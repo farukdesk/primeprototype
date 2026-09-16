@@ -17,6 +17,9 @@ foreach (acc_accounts_by_type('asset') as $a) {
 }
 $errors          = [];
 $sms_enabled     = acc_setting('sms_enabled', '0') === '1';
+// Banks a bank payment can be deposited to (Accounting → Payment Methods).
+$bank_options    = acc_bank_options();
+acc_ensure_bank_name_columns();
 
 // ── One-time payment nonce helpers (prevent duplicate payment on browser refresh / POST replay) ──
 function payment_nonce_generate(): void {
@@ -65,6 +68,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
     $payment_method  = trim((string)($_POST['payment_method'] ?? 'cash'));
     $mobile_banking_provider = trim((string)($_POST['mobile_banking_provider'] ?? ''));
     $transaction_number = trim((string)($_POST['transaction_number'] ?? ''));
+    $bank_name_in    = trim((string)($_POST['bank_name'] ?? ''));
+    $bank_name       = null;
     $received_into_account_id = acc_received_into_account_id_for_payment_method($payment_method);
     $income_account_id = (int)($_POST['income_account_id'] ?? 0);
     $date            = trim($_POST['voucher_date']       ?? date('Y-m-d'));
@@ -73,6 +78,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
     // Single source of truth: scheduled heads + all additional fee types + 'other'.
     $valid_types = acc_student_fee_types();
+
+    if ($payment_method === 'bank') {
+        try { $bank_name = acc_normalize_bank_name($payment_method, $bank_name_in); }
+        catch (RuntimeException $e) { $errors[] = $e->getMessage(); }
+    }
 
     if (!$student_id)                          $errors[] = 'Invalid student.';
     if (!$package_id)                          $errors[] = 'Student has no fee package.';
@@ -251,8 +261,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
 
                 $pay_stmt = db()->prepare(
                     'INSERT INTO sfp_payments
-                        (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, transaction_number, amount, voucher_id, note, collected_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                        (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, bank_name, transaction_number, amount, voucher_id, note, collected_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
                 );
                 $txn_used_for_fee_type = [];
                 foreach ($fee_items as $item) {
@@ -279,6 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                         $item['month_number'],
                         $payment_method,
                         $provider,
+                        $bank_name,
                         $item_txn,
                         round((float)$item['amount'], 2),
                         $last_voucher_id,
@@ -312,7 +323,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'student
                         $item['semester_fee_id'], $item['semester_number'], $item['month_number'],
                         $payment_method, $provider, $txn_no,
                         $item['amount'], $received_into_account_id, $item['income_account_id'],
-                        $date, $reference, $item_narration
+                        $date, $reference, $item_narration,
+                        false, $bank_name
                     );
                     $last_voucher_id = (int)$vid;
                     $total_amount += (float)$item['amount'];
@@ -424,6 +436,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
     $payment_method    = trim((string)($_POST['payment_method'] ?? 'cash'));
     $mobile_banking_provider = trim((string)($_POST['mobile_banking_provider'] ?? ''));
     $transaction_number = trim((string)($_POST['transaction_number'] ?? ''));
+    $adm_bank_name     = null;
+    if ($payment_method === 'bank') {
+        try { $adm_bank_name = acc_normalize_bank_name($payment_method, (string)($_POST['bank_name'] ?? '')); }
+        catch (RuntimeException $e) { $errors[] = $e->getMessage(); }
+    }
     $received_into_account_id = acc_received_into_account_id_for_payment_method($payment_method);
     $income_account_id = (int)($_POST['income_account_id'] ?? 0);
     $date              = trim($_POST['voucher_date']        ?? date('Y-m-d'));
@@ -475,7 +492,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['mode'] ?? '') === 'admissi
             $vid = acc_collect_applicant_admission_fee(
                 $app_id, $amount, $received_into_account_id, $income_account_id,
                 $payment_method, $adm_provider, $adm_txn_no,
-                $date, $reference, $narration
+                $date, $reference, $narration, $adm_bank_name
             );
 
             $voucher        = acc_get_voucher($vid);
@@ -1012,6 +1029,21 @@ require_once __DIR__ . '/../includes/header.php';
                                     <option value="rocket">Rocket</option>
                                 </select>
                             </div>
+                            <div class="col-md-4" id="payBankWrap" style="display:none;">
+                                <label class="form-label fw-semibold">Bank <span class="text-danger">*</span></label>
+                                <?php if ($bank_options): ?>
+                                <select name="bank_name" id="payBankName" class="form-select">
+                                    <option value="">— Select Bank —</option>
+                                    <?php foreach ($bank_options as $bn): ?>
+                                    <option value="<?= h($bn) ?>"><?= h($bn) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <div class="form-text">Which bank the money was deposited to. Manage the list in <a href="<?= APP_URL ?>/accounting/payment-methods.php" target="_blank">Payment Methods</a>.</div>
+                                <?php else: ?>
+                                <input type="text" name="bank_name" id="payBankName" class="form-control" placeholder="e.g. Shahjalal Islami Bank PLC" maxlength="190">
+                                <div class="form-text">No banks configured yet — add them in <a href="<?= APP_URL ?>/accounting/payment-methods.php" target="_blank">Payment Methods</a> to get a dropdown.</div>
+                                <?php endif; ?>
+                            </div>
                             <div class="col-md-4" id="payTxnWrap" style="display:none;">
                                 <label class="form-label fw-semibold" id="payTxnLabel"><span id="payTxnLabelText">Transaction Number</span> <span class="text-danger">*</span></label>
                                 <input type="text" name="transaction_number" id="payTxnNumber" class="form-control"
@@ -1377,6 +1409,20 @@ require_once __DIR__ . '/../includes/header.php';
                                 <option value="rocket">Rocket</option>
                             </select>
                         </div>
+                        <div class="col-md-4" id="admBankWrap" style="display:none;">
+                            <label class="form-label fw-semibold">Bank <span class="text-danger">*</span></label>
+                            <?php if ($bank_options): ?>
+                            <select name="bank_name" id="admBankName" class="form-select">
+                                <option value="">— Select Bank —</option>
+                                <?php foreach ($bank_options as $bn): ?>
+                                <option value="<?= h($bn) ?>"><?= h($bn) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php else: ?>
+                            <input type="text" name="bank_name" id="admBankName" class="form-control" placeholder="e.g. Shahjalal Islami Bank PLC" maxlength="190">
+                            <?php endif; ?>
+                            <div class="form-text">Which bank the money was deposited to.</div>
+                        </div>
                         <div class="col-md-4" id="admTxnWrap" style="display:none;">
                             <label class="form-label fw-semibold" id="admTxnLabel"><span id="admTxnLabelText">Transaction Number</span> <span class="text-danger">*</span></label>
                             <input type="text" name="transaction_number" id="admTxnNumber" class="form-control"
@@ -1533,14 +1579,19 @@ require_once __DIR__ . '/../includes/header.php';
         const method = document.getElementById('payMethod').value;
         const providerWrap = document.getElementById('payMobileProviderWrap');
         const provider = document.getElementById('payMobileProvider');
+        const bankWrap = document.getElementById('payBankWrap');
+        const bankInput = document.getElementById('payBankName');
         const txnWrap = document.getElementById('payTxnWrap');
         const txnInput = document.getElementById('payTxnNumber');
         const txnLabel = document.getElementById('payTxnLabelText');
         const isMobile = method === 'mobile_banking';
+        const isBank   = method === 'bank';
         const isOldErp = method === 'old_erp';
         const needsTxn = method !== 'cash';
 
         providerWrap.style.display = isMobile ? '' : 'none';
+        if (bankWrap) { bankWrap.style.display = isBank ? '' : 'none'; }
+        if (bankInput) { bankInput.required = isBank; if (!isBank) bankInput.value = ''; }
         txnWrap.style.display = needsTxn ? '' : 'none';
         provider.required = isMobile;
         txnInput.required = needsTxn;
@@ -1557,14 +1608,19 @@ require_once __DIR__ . '/../includes/header.php';
         const method = document.getElementById('admPayMethod').value;
         const providerWrap = document.getElementById('admProviderWrap');
         const provider = document.getElementById('admMobileProvider');
+        const bankWrap = document.getElementById('admBankWrap');
+        const bankInput = document.getElementById('admBankName');
         const txnWrap = document.getElementById('admTxnWrap');
         const txnInput = document.getElementById('admTxnNumber');
         const txnLabel = document.getElementById('admTxnLabelText');
         const isMobile = method === 'mobile_banking';
+        const isBank   = method === 'bank';
         const isOldErp = method === 'old_erp';
         const needsTxn = method !== 'cash';
 
         providerWrap.style.display = isMobile ? '' : 'none';
+        if (bankWrap) { bankWrap.style.display = isBank ? '' : 'none'; }
+        if (bankInput) { bankInput.required = isBank; if (!isBank) bankInput.value = ''; }
         txnWrap.style.display = needsTxn ? '' : 'none';
         provider.required = isMobile;
         txnInput.required = needsTxn;

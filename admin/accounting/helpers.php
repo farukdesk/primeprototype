@@ -1999,7 +1999,8 @@ function acc_collect_student_fee(
     string $date,
     string $reference  = '',
     string $narration  = '',
-    bool   $allow_duplicate_transaction_number = false
+    bool   $allow_duplicate_transaction_number = false,
+    ?string $bank_name = null
 ): int {
     if ($amount <= 0) {
         throw new RuntimeException('Payment amount must be greater than zero.');
@@ -2011,6 +2012,11 @@ function acc_collect_student_fee(
         $mobile_banking_provider,
         $transaction_number
     );
+    // Bank a bank payment was deposited to (null for every other method).
+    $bank_name = $payment_method === 'bank' && $bank_name !== null && trim($bank_name) !== ''
+        ? mb_substr(trim($bank_name), 0, 190)
+        : null;
+    acc_ensure_bank_name_columns();
 
     if (!$allow_duplicate_transaction_number && $transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
         throw new RuntimeException(
@@ -2032,8 +2038,8 @@ function acc_collect_student_fee(
     $user = auth_user();
     $db->prepare(
         'INSERT INTO sfp_payments
-            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, transaction_number, amount, voucher_id, note, collected_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, bank_name, transaction_number, amount, voucher_id, note, collected_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     )->execute([
         $student_id,
         $package_id,
@@ -2043,6 +2049,7 @@ function acc_collect_student_fee(
         $month_number,
         $payment_method,
         $mobile_banking_provider,
+        $bank_name,
         $transaction_number,
         round($amount, 2),
         $voucher_id,
@@ -2080,7 +2087,7 @@ function acc_get_student_payments(int $package_id): array
  * Looks in sfp_payments first, then adm_admission_fee_payments. Returns null
  * when no payment row is linked (e.g. journal / expense / transfer vouchers).
  *
- * @return array{payment_method:string,mobile_banking_provider:?string,transaction_number:?string}|null
+ * @return array{payment_method:string,mobile_banking_provider:?string,bank_name:?string,transaction_number:?string}|null
  */
 function acc_get_voucher_payment_info(int $voucher_id): ?array
 {
@@ -2088,9 +2095,10 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
         return null;
     }
     $db = db();
+    acc_ensure_bank_name_columns();
 
     $stmt = $db->prepare(
-        'SELECT payment_method, mobile_banking_provider, transaction_number
+        'SELECT payment_method, mobile_banking_provider, bank_name, transaction_number
          FROM sfp_payments
          WHERE voucher_id = ?
          -- Prefer rows with non-empty txn/receipt numbers (false sorts before true),
@@ -2103,7 +2111,7 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
 
     if (!$row) {
         $stmt = $db->prepare(
-            'SELECT payment_method, mobile_banking_provider, transaction_number
+            'SELECT payment_method, mobile_banking_provider, bank_name, transaction_number
              FROM adm_admission_fee_payments WHERE voucher_id = ? ORDER BY id DESC LIMIT 1'
         );
         $stmt->execute([$voucher_id]);
@@ -2117,6 +2125,7 @@ function acc_get_voucher_payment_info(int $voucher_id): ?array
     return [
         'payment_method'          => (string)($row['payment_method'] ?? 'cash'),
         'mobile_banking_provider' => $row['mobile_banking_provider'] ?? null,
+        'bank_name'               => $row['bank_name'] ?? null,
         'transaction_number'      => $row['transaction_number'] ?? null,
     ];
 }
@@ -2797,7 +2806,8 @@ function acc_collect_applicant_admission_fee(
     ?string $transaction_number,
     string $date,
     string $reference = '',
-    string $narration  = ''
+    string $narration  = '',
+    ?string $bank_name = null
 ): int {
     $amount = round($amount, 2);
     [$payment_method, $mobile_banking_provider, $transaction_number] = acc_normalize_payment_method_fields(
@@ -2805,6 +2815,10 @@ function acc_collect_applicant_admission_fee(
         $mobile_banking_provider,
         $transaction_number
     );
+    $bank_name = $payment_method === 'bank' && $bank_name !== null && trim($bank_name) !== ''
+        ? mb_substr(trim($bank_name), 0, 190)
+        : null;
+    acc_ensure_bank_name_columns();
 
     if ($transaction_number !== null && acc_transaction_number_exists($transaction_number)) {
         throw new RuntimeException(
@@ -2823,9 +2837,9 @@ function acc_collect_applicant_admission_fee(
     $user = auth_user();
     db()->prepare(
         'INSERT INTO adm_admission_fee_payments
-            (application_id, voucher_id, amount, payment_method, mobile_banking_provider, transaction_number, collected_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)'
-    )->execute([$app_id, $voucher_id, $amount, $payment_method, $mobile_banking_provider, $transaction_number, $user['id'] ?? null]);
+            (application_id, voucher_id, amount, payment_method, mobile_banking_provider, bank_name, transaction_number, collected_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    )->execute([$app_id, $voucher_id, $amount, $payment_method, $mobile_banking_provider, $bank_name, $transaction_number, $user['id'] ?? null]);
 
     return $voucher_id;
 }
@@ -3069,15 +3083,92 @@ function acc_is_additional_fee_type(string $fee_type): bool
 /**
  * Human-readable label for payment method display.
  */
-function acc_payment_method_label(string $method, ?string $provider = null): string
+function acc_payment_method_label(string $method, ?string $provider = null, ?string $bank_name = null): string
 {
-    $method = strtolower(trim($method));
+    $method    = strtolower(trim($method));
+    $bank_name = $bank_name !== null ? trim($bank_name) : '';
     return match ($method) {
-        'bank' => 'Bank',
+        'bank' => 'Bank' . ($bank_name !== '' ? ' (' . $bank_name . ')' : ''),
         'mobile_banking' => 'Mobile Banking' . ($provider ? ' (' . ucfirst(strtolower($provider)) . ')' : ''),
         'old_erp' => 'Old ERP',
         default => 'Cash',
     };
+}
+
+/**
+ * Make sure the payment tables carry a `bank_name` column (the bank a bank
+ * payment was deposited to). Added lazily so existing installs upgrade on
+ * first use; only ALTERs when the column is actually missing.
+ */
+function acc_ensure_bank_name_columns(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    foreach (['sfp_payments', 'adm_admission_fee_payments'] as $table) {
+        try {
+            $cols = db()->query('SHOW COLUMNS FROM ' . $table)->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('bank_name', $cols, true)) {
+                db()->exec('ALTER TABLE ' . $table . ' ADD COLUMN bank_name VARCHAR(190) NULL DEFAULT NULL AFTER mobile_banking_provider');
+            }
+        } catch (\Throwable $e) {
+            error_log('acc_ensure_bank_name_columns(' . $table . '): ' . $e->getMessage());
+        }
+    }
+    $done = true;
+}
+
+/**
+ * Banks a payment can be deposited to, taken from the active bank entries in
+ * Accounting → Payment Methods. Returns unique bank names in configured order.
+ *
+ * @return string[]
+ */
+function acc_bank_options(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    require_once __DIR__ . '/payment-methods-helpers.php';
+    $names = [];
+    try {
+        foreach (opm_all_methods(true) as $m) {
+            if ((string)($m['method_type'] ?? '') !== 'bank') {
+                continue;
+            }
+            $name = trim((string)($m['bank_name'] ?? ''));
+            if ($name !== '' && !in_array($name, $names, true)) {
+                $names[] = $name;
+            }
+        }
+    } catch (\Throwable $e) {
+        error_log('acc_bank_options: ' . $e->getMessage());
+    }
+    return $cache = $names;
+}
+
+/**
+ * Normalise a submitted bank name: only meaningful for bank payments, and
+ * (when banks are configured) it must be one of the configured banks.
+ *
+ * @throws RuntimeException when a bank payment has no / an unknown bank
+ */
+function acc_normalize_bank_name(string $payment_method, ?string $bank_name): ?string
+{
+    if (strtolower(trim($payment_method)) !== 'bank') {
+        return null;
+    }
+    $bank_name = trim((string)$bank_name);
+    if ($bank_name === '') {
+        throw new RuntimeException('Please select the bank the payment was deposited to.');
+    }
+    $options = acc_bank_options();
+    if ($options && !in_array($bank_name, $options, true)) {
+        throw new RuntimeException('Unknown bank selected. Please choose one of the configured banks.');
+    }
+    return mb_substr($bank_name, 0, 190);
 }
 
 /**
