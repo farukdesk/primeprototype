@@ -81,22 +81,95 @@ arsort($staff_totals);
 arsort($by_pay_method);
 arsort($by_fee_type);
 
-// ── Staff × Payment-method cross-tab (for print summary) ───────────────────
-$method_order  = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_banking' => 'Mobile Banking', 'old_erp' => 'Old ERP'];
-$method_keys   = [];          // payment methods actually present, in $method_order order
-$staff_matrix  = [];          // [staff_name][method] => amount
-$method_totals = [];          // [method] => amount
+// ── Staff × Collection-channel cross-tab (for print summary) ───────────────
+// A "channel" is finer than the payment method: Cash, each mobile-banking
+// provider (bKash / Nagad / Rocket), each bank account the money was received
+// into (from the receipt voucher's debit line), and Old ERP.
+$mb_provider_labels = ['bkash' => 'bKash', 'nagad' => 'Nagad', 'rocket' => 'Rocket'];
+$group_labels       = ['cash' => 'Cash', 'mobile_banking' => 'Mobile Banking', 'bank' => 'Bank', 'old_erp' => 'Old ERP'];
+$group_order        = ['cash' => 0, 'mobile_banking' => 1, 'bank' => 2, 'old_erp' => 3];
+$provider_order     = ['bkash' => 0, 'nagad' => 1, 'rocket' => 2];
+
+$channel_group  = [];   // [channel_key] => group (cash|mobile_banking|bank|old_erp)
+$channel_label  = [];   // [channel_key] => column label
+$channel_totals = [];   // [channel_key] => amount (all staff)
+$staff_matrix   = [];   // [staff_name][channel_key] => amount
+$staff_txns     = [];   // [staff_name] => number of transactions
 foreach ($rows as $r) {
     $amt  = (float)$r['amount'];
     $name = $r['collected_by'];
-    $mk   = strtolower(trim($r['payment_method']));
-    if (!isset($method_order[$mk])) { $mk = 'cash'; }
-    $staff_matrix[$name][$mk] = ($staff_matrix[$name][$mk] ?? 0.0) + $amt;
-    $method_totals[$mk]       = ($method_totals[$mk] ?? 0.0) + $amt;
+    $pm   = strtolower(trim((string)$r['payment_method']));
+    switch ($pm) {
+        case 'mobile_banking':
+            $prov  = strtolower(trim((string)($r['mobile_banking_provider'] ?? '')));
+            $key   = 'mb:' . ($prov !== '' ? $prov : 'other');
+            $label = $mb_provider_labels[$prov] ?? ($prov !== '' ? ucfirst($prov) : 'Other Wallet');
+            $group = 'mobile_banking';
+            break;
+        case 'bank':
+            $bank  = trim((string)($r['received_into'] ?? ''));
+            $key   = 'bank:' . ($bank !== '' ? $bank : 'unspecified');
+            $label = $bank !== '' ? $bank : 'Unspecified';
+            $group = 'bank';
+            break;
+        case 'old_erp':
+            $key = 'old_erp'; $label = 'Old ERP'; $group = 'old_erp';
+            break;
+        default:
+            $key = 'cash'; $label = 'Cash'; $group = 'cash';
+    }
+    $channel_group[$key]       = $group;
+    $channel_label[$key]       = $label;
+    $channel_totals[$key]      = ($channel_totals[$key] ?? 0.0) + $amt;
+    $staff_matrix[$name][$key] = ($staff_matrix[$name][$key] ?? 0.0) + $amt;
+    $staff_txns[$name]         = ($staff_txns[$name] ?? 0) + 1;
 }
-foreach ($method_order as $mk => $lbl) {
-    if (isset($method_totals[$mk])) { $method_keys[$mk] = $lbl; }
+
+// Column order: Cash → bKash, Nagad, Rocket → banks (A–Z) → Old ERP
+$channel_keys = array_keys($channel_label);
+usort($channel_keys, static function (string $a, string $b) use ($channel_group, $channel_label, $group_order, $provider_order): int {
+    $ga = $group_order[$channel_group[$a]] ?? 9;
+    $gb = $group_order[$channel_group[$b]] ?? 9;
+    if ($ga !== $gb) { return $ga <=> $gb; }
+    if ($channel_group[$a] === 'mobile_banking') {
+        $pa = $provider_order[substr($a, 3)] ?? 9;
+        $pb = $provider_order[substr($b, 3)] ?? 9;
+        if ($pa !== $pb) { return $pa <=> $pb; }
+    }
+    return strcasecmp($channel_label[$a], $channel_label[$b]);
+});
+
+// Group the columns for the two-row header. A group with more than one
+// channel (e.g. several banks) also gets a "<Group> Total" subtotal column.
+$summary_groups = [];   // [group] => ['label' => ..., 'cols' => [['key','label','subtotal'], ...]]
+foreach ($channel_keys as $k) {
+    $g = $channel_group[$k];
+    $summary_groups[$g]['label']  = $group_labels[$g] ?? ucfirst($g);
+    $summary_groups[$g]['cols'][] = ['key' => $k, 'label' => $channel_label[$k], 'subtotal' => false];
 }
+$has_sub_header = false;
+foreach ($summary_groups as $g => &$grp) {
+    if (count($grp['cols']) > 1) {
+        $grp['cols'][] = ['key' => 'sub:' . $g, 'label' => $grp['label'] . ' Total', 'subtotal' => true];
+        $has_sub_header = true;
+    }
+}
+unset($grp);
+
+// Amount for one summary cell (a channel or a group subtotal). Null = nothing collected.
+$summary_cell = static function (array $amounts, array $col) use ($summary_groups): ?float {
+    if ($col['subtotal']) {
+        $g   = substr($col['key'], 4);
+        $sum = 0.0;
+        $any = false;
+        foreach ($summary_groups[$g]['cols'] as $c) {
+            if (!$c['subtotal'] && isset($amounts[$c['key']])) { $sum += $amounts[$c['key']]; $any = true; }
+        }
+        return $any ? $sum : null;
+    }
+    return $amounts[$col['key']] ?? null;
+};
+
 // Order staff rows by their total collection (desc) to match $staff_totals
 $staff_matrix_sorted = [];
 foreach ($staff_totals as $name => $tot) {
