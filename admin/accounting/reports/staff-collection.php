@@ -37,6 +37,9 @@ $rows = db()->prepare(
          COALESCE(ub.name, s.admitted_semester, '—') AS batch,
          COALESCE(u.full_name, 'System')           AS collected_by,
          p.fee_type,
+         p.semester_number,
+         p.month_number,
+         sf.semester_label,
          p.payment_method,
          p.mobile_banking_provider,
          (SELECT a.name
@@ -56,6 +59,7 @@ $rows = db()->prepare(
      LEFT JOIN dept_departments       d  ON d.id  = s.dept_id
      LEFT JOIN dept_academic_programs ap ON ap.id = s.program_id
      LEFT JOIN student_batches        ub ON ub.id = s.batch_id
+     LEFT JOIN sfp_semester_fees      sf ON sf.id = p.semester_fee_id
      WHERE $where_sql
      ORDER BY v.voucher_date DESC, p.id DESC"
 );
@@ -63,6 +67,89 @@ $rows->execute($params);
 $rows = $rows->fetchAll();
 
 $grand_total = array_sum(array_column($rows, 'amount'));
+
+// ── Group fee lines into receipts (one row per voucher) ─────────────────────
+// A single payment of e.g. 5,000 may be split across several fee heads
+// (tuition + registration + form fee ...). Each head is its own sfp_payments
+// line, but the report shows ONE row per receipt with the breakdown inside it.
+// Consecutive months of the same head/semester are compressed: "M1–M3, M5".
+$compress_months = static function (array $months): string {
+    $months = array_values(array_unique(array_map('intval', $months)));
+    sort($months);
+    $parts = [];
+    $start = $prev = null;
+    foreach ($months as $m) {
+        if ($start === null)      { $start = $prev = $m; continue; }
+        if ($m === $prev + 1)     { $prev = $m; continue; }
+        $parts[] = $start === $prev ? 'M' . $start : 'M' . $start . '–M' . $prev;
+        $start = $prev = $m;
+    }
+    if ($start !== null) { $parts[] = $start === $prev ? 'M' . $start : 'M' . $start . '–M' . $prev; }
+    return implode(', ', $parts);
+};
+
+$receipts = [];   // [voucher_id] => receipt (header fields + 'items' => [fee_type => ...])
+foreach ($rows as $r) {
+    $vid = (int)$r['voucher_id'];
+    if (!isset($receipts[$vid])) {
+        $receipts[$vid] = [
+            'voucher_id'              => $vid,
+            'invoice_no'              => $r['invoice_no'],
+            'collection_date'         => $r['collection_date'],
+            'sid'                     => $r['sid'],
+            'student_name'            => $r['student_name'],
+            'program'                 => $r['program'],
+            'batch'                   => $r['batch'],
+            'collected_by'            => $r['collected_by'],
+            'payment_method'          => $r['payment_method'],
+            'mobile_banking_provider' => $r['mobile_banking_provider'],
+            'received_into'           => $r['received_into'],
+            'amount'                  => 0.0,
+            'lines'                   => 0,
+            'items'                   => [],
+        ];
+    }
+    $ft  = (string)$r['fee_type'];
+    $amt = (float)$r['amount'];
+    $receipts[$vid]['amount'] += $amt;
+    $receipts[$vid]['lines']++;
+
+    if (!isset($receipts[$vid]['items'][$ft])) {
+        $receipts[$vid]['items'][$ft] = [
+            'fee_type' => $ft,
+            'label'    => acc_fee_type_label($ft),
+            'amount'   => 0.0,
+            'sems'     => [],   // [semester label] => [month numbers]
+            'ctx'      => '',
+        ];
+    }
+    $receipts[$vid]['items'][$ft]['amount'] += $amt;
+
+    $sem = trim((string)($r['semester_label'] ?? ''));
+    if ($sem === '' && !empty($r['semester_number'])) { $sem = 'Semester ' . (int)$r['semester_number']; }
+    if ($sem !== '' || !empty($r['month_number'])) {
+        $receipts[$vid]['items'][$ft]['sems'][$sem] = $receipts[$vid]['items'][$ft]['sems'][$sem] ?? [];
+        if (!empty($r['month_number'])) { $receipts[$vid]['items'][$ft]['sems'][$sem][] = (int)$r['month_number']; }
+    }
+}
+// Build the human context per head, e.g. "Spring 2025 (M1–M3) · Summer 2025 (M1)"
+foreach ($receipts as &$rc) {
+    foreach ($rc['items'] as &$it) {
+        $ctx_parts = [];
+        foreach ($it['sems'] as $sem => $months) {
+            $m = $months ? $compress_months($months) : '';
+            if ($sem !== '' && $m !== '')      { $ctx_parts[] = $sem . ' (' . $m . ')'; }
+            elseif ($sem !== '')               { $ctx_parts[] = $sem; }
+            elseif ($m !== '')                 { $ctx_parts[] = $m; }
+        }
+        $it['ctx'] = implode(' · ', $ctx_parts);
+        unset($it['sems']);
+    }
+    unset($it);
+    $rc['items'] = array_values($rc['items']);
+}
+unset($rc);
+$receipts = array_values($receipts);
 
 // ── Aggregations (stat cards + charts) ─────────────────────────────────────
 $staff_totals  = [];
@@ -94,7 +181,7 @@ $channel_group  = [];   // [channel_key] => group (cash|mobile_banking|bank|old_
 $channel_label  = [];   // [channel_key] => column label
 $channel_totals = [];   // [channel_key] => amount (all staff)
 $staff_matrix   = [];   // [staff_name][channel_key] => amount
-$staff_txns     = [];   // [staff_name] => number of transactions
+$staff_txns     = [];   // [staff_name] => number of receipts (vouchers)
 foreach ($rows as $r) {
     $amt  = (float)$r['amount'];
     $name = $r['collected_by'];
@@ -122,7 +209,9 @@ foreach ($rows as $r) {
     $channel_label[$key]       = $label;
     $channel_totals[$key]      = ($channel_totals[$key] ?? 0.0) + $amt;
     $staff_matrix[$name][$key] = ($staff_matrix[$name][$key] ?? 0.0) + $amt;
-    $staff_txns[$name]         = ($staff_txns[$name] ?? 0) + 1;
+}
+foreach ($receipts as $rc) {
+    $staff_txns[$rc['collected_by']] = ($staff_txns[$rc['collected_by']] ?? 0) + 1;
 }
 
 // Column order: Cash → bKash, Nagad, Rocket → banks (A–Z) → Old ERP
@@ -314,7 +403,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <tr>
                 <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">#</th>
                 <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">Staff</th>
-                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Txns</th>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Receipts</th>
                 <?php foreach ($summary_groups as $g => $grp): $ncols = count($grp['cols']); ?>
                     <?php if ($ncols === 1): ?>
                     <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r"><?= h(($g === 'bank' ? 'Bank – ' : '') . $grp['cols'][0]['label']) ?></th>
@@ -350,7 +439,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <tfoot>
             <tr>
                 <td colspan="2" class="sc-r">Total Collection</td>
-                <td class="sc-r"><?= count($rows) ?></td>
+                <td class="sc-r"><?= count($receipts) ?></td>
                 <?php foreach ($summary_groups as $grp): foreach ($grp['cols'] as $col): $v = $summary_cell($channel_totals, $col); ?>
                 <td class="sc-r"><?= $v !== null ? number_format($v, 2) : '—' ?></td>
                 <?php endforeach; endforeach; ?>
@@ -368,7 +457,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="card-body p-3 text-white">
                 <div class="d-flex align-items-center gap-2 mb-1"><i class="fas fa-coins fa-lg opacity-75"></i><span class="fw-semibold small opacity-90">Grand Total</span></div>
                 <div class="fw-bold" style="font-size:1.3rem"><?= $currency ?> <?= number_format($grand_total, 2) ?></div>
-                <div style="font-size:.72rem;opacity:.8"><?= count($rows) ?> transaction(s)</div>
+                <div style="font-size:.72rem;opacity:.8"><?= count($receipts) ?> receipt(s) · <?= count($rows) ?> fee line(s)</div>
             </div>
         </div>
     </div>
@@ -414,7 +503,7 @@ require_once __DIR__ . '/../../includes/header.php';
 <!-- ── Detail table ── -->
 <div class="card border-0 shadow-sm">
     <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <strong class="small"><i class="fas fa-table me-1 text-info"></i> Transaction Breakdown · <span id="recCount"><?= count($rows) ?></span> record(s)</strong>
+        <strong class="small"><i class="fas fa-table me-1 text-info"></i> Transaction Breakdown · <span id="recCount"><?= count($receipts) ?></span> receipt(s) <span class="text-muted fw-normal">(<?= count($rows) ?> fee line(s))</span></strong>
         <div class="d-flex align-items-center gap-2 no-print">
             <input type="search" id="tableSearch" class="form-control form-control-sm" style="max-width:220px" placeholder="Search records…">
         </div>
@@ -436,7 +525,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <th>Student</th>
                         <th>Program</th>
                         <th>Staff</th>
-                        <th>Fee Type</th>
+                        <th>Fee Breakdown</th>
                         <th>Method</th>
                         <th>Invoice</th>
                         <th class="text-end">Amount (<?= h($currency) ?>)</th>
@@ -453,41 +542,51 @@ require_once __DIR__ . '/../../includes/header.php';
                 ];
                 ?>
                 <tbody id="tableBody">
-                    <?php foreach ($rows as $i => $r):
-                        $ft_color = $ft_colors[$r['fee_type']] ?? 'secondary';
+                    <?php foreach ($receipts as $i => $rc):
+                        $multi   = count($rc['items']) > 1;
+                        $is_bank = strtolower((string)$rc['payment_method']) === 'bank';
+                        $bank    = trim((string)($rc['received_into'] ?? ''));
                     ?>
                     <tr class="data-row">
                         <td class="text-center text-muted small idx"><?= $i + 1 ?></td>
-                        <td class="text-muted small text-nowrap"><?= date('d M Y', strtotime($r['collection_date'])) ?></td>
+                        <td class="text-muted small text-nowrap"><?= date('d M Y', strtotime($rc['collection_date'])) ?></td>
                         <td>
-                            <div class="fw-semibold"><?= h($r['student_name']) ?></div>
-                            <span class="badge bg-secondary bg-opacity-10 text-dark border" style="font-size:.72rem"><?= h($r['sid']) ?></span>
-                            <div class="small text-muted">Batch: <?= h($r['batch']) ?></div>
+                            <div class="fw-semibold"><?= h($rc['student_name']) ?></div>
+                            <span class="badge bg-secondary bg-opacity-10 text-dark border" style="font-size:.72rem"><?= h($rc['sid']) ?></span>
+                            <div class="small text-muted">Batch: <?= h($rc['batch']) ?></div>
                         </td>
                         <td>
-                            <div class="small text-muted"><?= h($r['program']) ?></div>
+                            <div class="small text-muted"><?= h($rc['program']) ?></div>
                         </td>
                         <td>
-                            <?= h($r['collected_by']) ?>
+                            <?= h($rc['collected_by']) ?>
+                        </td>
+                        <td class="bd-cell">
+                            <?php foreach ($rc['items'] as $it): $ft_color = $ft_colors[$it['fee_type']] ?? 'secondary'; ?>
+                            <div class="bd-line">
+                                <span class="bd-head">
+                                    <span class="badge bg-<?= $ft_color ?> bg-opacity-10 text-<?= $ft_color ?> border border-<?= $ft_color ?> border-opacity-25" style="font-size:.75rem"><?= h($it['label']) ?></span>
+                                    <?php if ($it['ctx'] !== ''): ?><span class="bd-ctx text-muted"><?= h($it['ctx']) ?></span><?php endif; ?>
+                                </span>
+                                <?php if ($multi): ?><span class="bd-amt"><?= number_format($it['amount'], 2) ?></span><?php endif; ?>
+                            </div>
+                            <?php endforeach; ?>
                         </td>
                         <td>
-                            <span class="badge bg-<?= $ft_color ?> bg-opacity-10 text-<?= $ft_color ?> border border-<?= $ft_color ?> border-opacity-25" style="font-size:.75rem">
-                                <?= h(acc_fee_type_label($r['fee_type'])) ?>
-                            </span>
+                            <?= h(acc_payment_method_label($rc['payment_method'], $rc['mobile_banking_provider'])) ?>
+                            <?php if ($is_bank && $bank !== ''): ?><div class="small text-muted"><?= h($bank) ?></div><?php endif; ?>
                         </td>
                         <td>
-                            <?= h(acc_payment_method_label($r['payment_method'], $r['mobile_banking_provider'])) ?>
-                        </td>
-                        <td>
-                            <a href="<?= APP_URL ?>/accounting/fee-invoice.php?voucher_id=<?= (int)$r['voucher_id'] ?>"
+                            <a href="<?= APP_URL ?>/accounting/fee-invoice.php?voucher_id=<?= (int)$rc['voucher_id'] ?>"
                                target="_blank"
                                class="badge bg-light text-primary border text-decoration-none inv-link"
                                style="font-family:monospace;font-size:.78rem"
                                title="Open invoice">
-                                <?= h($r['invoice_no']) ?>&nbsp;<i class="fas fa-external-link-alt" style="font-size:.6rem"></i>
+                                <?= h($rc['invoice_no']) ?>&nbsp;<i class="fas fa-external-link-alt" style="font-size:.6rem"></i>
                             </a>
+                            <?php if ($multi): ?><div class="small text-muted"><?= count($rc['items']) ?> heads</div><?php endif; ?>
                         </td>
-                        <td class="text-end fw-bold text-success amt"><?= number_format((float)$r['amount'], 2) ?></td>
+                        <td class="text-end fw-bold text-success amt"><?= number_format((float)$rc['amount'], 2) ?></td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -521,6 +620,13 @@ require_once __DIR__ . '/../../includes/header.php';
 <style>
 #collectionTable thead th { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; color:#495057; border-bottom:2px solid #d0d9f5; white-space:nowrap; }
 #collectionTable tbody tr:hover { background:#f5f8ff; }
+/* Fee breakdown inside a receipt row */
+.bd-cell { min-width:230px; }
+.bd-line { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.bd-line + .bd-line { border-top:1px dashed #e3e8f2; margin-top:3px; padding-top:3px; }
+.bd-head { display:inline-flex; flex-wrap:wrap; align-items:baseline; gap:4px 6px; }
+.bd-ctx { font-size:.72rem; }
+.bd-amt { font-variant-numeric:tabular-nums; white-space:nowrap; font-size:.78rem; color:#495057; }
 /* Print summary: staff × collection channel */
 .sc-summary { width:100%; border-collapse:collapse; font-size:8pt; }
 .sc-summary th, .sc-summary td { padding:3px 6px; border:1px solid #ccc; vertical-align:middle; }
@@ -548,13 +654,18 @@ require_once __DIR__ . '/../../includes/header.php';
     /* Proportional column widths so all 9 columns fit one A4 landscape page */
     #collectionTable th:nth-child(1), #collectionTable td:nth-child(1) { width:3%; }   /* # */
     #collectionTable th:nth-child(2), #collectionTable td:nth-child(2) { width:8%; }   /* Date */
-    #collectionTable th:nth-child(3), #collectionTable td:nth-child(3) { width:18%; }  /* Student */
-    #collectionTable th:nth-child(4), #collectionTable td:nth-child(4) { width:13%; }  /* Program */
-    #collectionTable th:nth-child(5), #collectionTable td:nth-child(5) { width:12%; }  /* Staff */
-    #collectionTable th:nth-child(6), #collectionTable td:nth-child(6) { width:14%; }  /* Fee Type */
+    #collectionTable th:nth-child(3), #collectionTable td:nth-child(3) { width:16%; }  /* Student */
+    #collectionTable th:nth-child(4), #collectionTable td:nth-child(4) { width:11%; }  /* Program */
+    #collectionTable th:nth-child(5), #collectionTable td:nth-child(5) { width:10%; }  /* Staff */
+    #collectionTable th:nth-child(6), #collectionTable td:nth-child(6) { width:25%; }  /* Fee Breakdown */
     #collectionTable th:nth-child(7), #collectionTable td:nth-child(7) { width:9%; }   /* Method */
-    #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:10%; }  /* Invoice */
-    #collectionTable th:nth-child(9), #collectionTable td:nth-child(9) { width:13%; text-align:right; } /* Amount */
+    #collectionTable th:nth-child(8), #collectionTable td:nth-child(8) { width:9%; }   /* Invoice */
+    #collectionTable th:nth-child(9), #collectionTable td:nth-child(9) { width:9%; text-align:right; } /* Amount */
+    .bd-cell { min-width:0; }
+    .bd-line { gap:4px; }
+    .bd-line + .bd-line { border-top:1px dotted #bbb; margin-top:2px; padding-top:2px; }
+    .bd-ctx { font-size:6.5pt; color:#555 !important; }
+    .bd-amt { font-size:7pt; color:#000; }
     #collectionTable td:nth-child(8) .inv-link { font-family:inherit !important; font-size:7pt !important; word-break:break-all; }
     #collectionTable td:nth-child(9) { font-size:7pt !important; white-space:nowrap !important; }
     #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; display:table-header-group; }
