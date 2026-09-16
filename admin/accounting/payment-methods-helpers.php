@@ -414,6 +414,17 @@ function opm_post_approved_payment(array $p): array
             $provider = $op;
         }
     }
+    // Bank the student deposited to (from the payment method they selected).
+    $bank_name = null;
+    if ($method === 'bank') {
+        $bank_name = trim((string)($p['bank_name'] ?? ''));
+        if ($bank_name === '' && (int)($p['method_id'] ?? 0) > 0) {
+            $m = opm_get_method((int)$p['method_id']);
+            $bank_name = trim((string)($m['bank_name'] ?? ''));
+        }
+        $bank_name = $bank_name !== '' ? mb_substr($bank_name, 0, 190) : null;
+    }
+    acc_ensure_bank_name_columns();
 
     // ── bKash charge: 1.5% of the paid amount is the operator's fee — it is
     // NOT adjusted against the student's dues, but it is shown as a separate
@@ -498,8 +509,8 @@ function opm_post_approved_payment(array $p): array
     // ── Record sfp_payments rows so dues, statements and history update ──
     $pay_stmt = db()->prepare(
         'INSERT INTO sfp_payments
-            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, transaction_number, amount, voucher_id, note, collected_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            (student_id, package_id, semester_fee_id, fee_type, semester_number, month_number, payment_method, mobile_banking_provider, bank_name, transaction_number, amount, voucher_id, note, collected_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
     $user = auth_user();
     $txn_used_for_fee_type = [];
@@ -524,6 +535,7 @@ function opm_post_approved_payment(array $p): array
             $it['month_number'],
             $method,
             $provider,
+            $bank_name,
             $item_txn,
             round((float)$it['amount'], 2),
             $voucher_id,
