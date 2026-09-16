@@ -521,11 +521,27 @@ require_once __DIR__ . '/../../includes/header.php';
 <style>
 #collectionTable thead th { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; color:#495057; border-bottom:2px solid #d0d9f5; white-space:nowrap; }
 #collectionTable tbody tr:hover { background:#f5f8ff; }
+/* Print summary: staff × collection channel */
+.sc-summary { width:100%; border-collapse:collapse; font-size:8pt; }
+.sc-summary th, .sc-summary td { padding:3px 6px; border:1px solid #ccc; vertical-align:middle; }
+.sc-summary thead th { background:#dce8ff; border-color:#b9c9ef; font-weight:700; text-align:right; white-space:nowrap; }
+.sc-summary .sc-l { text-align:left; }
+.sc-summary .sc-c { text-align:center; }
+.sc-summary .sc-r { text-align:right; white-space:nowrap; }
+.sc-summary thead th.sc-grp { background:#c9daff; }
+.sc-summary .sc-sub { background:#f3f6fd; font-weight:600; }
+.sc-summary .sc-muted { color:#666; }
+.sc-summary .sc-name { font-weight:600; text-align:left; }
+.sc-summary .sc-total { font-weight:700; }
+.sc-summary tfoot td { background:#e0eaff; border-color:#b9c9ef; font-weight:700; }
+.sc-summary .sc-grand { color:#0d6efd; }
 @media print {
     #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display:none !important; }
     #main-wrapper, body, html { margin:0 !important; padding:0 !important; }
     #printArea { width:100%; }
     .sc-summary { -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-inside:avoid; }
+    .sc-summary thead { display:table-header-group; }
+    .sc-summary tr { page-break-inside:avoid; }
     #collectionTable { font-size:7.5pt !important; border-collapse:collapse; width:100%; table-layout:fixed; }
     #collectionTable th, #collectionTable td { padding:3px 5px !important; border:1px solid #ccc !important; vertical-align:top !important; word-break:break-word; overflow-wrap:anywhere; white-space:normal !important; }
     #collectionTable thead th { font-size:7pt !important; }
