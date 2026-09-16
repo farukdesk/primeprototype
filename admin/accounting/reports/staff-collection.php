@@ -39,6 +39,12 @@ $rows = db()->prepare(
          p.fee_type,
          p.payment_method,
          p.mobile_banking_provider,
+         (SELECT a.name
+            FROM acc_voucher_items vi
+            JOIN acc_accounts a ON a.id = vi.account_id
+           WHERE vi.voucher_id = v.id AND vi.debit_amount > 0 AND a.type = 'asset'
+           ORDER BY vi.id ASC
+           LIMIT 1)                                AS received_into,
          v.id                                      AS voucher_id,
          v.voucher_number                          AS invoice_no,
          p.amount,
@@ -75,22 +81,95 @@ arsort($staff_totals);
 arsort($by_pay_method);
 arsort($by_fee_type);
 
-// ── Staff × Payment-method cross-tab (for print summary) ───────────────────
-$method_order  = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_banking' => 'Mobile Banking', 'old_erp' => 'Old ERP'];
-$method_keys   = [];          // payment methods actually present, in $method_order order
-$staff_matrix  = [];          // [staff_name][method] => amount
-$method_totals = [];          // [method] => amount
+// ── Staff × Collection-channel cross-tab (for print summary) ───────────────
+// A "channel" is finer than the payment method: Cash, each mobile-banking
+// provider (bKash / Nagad / Rocket), each bank account the money was received
+// into (from the receipt voucher's debit line), and Old ERP.
+$mb_provider_labels = ['bkash' => 'bKash', 'nagad' => 'Nagad', 'rocket' => 'Rocket'];
+$group_labels       = ['cash' => 'Cash', 'mobile_banking' => 'Mobile Banking', 'bank' => 'Bank', 'old_erp' => 'Old ERP'];
+$group_order        = ['cash' => 0, 'mobile_banking' => 1, 'bank' => 2, 'old_erp' => 3];
+$provider_order     = ['bkash' => 0, 'nagad' => 1, 'rocket' => 2];
+
+$channel_group  = [];   // [channel_key] => group (cash|mobile_banking|bank|old_erp)
+$channel_label  = [];   // [channel_key] => column label
+$channel_totals = [];   // [channel_key] => amount (all staff)
+$staff_matrix   = [];   // [staff_name][channel_key] => amount
+$staff_txns     = [];   // [staff_name] => number of transactions
 foreach ($rows as $r) {
     $amt  = (float)$r['amount'];
     $name = $r['collected_by'];
-    $mk   = strtolower(trim($r['payment_method']));
-    if (!isset($method_order[$mk])) { $mk = 'cash'; }
-    $staff_matrix[$name][$mk] = ($staff_matrix[$name][$mk] ?? 0.0) + $amt;
-    $method_totals[$mk]       = ($method_totals[$mk] ?? 0.0) + $amt;
+    $pm   = strtolower(trim((string)$r['payment_method']));
+    switch ($pm) {
+        case 'mobile_banking':
+            $prov  = strtolower(trim((string)($r['mobile_banking_provider'] ?? '')));
+            $key   = 'mb:' . ($prov !== '' ? $prov : 'other');
+            $label = $mb_provider_labels[$prov] ?? ($prov !== '' ? ucfirst($prov) : 'Other Wallet');
+            $group = 'mobile_banking';
+            break;
+        case 'bank':
+            $bank  = trim((string)($r['received_into'] ?? ''));
+            $key   = 'bank:' . ($bank !== '' ? $bank : 'unspecified');
+            $label = $bank !== '' ? $bank : 'Unspecified';
+            $group = 'bank';
+            break;
+        case 'old_erp':
+            $key = 'old_erp'; $label = 'Old ERP'; $group = 'old_erp';
+            break;
+        default:
+            $key = 'cash'; $label = 'Cash'; $group = 'cash';
+    }
+    $channel_group[$key]       = $group;
+    $channel_label[$key]       = $label;
+    $channel_totals[$key]      = ($channel_totals[$key] ?? 0.0) + $amt;
+    $staff_matrix[$name][$key] = ($staff_matrix[$name][$key] ?? 0.0) + $amt;
+    $staff_txns[$name]         = ($staff_txns[$name] ?? 0) + 1;
 }
-foreach ($method_order as $mk => $lbl) {
-    if (isset($method_totals[$mk])) { $method_keys[$mk] = $lbl; }
+
+// Column order: Cash → bKash, Nagad, Rocket → banks (A–Z) → Old ERP
+$channel_keys = array_keys($channel_label);
+usort($channel_keys, static function (string $a, string $b) use ($channel_group, $channel_label, $group_order, $provider_order): int {
+    $ga = $group_order[$channel_group[$a]] ?? 9;
+    $gb = $group_order[$channel_group[$b]] ?? 9;
+    if ($ga !== $gb) { return $ga <=> $gb; }
+    if ($channel_group[$a] === 'mobile_banking') {
+        $pa = $provider_order[substr($a, 3)] ?? 9;
+        $pb = $provider_order[substr($b, 3)] ?? 9;
+        if ($pa !== $pb) { return $pa <=> $pb; }
+    }
+    return strcasecmp($channel_label[$a], $channel_label[$b]);
+});
+
+// Group the columns for the two-row header. A group with more than one
+// channel (e.g. several banks) also gets a "<Group> Total" subtotal column.
+$summary_groups = [];   // [group] => ['label' => ..., 'cols' => [['key','label','subtotal'], ...]]
+foreach ($channel_keys as $k) {
+    $g = $channel_group[$k];
+    $summary_groups[$g]['label']  = $group_labels[$g] ?? ucfirst($g);
+    $summary_groups[$g]['cols'][] = ['key' => $k, 'label' => $channel_label[$k], 'subtotal' => false];
 }
+$has_sub_header = false;
+foreach ($summary_groups as $g => &$grp) {
+    if (count($grp['cols']) > 1) {
+        $grp['cols'][] = ['key' => 'sub:' . $g, 'label' => $grp['label'] . ' Total', 'subtotal' => true];
+        $has_sub_header = true;
+    }
+}
+unset($grp);
+
+// Amount for one summary cell (a channel or a group subtotal). Null = nothing collected.
+$summary_cell = static function (array $amounts, array $col) use ($summary_groups): ?float {
+    if ($col['subtotal']) {
+        $g   = substr($col['key'], 4);
+        $sum = 0.0;
+        $any = false;
+        foreach ($summary_groups[$g]['cols'] as $c) {
+            if (!$c['subtotal'] && isset($amounts[$c['key']])) { $sum += $amounts[$c['key']]; $any = true; }
+        }
+        return $any ? $sum : null;
+    }
+    return $amounts[$col['key']] ?? null;
+};
+
 // Order staff rows by their total collection (desc) to match $staff_totals
 $staff_matrix_sorted = [];
 foreach ($staff_totals as $name => $tot) {
@@ -227,42 +306,59 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <?php if (!empty($rows)): ?>
-<!-- ── Print-only summary: staff × payment-method collection ── -->
+<!-- ── Print-only summary: staff × collection channel (Cash / bKash / Nagad / Rocket / each Bank) ── -->
 <div class="d-none d-print-block mb-3">
-    <div style="font-size:10pt;font-weight:700;color:#0d6efd;margin-bottom:5px">Collection Summary — by Staff &amp; Payment Method</div>
-    <table class="sc-summary" style="width:100%;border-collapse:collapse;font-size:8pt">
+    <div style="font-size:10pt;font-weight:700;color:#0d6efd;margin-bottom:5px">Collection Summary — by Staff &amp; Payment Channel</div>
+    <table class="sc-summary">
         <thead>
-            <tr style="background:#dce8ff">
-                <th style="text-align:left;padding:4px 6px;border:1px solid #b9c9ef">#</th>
-                <th style="text-align:left;padding:4px 6px;border:1px solid #b9c9ef">Staff</th>
-                <?php foreach ($method_keys as $mk => $lbl): ?>
-                <th style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef"><?= h($lbl) ?></th>
+            <tr>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">#</th>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">Staff</th>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Txns</th>
+                <?php foreach ($summary_groups as $g => $grp): $ncols = count($grp['cols']); ?>
+                    <?php if ($ncols === 1): ?>
+                    <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r"><?= h(($g === 'bank' ? 'Bank – ' : '') . $grp['cols'][0]['label']) ?></th>
+                    <?php else: ?>
+                    <th colspan="<?= $ncols ?>" class="sc-c sc-grp"><?= h($grp['label']) ?></th>
+                    <?php endif; ?>
                 <?php endforeach; ?>
-                <th style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef">Total (<?= h($currency) ?>)</th>
+                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Total (<?= h($currency) ?>)</th>
             </tr>
+            <?php if ($has_sub_header): ?>
+            <tr>
+                <?php foreach ($summary_groups as $grp): if (count($grp['cols']) === 1) continue; ?>
+                    <?php foreach ($grp['cols'] as $col): ?>
+                    <th class="sc-r<?= $col['subtotal'] ? ' sc-sub' : '' ?>"><?= h($col['label']) ?></th>
+                    <?php endforeach; ?>
+                <?php endforeach; ?>
+            </tr>
+            <?php endif; ?>
         </thead>
         <tbody>
-            <?php $sidx = 0; foreach ($staff_matrix as $sname => $mrow): $sidx++; ?>
+            <?php $sidx = 0; foreach ($staff_matrix as $sname => $amounts): $sidx++; ?>
             <tr>
-                <td style="padding:3px 6px;border:1px solid #ccc;color:#666"><?= $sidx ?></td>
-                <td style="padding:3px 6px;border:1px solid #ccc;font-weight:600"><?= h($sname) ?></td>
-                <?php foreach ($method_keys as $mk => $lbl): ?>
-                <td style="text-align:right;padding:3px 6px;border:1px solid #ccc"><?= isset($mrow[$mk]) ? number_format($mrow[$mk], 2) : '—' ?></td>
-                <?php endforeach; ?>
-                <td style="text-align:right;padding:3px 6px;border:1px solid #ccc;font-weight:700"><?= number_format($staff_totals[$sname] ?? 0, 2) ?></td>
+                <td class="sc-muted"><?= $sidx ?></td>
+                <td class="sc-name"><?= h($sname) ?></td>
+                <td class="sc-r sc-muted"><?= (int)($staff_txns[$sname] ?? 0) ?></td>
+                <?php foreach ($summary_groups as $grp): foreach ($grp['cols'] as $col): $v = $summary_cell($amounts, $col); ?>
+                <td class="sc-r<?= $col['subtotal'] ? ' sc-sub' : '' ?>"><?= $v !== null ? number_format($v, 2) : '—' ?></td>
+                <?php endforeach; endforeach; ?>
+                <td class="sc-r sc-total"><?= number_format($staff_totals[$sname] ?? 0, 2) ?></td>
             </tr>
             <?php endforeach; ?>
         </tbody>
         <tfoot>
-            <tr style="background:#e0eaff;font-weight:700">
-                <td colspan="2" style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef">Total Collection</td>
-                <?php foreach ($method_keys as $mk => $lbl): ?>
-                <td style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef"><?= number_format($method_totals[$mk] ?? 0, 2) ?></td>
-                <?php endforeach; ?>
-                <td style="text-align:right;padding:4px 6px;border:1px solid #b9c9ef;color:#0d6efd"><?= number_format($grand_total, 2) ?></td>
+            <tr>
+                <td colspan="2" class="sc-r">Total Collection</td>
+                <td class="sc-r"><?= count($rows) ?></td>
+                <?php foreach ($summary_groups as $grp): foreach ($grp['cols'] as $col): $v = $summary_cell($channel_totals, $col); ?>
+                <td class="sc-r"><?= $v !== null ? number_format($v, 2) : '—' ?></td>
+                <?php endforeach; endforeach; ?>
+                <td class="sc-r sc-grand"><?= number_format($grand_total, 2) ?></td>
             </tr>
         </tfoot>
     </table>
+    <div style="font-size:7pt;color:#777;margin-top:3px">Mobile Banking is split by wallet provider. Bank columns show the bank account the payment was received into (per the receipt voucher).</div>
 </div>
 
 <!-- ── Summary stat cards (screen) ── -->
@@ -425,11 +521,27 @@ require_once __DIR__ . '/../../includes/header.php';
 <style>
 #collectionTable thead th { font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; color:#495057; border-bottom:2px solid #d0d9f5; white-space:nowrap; }
 #collectionTable tbody tr:hover { background:#f5f8ff; }
+/* Print summary: staff × collection channel */
+.sc-summary { width:100%; border-collapse:collapse; font-size:8pt; }
+.sc-summary th, .sc-summary td { padding:3px 6px; border:1px solid #ccc; vertical-align:middle; }
+.sc-summary thead th { background:#dce8ff; border-color:#b9c9ef; font-weight:700; text-align:right; white-space:nowrap; }
+.sc-summary .sc-l { text-align:left; }
+.sc-summary .sc-c { text-align:center; }
+.sc-summary .sc-r { text-align:right; white-space:nowrap; }
+.sc-summary thead th.sc-grp { background:#c9daff; }
+.sc-summary .sc-sub { background:#f3f6fd; font-weight:600; }
+.sc-summary .sc-muted { color:#666; }
+.sc-summary .sc-name { font-weight:600; text-align:left; }
+.sc-summary .sc-total { font-weight:700; }
+.sc-summary tfoot td { background:#e0eaff; border-color:#b9c9ef; font-weight:700; }
+.sc-summary .sc-grand { color:#0d6efd; }
 @media print {
     #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display:none !important; }
     #main-wrapper, body, html { margin:0 !important; padding:0 !important; }
     #printArea { width:100%; }
     .sc-summary { -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-inside:avoid; }
+    .sc-summary thead { display:table-header-group; }
+    .sc-summary tr { page-break-inside:avoid; }
     #collectionTable { font-size:7.5pt !important; border-collapse:collapse; width:100%; table-layout:fixed; }
     #collectionTable th, #collectionTable td { padding:3px 5px !important; border:1px solid #ccc !important; vertical-align:top !important; word-break:break-word; overflow-wrap:anywhere; white-space:normal !important; }
     #collectionTable thead th { font-size:7pt !important; }
