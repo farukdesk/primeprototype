@@ -39,6 +39,12 @@ $rows = db()->prepare(
          p.fee_type,
          p.payment_method,
          p.mobile_banking_provider,
+         (SELECT a.name
+            FROM acc_voucher_items vi
+            JOIN acc_accounts a ON a.id = vi.account_id
+           WHERE vi.voucher_id = v.id AND vi.debit_amount > 0 AND a.type = 'asset'
+           ORDER BY vi.id ASC
+           LIMIT 1)                                AS received_into,
          v.id                                      AS voucher_id,
          v.voucher_number                          AS invoice_no,
          p.amount,
