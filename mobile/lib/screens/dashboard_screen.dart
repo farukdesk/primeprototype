@@ -341,7 +341,7 @@ class _WelcomeCard extends StatelessWidget {
               children: [
                 Text(
                   'Welcome back,',
-                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
                 ),
                 Text(
                   user.fullName,
@@ -355,7 +355,7 @@ class _WelcomeCard extends StatelessWidget {
                 ),
                 Text(
                   user.group,
-                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                 ),
               ],
             ),
@@ -399,7 +399,7 @@ class _StatCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -446,7 +446,7 @@ class _ModuleTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -459,7 +459,7 @@ class _ModuleTile extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 22),

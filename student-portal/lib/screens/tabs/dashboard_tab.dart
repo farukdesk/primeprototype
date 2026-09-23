@@ -153,7 +153,7 @@ class _DashboardTabState extends State<DashboardTab> {
         children: [
           Text(
             'Welcome back, 👋',
-            style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 13),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13),
           ),
           const SizedBox(height: 4),
           Text(
@@ -215,7 +215,7 @@ class _StatCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -225,7 +225,7 @@ class _StatCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -295,7 +295,7 @@ class _NoticeCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           border: Border(left: BorderSide(color: color, width: 4)),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2)),
+            BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2)),
           ],
         ),
         child: Row(
@@ -309,7 +309,7 @@ class _NoticeCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.1),
+                          color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -357,7 +357,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 32),
-          Icon(icon, size: 48, color: AppTheme.textSecondary.withOpacity(0.4)),
+          Icon(icon, size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.4)),
           const SizedBox(height: 12),
           Text(
             message,

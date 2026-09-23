@@ -75,7 +75,7 @@ class _FinancesTabState extends State<FinancesTab> {
         children: [
           const SizedBox(height: 60),
           Icon(Icons.error_outline_rounded,
-              size: 56, color: AppTheme.error.withOpacity(0.6)),
+              size: 56, color: AppTheme.error.withValues(alpha: 0.6)),
           const SizedBox(height: 16),
           Center(
             child: Padding(
@@ -223,7 +223,7 @@ class _SemCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6, offset: const Offset(0, 2)),
         ],
       ),
@@ -302,7 +302,7 @@ class _PaymentCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 6, offset: const Offset(0, 2)),
         ],
       ),
@@ -312,7 +312,7 @@ class _PaymentCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.1),
+              color: AppTheme.success.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.receipt_long_rounded,

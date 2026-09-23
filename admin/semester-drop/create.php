@@ -13,10 +13,13 @@ $me       = auth_user();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    $student_id = (int)($_POST['student_id'] ?? 0);
-    $type       = ($_POST['semester_type'] ?? '') === 'tri' ? 'tri' : 'bi';
-    $drop_start = trim($_POST['drop_start'] ?? '');
-    $reason     = trim($_POST['reason'] ?? '');
+    $student_id  = (int)($_POST['student_id'] ?? 0);
+    $type_raw    = (string)($_POST['semester_type'] ?? '');
+    $type        = in_array($type_raw, ['tri', 'custom'], true) ? $type_raw : 'bi';
+    $is_custom   = $type === 'custom';
+    $drop_start  = trim($_POST['drop_start'] ?? '');
+    $drop_end_in = trim($_POST['drop_end_custom'] ?? '');
+    $reason      = trim($_POST['reason'] ?? '');
 
     $errors = [];
 
@@ -41,9 +44,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $start_dt = false;
     }
 
+    // Custom period: validate the freely-chosen drop end date.
+    $new_end = null;
+    if ($start_dt) {
+        if ($is_custom) {
+            $end_dt = false;
+            if ($drop_end_in !== '') {
+                $end_dt = \DateTimeImmutable::createFromFormat('!Y-m-d', $drop_end_in);
+            }
+            if (!($end_dt instanceof \DateTimeImmutable) || $end_dt->format('Y-m-d') !== $drop_end_in) {
+                $errors[] = 'Please provide a valid drop end date.';
+            } elseif ($drop_end_in < $drop_start) {
+                $errors[] = 'The drop end date cannot be before the drop start date.';
+            } else {
+                $new_end = $drop_end_in;
+            }
+        } else {
+            $new_end = sd_compute_end($drop_start, $type);
+        }
+    }
+
     // Prevent overlapping active drops for the same student
-    if ($student && $start_dt) {
-        $new_end = sd_compute_end($drop_start, $type);
+    if ($student && $start_dt && $new_end !== null) {
         $ov = $db->prepare(
             'SELECT COUNT(*) FROM semester_drops
               WHERE student_id = ? AND status = \'active\' AND kind = \'drop\'
@@ -71,14 +93,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors) && $student) {
-        $new_id = sd_create_drop(
-            (int)$student['id'],
-            $type,
-            $drop_start,
-            $reason !== '' ? $reason : null,
-            $evidence_file_id,
-            (int)$me['id']
-        );
+        $new_id = $is_custom
+            ? sd_create_drop_custom_range(
+                (int)$student['id'],
+                $drop_start,
+                (string)$new_end,
+                $reason !== '' ? $reason : null,
+                $evidence_file_id,
+                (int)$me['id']
+            )
+            : sd_create_drop(
+                (int)$student['id'],
+                $type,
+                $drop_start,
+                $reason !== '' ? $reason : null,
+                $evidence_file_id,
+                (int)$me['id']
+            );
         flash_set('success', 'Semester drop recorded for ' . h($student['full_name']) . '.');
         clear_old();
         redirect(APP_URL . '/semester-drop/view.php?id=' . $new_id);
@@ -88,11 +119,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash_set('error', $e);
     }
     save_old([
-        'student_id'    => $student_id,
-        'student_label' => trim($_POST['student_label'] ?? ''),
-        'semester_type' => $type,
-        'drop_start'    => $drop_start,
-        'reason'        => $reason,
+        'student_id'      => $student_id,
+        'student_label'   => trim($_POST['student_label'] ?? ''),
+        'semester_type'   => $type,
+        'drop_start'      => $drop_start,
+        'drop_end_custom' => $drop_end_in,
+        'reason'          => $reason,
     ]);
     redirect(APP_URL . '/semester-drop/create.php');
 }
@@ -134,20 +166,28 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="mb-4">
                     <label class="form-label fw-semibold">Semester Type <span class="text-danger">*</span></label>
                     <div class="row g-2">
-                        <div class="col-sm-6">
+                        <div class="col-sm-4">
                             <input type="radio" class="btn-check" name="semester_type" id="type_bi" value="bi"
-                                   <?= old('semester_type', 'bi') === 'tri' ? '' : 'checked' ?>>
+                                   <?= old('semester_type', 'bi') === 'bi' ? 'checked' : '' ?>>
                             <label class="btn btn-outline-warning w-100 text-start p-3" for="type_bi">
                                 <span class="fw-bold d-block">Bi-semester</span>
                                 <small class="text-muted">Blocks <strong>6 months</strong></small>
                             </label>
                         </div>
-                        <div class="col-sm-6">
+                        <div class="col-sm-4">
                             <input type="radio" class="btn-check" name="semester_type" id="type_tri" value="tri"
                                    <?= old('semester_type') === 'tri' ? 'checked' : '' ?>>
                             <label class="btn btn-outline-warning w-100 text-start p-3" for="type_tri">
                                 <span class="fw-bold d-block">Tri-semester</span>
                                 <small class="text-muted">Blocks <strong>4 months</strong></small>
+                            </label>
+                        </div>
+                        <div class="col-sm-4">
+                            <input type="radio" class="btn-check" name="semester_type" id="type_custom" value="custom"
+                                   <?= old('semester_type') === 'custom' ? 'checked' : '' ?>>
+                            <label class="btn btn-outline-warning w-100 text-start p-3" for="type_custom">
+                                <span class="fw-bold d-block">Custom</span>
+                                <small class="text-muted">Pick <strong>any date range</strong></small>
                             </label>
                         </div>
                     </div>
@@ -161,9 +201,12 @@ require_once __DIR__ . '/../includes/header.php';
                                value="<?= old('drop_start', date('Y-m-d')) ?>" required>
                     </div>
                     <div class="col-sm-6">
-                        <label class="form-label fw-semibold">Drop End <span class="text-muted">(auto)</span></label>
+                        <label class="form-label fw-semibold" id="drop_end_label">Drop End <span class="text-muted">(auto)</span></label>
                         <input type="text" id="drop_end_preview" class="form-control" readonly
                                placeholder="Calculated from type & start">
+                        <input type="date" name="drop_end_custom" id="drop_end_custom" class="form-control d-none"
+                               value="<?= old('drop_end_custom') ?>">
+                        <small class="text-muted d-none" id="drop_end_custom_hint">Choose the last day of the blocked period.</small>
                     </div>
                 </div>
 
@@ -203,6 +246,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <ul class="small text-muted mb-0 ps-3">
                     <li>A <strong>Bi-semester</strong> drop blocks <strong>6 months</strong>.</li>
                     <li>A <strong>Tri-semester</strong> drop blocks <strong>4 months</strong>.</li>
+                    <li><strong>Custom</strong> lets you pick any drop start <em>and</em> end date instead of a fixed 6/4-month block — the blocked month count is worked out from the dates you choose.</li>
                     <li>The dropped months are <strong>deferred, not waived</strong>: the monthly tuition is pushed to the end of the schedule, so the student still owes the full programme total and the <strong>programme end is extended</strong> by the drop length.</li>
                     <li>During the blocked window the dropped months show as <em>Semester Drop</em> placeholders in Accounts, Collect Payment and the student profile, and are not counted as due until their deferred calendar month arrives.</li>
                     <li>Evidence is mandatory unless recorded by a Super Administrator.</li>
@@ -218,10 +262,14 @@ require_once __DIR__ . '/../includes/header.php';
     var input    = document.getElementById('student_search');
     var hidden   = document.getElementById('student_id');
     var results  = document.getElementById('student_results');
-    var typeBi   = document.getElementById('type_bi');
-    var typeTri  = document.getElementById('type_tri');
-    var startEl  = document.getElementById('drop_start');
-    var endEl    = document.getElementById('drop_end_preview');
+    var typeBi     = document.getElementById('type_bi');
+    var typeTri    = document.getElementById('type_tri');
+    var typeCustom = document.getElementById('type_custom');
+    var startEl    = document.getElementById('drop_start');
+    var endEl      = document.getElementById('drop_end_preview');
+    var endLabel   = document.getElementById('drop_end_label');
+    var endCustom  = document.getElementById('drop_end_custom');
+    var endCustomHint = document.getElementById('drop_end_custom_hint');
     var timer    = null;
 
     function clearResults() { results.innerHTML = ''; }
@@ -263,10 +311,14 @@ require_once __DIR__ . '/../includes/header.php';
     });
 
     // ── Drop end preview ──────────────────────────────────────────────────
+    function isCustom() {
+        return !!(typeCustom && typeCustom.checked);
+    }
     function monthsForType() {
         return (typeTri && typeTri.checked) ? 4 : 6;
     }
     function updateEnd() {
+        if (isCustom()) { return; }
         if (!startEl.value) { endEl.value = ''; return; }
         var parts = startEl.value.split('-');
         if (parts.length !== 3) { endEl.value = ''; return; }
@@ -276,10 +328,29 @@ require_once __DIR__ . '/../includes/header.php';
         var opts = { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' };
         endEl.value = d.toLocaleDateString('en-GB', opts) + '  (' + monthsForType() + ' months)';
     }
-    [typeBi, typeTri, startEl].forEach(function (el) {
-        if (el) el.addEventListener('change', updateEnd);
+    // Swap the readonly auto-preview for an editable date input when Custom
+    // is selected, and back again for Bi/Tri.
+    function updateModeUI() {
+        var custom = isCustom();
+        endEl.classList.toggle('d-none', custom);
+        endCustom.classList.toggle('d-none', !custom);
+        if (endCustomHint) { endCustomHint.classList.toggle('d-none', !custom); }
+        endCustom.disabled = !custom;
+        endCustom.required = custom;
+        if (endLabel) {
+            endLabel.innerHTML = custom
+                ? 'Drop End <span class="text-danger">*</span>'
+                : 'Drop End <span class="text-muted">(auto)</span>';
+        }
+        if (!custom) { updateEnd(); }
+    }
+    [typeBi, typeTri, typeCustom].forEach(function (el) {
+        if (el) el.addEventListener('change', updateModeUI);
     });
-    if (startEl) startEl.addEventListener('input', updateEnd);
-    updateEnd();
+    if (startEl) {
+        startEl.addEventListener('change', updateEnd);
+        startEl.addEventListener('input', updateEnd);
+    }
+    updateModeUI();
 }());
 </script>

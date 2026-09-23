@@ -118,7 +118,7 @@ class _CoursesTabState extends State<CoursesTab> {
     return ListView(
       children: [
         const SizedBox(height: 80),
-        Icon(icon, size: 56, color: color.withOpacity(0.6)),
+        Icon(icon, size: 56, color: color.withValues(alpha: 0.6)),
         const SizedBox(height: 16),
         Center(
           child: Padding(
@@ -145,7 +145,7 @@ class _CoursesTabState extends State<CoursesTab> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            color: AppTheme.primary.withOpacity(0.06),
+            color: AppTheme.primary.withValues(alpha: 0.06),
             padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,7 +186,7 @@ class _CoursesTabState extends State<CoursesTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: (open ? AppTheme.success : AppTheme.textSecondary).withOpacity(0.12),
+        color: (open ? AppTheme.success : AppTheme.textSecondary).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -263,7 +263,7 @@ class _CoursesTabState extends State<CoursesTab> {
         label: Text(sub.registered ? 'Registered' : '—',
             style: const TextStyle(fontSize: 12)),
         backgroundColor: sub.registered
-            ? AppTheme.success.withOpacity(0.12)
+            ? AppTheme.success.withValues(alpha: 0.12)
             : AppTheme.divider,
         labelStyle: TextStyle(
             color: sub.registered ? AppTheme.success : AppTheme.textSecondary),

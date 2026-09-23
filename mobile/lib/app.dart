@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';

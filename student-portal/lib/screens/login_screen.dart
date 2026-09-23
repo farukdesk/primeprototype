@@ -85,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 16,
                             offset: const Offset(0, 6),
                           ),
@@ -112,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.accent.withOpacity(0.2),
+                        color: AppTheme.accent.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: AppTheme.accent, width: 1),
                       ),
@@ -164,10 +164,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: AppTheme.error.withOpacity(0.1),
+                              color: AppTheme.error.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                  color: AppTheme.error.withOpacity(0.3)),
+                                  color: AppTheme.error.withValues(alpha: 0.3)),
                             ),
                             child: Row(
                               children: [
@@ -193,10 +193,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: AppTheme.error.withOpacity(0.08),
+                              color: AppTheme.error.withValues(alpha: 0.08),
                               borderRadius: BorderRadius.circular(10),
                               border: Border.all(
-                                  color: AppTheme.error.withOpacity(0.3)),
+                                  color: AppTheme.error.withValues(alpha: 0.3)),
                             ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,

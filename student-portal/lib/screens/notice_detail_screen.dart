@@ -34,9 +34,9 @@ class NoticeDetailScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: accent.withOpacity(0.1),
+                    color: accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: accent.withOpacity(0.3)),
+                    border: Border.all(color: accent.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -102,7 +102,7 @@ class NoticeDetailScreen extends StatelessWidget {
               Text(
                 'No content provided.',
                 style: TextStyle(
-                    color: AppTheme.textSecondary.withOpacity(0.6),
+                    color: AppTheme.textSecondary.withValues(alpha: 0.6),
                     fontStyle: FontStyle.italic),
               ),
 
@@ -125,9 +125,9 @@ class NoticeDetailScreen extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: accent.withOpacity(0.07),
+                    color: accent.withValues(alpha: 0.07),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: accent.withOpacity(0.2)),
+                    border: Border.all(color: accent.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
@@ -135,7 +135,7 @@ class NoticeDetailScreen extends StatelessWidget {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: accent.withOpacity(0.15),
+                          color: accent.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(Icons.attach_file_rounded,

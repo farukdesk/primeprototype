@@ -99,6 +99,65 @@ function sd_compute_end_months(string $start, int $months): string
 }
 
 /**
+ * Number of calendar months (inclusive, month granularity) spanned by a date
+ * range, e.g. 2025-01-15 → 2025-03-10 spans Jan, Feb, Mar = 3 months. This is
+ * the same granularity sd_is_month_dropped() / sd_dropped_months_count() use
+ * to decide which obligation months are deferred, so it is the right unit to
+ * store in block_months for a drop whose end date was picked freely rather
+ * than derived from a fixed Bi/Tri block length.
+ */
+function sd_months_between_dates(string $start, string $end): int
+{
+    $s = explode('-', $start);
+    $e = explode('-', $end);
+    if (count($s) < 2 || count($e) < 2) {
+        return 1;
+    }
+    $months = (((int)$e[0]) * 12 + ((int)$e[1] - 1)) - (((int)$s[0]) * 12 + ((int)$s[1] - 1)) + 1;
+    return max(1, $months);
+}
+
+/**
+ * Create a semester drop over an EXACT, freely-chosen date range
+ * (semester_type = NULL), rather than a fixed Bi (6) / Tri (4) month block.
+ *
+ * Used by the "Custom" option on the single-record create form, where the
+ * admin picks both the drop start and drop end date directly instead of
+ * choosing Bi/Tri. block_months is derived from the chosen range (see
+ * sd_months_between_dates()) purely so the deferral logic — which extends the
+ * programme end by the total blocked months — treats it the same as any
+ * other drop.
+ *
+ * @return int  The new record id.
+ */
+function sd_create_drop_custom_range(
+    int $student_id,
+    string $drop_start,
+    string $drop_end,
+    ?string $reason,
+    ?int $evidence_file_id,
+    int $created_by
+): int {
+    $months = sd_months_between_dates($drop_start, $drop_end);
+
+    $stmt = db()->prepare(
+        'INSERT INTO semester_drops
+            (student_id, kind, semester_type, block_months, drop_start, drop_end, reason, evidence_file_id, status, created_by)
+         VALUES (?, \'drop\', NULL, ?, ?, ?, ?, ?, \'active\', ?)'
+    );
+    $stmt->execute([
+        $student_id,
+        $months,
+        $drop_start,
+        $drop_end,
+        ($reason !== null && $reason !== '') ? $reason : null,
+        $evidence_file_id,
+        $created_by,
+    ]);
+    return (int)db()->lastInsertId();
+}
+
+/**
  * Create a semester drop with a CUSTOM month length (semester_type = NULL).
  *
  * Used by Bulk Drop by Amount, where the number of blocked months is derived

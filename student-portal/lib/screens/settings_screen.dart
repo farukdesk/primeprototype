@@ -188,7 +188,7 @@ class _SettingsCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
@@ -221,7 +221,7 @@ class _ListTileItem extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: iconColor.withOpacity(0.1),
+          color: iconColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(9),
         ),
         child: Icon(icon, color: iconColor, size: 18),
@@ -256,9 +256,9 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

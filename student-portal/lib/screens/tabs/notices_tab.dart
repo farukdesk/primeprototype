@@ -178,7 +178,7 @@ class _NoticesTabState extends State<NoticesTab> {
       child: Container(
         height: 40,
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: Colors.white.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(24),
         ),
         child: Row(
@@ -258,7 +258,7 @@ class _NoticeListCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: accent.withOpacity(0.1),
+                            color: accent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(

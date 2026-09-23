@@ -124,7 +124,7 @@ class ProfileTab extends StatelessWidget {
                 Text(
                   student.deptName,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.75),
+                    color: Colors.white.withValues(alpha: 0.75),
                     fontSize: 12,
                   ),
                 ),
@@ -150,7 +150,7 @@ class _InfoCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.04),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.04),
               blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),

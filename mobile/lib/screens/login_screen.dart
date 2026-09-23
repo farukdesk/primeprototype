@@ -147,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
           ),
           child: const Icon(Icons.school_rounded, size: 44, color: Colors.white),
@@ -166,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Text(
           'Prime University Management System',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.55),
+            color: Colors.white.withValues(alpha: 0.55),
             fontSize: 12,
           ),
           textAlign: TextAlign.center,
@@ -183,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 40,
             offset: const Offset(0, 16),
           ),
@@ -359,7 +359,7 @@ class _BiometricIndicator extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
+          color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(

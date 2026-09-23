@@ -110,7 +110,7 @@ class AppTheme {
       ),
 
       chipTheme: ChipThemeData(
-        backgroundColor: primary.withOpacity(0.08),
+        backgroundColor: primary.withValues(alpha: 0.08),
         labelStyle: const TextStyle(
           color: primary,
           fontSize: 12,
