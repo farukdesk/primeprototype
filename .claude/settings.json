@@ -2,7 +2,22 @@
   "permissions": {
     "allow": [
       "Bash(git check-ignore *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(grep -n '\\\\$t\\\\b' includes/header.php)",
+      "Bash(grep -n '\\\\$is_dept\\\\b\\\\|\\\\$package\\\\b\\\\|\\\\$payment_count\\\\b\\\\|\\\\$me\\\\b\\\\|\\\\$id\\\\b' includes/header.php)",
+      "Bash(grep -n '\\\\$t\\\\b' department.php batch.php index.php)",
+      "Bash(grep -n '\\\\$t\\\\b' view.php)",
+      "Bash(grep -cE '\\\\$t\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$student\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$id\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$db\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$page\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$me\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$package\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$payment_count\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$is_dept\\\\b' includes/header.php)",
+      "Bash(grep -cE '\\\\$departments\\\\b' includes/header.php)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
