@@ -49,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Short leave is a single-day leave: the end date is always the start date.
     if ($end === '' && $category !== 'short') $errors[] = 'End date is required.';
     if ($reason === '')        $errors[] = 'Please provide a reason for the leave.';
+    if ($is_faculty && $makeup === '') $errors[] = 'Please describe your makeup class schedule plan.';
 
     // Paid/unpaid: fixed for some categories, chosen by the requester for others.
     $fixed_pay = lm_fixed_pay($category);
@@ -238,8 +239,8 @@ require_once __DIR__ . '/../includes/header.php';
 
                     <?php if ($is_faculty): ?>
                     <div class="mb-3">
-                        <label class="form-label fw-medium">Makeup Class Schedule Plan <span class="text-muted">(optional)</span></label>
-                        <textarea name="makeup_plan" class="form-control" rows="3"
+                        <label class="form-label fw-medium">Makeup Class Schedule Plan <span class="text-danger">*</span></label>
+                        <textarea name="makeup_plan" class="form-control" rows="3" required
                                   placeholder="e.g. CSE-101 (Sec A) class of 12 Aug will be made up on 16 Aug, 10:00 AM, Room 402"><?= h($in['makeup_plan']) ?></textarea>
                         <div class="form-text">Describe how and when you plan to make up the classes affected by this leave. This helps approvers process your request faster.</div>
                     </div>
