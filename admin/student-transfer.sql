@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS `student_transfers` (
   `created_by`         int(10) UNSIGNED DEFAULT NULL,
   `created_at`         datetime NOT NULL DEFAULT current_timestamp(),
 
+  -- Revert support (see admin/student-transfer-revert.sql for the standalone
+  -- migration these two columns came from) — a reverted transfer is marked,
+  -- never deleted, so the history stays intact.
+  `reverted_at`        datetime DEFAULT NULL COMMENT 'When this transfer was reverted, if ever',
+  `reverted_by`        int(10) UNSIGNED DEFAULT NULL COMMENT 'users.id who reverted this transfer',
+
   PRIMARY KEY (`id`),
   KEY `idx_st_student` (`student_id`),
   KEY `idx_st_kind` (`kind`),

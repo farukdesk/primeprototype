@@ -173,7 +173,7 @@ require_once __DIR__ . '/../includes/header.php';
                         </a><br>
                         <small class="text-muted"><?= h($t['student_sid']) ?></small>
                     </td>
-                    <td><?= stt_kind_badge($t['kind']) ?></td>
+                    <td><?= stt_kind_badge($t['kind']) ?> <?= !empty($t['reverted_at']) ? stt_reverted_badge() : '' ?></td>
                     <td>
                         <?php if ($t['kind'] === 'department'): ?>
                         <div><?= h($t['from_dept_name'] ?? '—') ?> → <strong><?= h($t['to_dept_name'] ?? '—') ?></strong></div>

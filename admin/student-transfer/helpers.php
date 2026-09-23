@@ -30,6 +30,7 @@ const STT_SLUG = 'student-transfer';
 // ── Permission helpers ──────────────────────────────────────────────────────
 function stt_can_view(): bool   { return can_access(STT_SLUG, 'can_view'); }
 function stt_can_create(): bool { return can_access(STT_SLUG, 'can_create'); }
+function stt_can_delete(): bool { return can_access(STT_SLUG, 'can_delete'); }
 
 // ── Reference data ──────────────────────────────────────────────────────────
 
@@ -406,6 +407,166 @@ function stt_create_batch_transfer(int $student_id, int $to_batch_id, ?string $r
     return ['ok' => true, 'message' => 'Batch transfer recorded for ' . $student['full_name'] . '.', 'transfer_id' => $transfer_id];
 }
 
+// ── Revert ───────────────────────────────────────────────────────────────────
+//
+// Reverting restores the student's actual academic fields to their exact
+// pre-transfer values. The student_transfers row itself is marked reverted
+// (reverted_at/reverted_by), never deleted, so the history still shows both
+// that the transfer happened AND that it was later undone.
+//
+// A revert is refused when the student's current state no longer matches
+// exactly what this transfer produced — e.g. a later transfer already moved
+// them again — so reverting can never silently clobber more recent changes.
+//
+// Fee packages are NEVER touched by a revert, for department transfers,
+// consistent with never automating money changes: if the old package was
+// ended as part of the transfer, that deletion is permanent and reverting the
+// department does not bring it back (stt_revert_department_transfer() flags
+// this in its message so the admin isn't surprised).
+
+/**
+ * Whether a transfer can currently be reverted.
+ */
+function stt_can_revert(array $transfer): bool
+{
+    if (!empty($transfer['reverted_at'])) {
+        return false;
+    }
+    $student = stt_get_student((int)$transfer['student_id']);
+    if (!$student) {
+        return false;
+    }
+    if ($transfer['kind'] === 'department') {
+        if (empty($transfer['from_dept_id'])) {
+            return false; // Source department no longer known (e.g. it was deleted) — nothing safe to restore.
+        }
+        return (int)$student['dept_id'] === (int)$transfer['to_dept_id']
+            && (int)($student['program_id'] ?? 0) === (int)($transfer['to_program_id'] ?? 0)
+            && (string)$student['student_id'] === (string)$transfer['new_student_id'];
+    }
+    return (int)($student['batch_id'] ?? 0) === (int)$transfer['to_batch_id'];
+}
+
+/** Dispatches to the right revert routine for this transfer's kind. */
+function stt_revert_transfer(int $transfer_id, int $user_id): array
+{
+    $transfer = stt_get_transfer($transfer_id);
+    if (!$transfer) {
+        return ['ok' => false, 'message' => 'Transfer record not found.'];
+    }
+    return $transfer['kind'] === 'department'
+        ? stt_revert_department_transfer($transfer, $user_id)
+        : stt_revert_batch_transfer($transfer, $user_id);
+}
+
+/**
+ * Revert a Department Transfer: restores dept_id/program_id/student_id to
+ * their pre-transfer values.
+ *
+ * @return array{ok:bool,message:string}
+ */
+function stt_revert_department_transfer(array $transfer, int $user_id): array
+{
+    if (!stt_can_revert($transfer)) {
+        return ['ok' => false, 'message' => 'This transfer can no longer be reverted — either it was already reverted, or the student\'s record has changed since (e.g. another transfer happened after this one).'];
+    }
+
+    $student_id = (int)$transfer['student_id'];
+    $student    = stt_get_student($student_id);
+
+    if (!can_access_dept((int)$transfer['from_dept_id']) || !can_access_dept((int)$transfer['to_dept_id'])) {
+        return ['ok' => false, 'message' => 'You do not have permission to revert this transfer.'];
+    }
+
+    $restore_sid = (string)($transfer['old_student_id'] ?: $student['student_id']);
+    if ($restore_sid !== $student['student_id']) {
+        $dup = db()->prepare('SELECT id FROM students WHERE student_id = ? AND id != ?');
+        $dup->execute([$restore_sid, $student_id]);
+        if ($dup->fetchColumn()) {
+            return ['ok' => false, 'message' => 'Cannot revert: the previous Student ID "' . $restore_sid . '" is now in use by another student.'];
+        }
+    }
+
+    $from_dept_row = stt_dept_map()[(int)$transfer['from_dept_id']] ?? null;
+
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $db->prepare(
+            'UPDATE students SET dept_id = ?, program_id = ?, student_id = ?, faculty_label = ? WHERE id = ?'
+        )->execute([
+            $transfer['from_dept_id'],
+            $transfer['from_program_id'] ?: null,
+            $restore_sid,
+            $from_dept_row['faculty_label'] ?? null,
+            $student_id,
+        ]);
+
+        $db->prepare('UPDATE student_transfers SET reverted_at = NOW(), reverted_by = ? WHERE id = ?')
+           ->execute([$user_id, (int)$transfer['id']]);
+
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    $label = $student['full_name'] . ' (' . $restore_sid . ')';
+    log_change('students', 'UPDATE', $student_id, $label, 'dept_id', $transfer['to_dept_id'], $transfer['from_dept_id'],
+        'Department transfer #' . $transfer['id'] . ' reverted: back to ' . ($from_dept_row['name'] ?? '—'));
+
+    $message = 'Department transfer reverted — ' . $student['full_name'] . ' is back to their previous department/program/ID.';
+    if ($transfer['package_action'] === 'ended') {
+        $message .= ' Note: the fee package that was ended during this transfer was permanently deleted and has NOT been restored.';
+    }
+
+    return ['ok' => true, 'message' => $message];
+}
+
+/**
+ * Revert a Batch Transfer: restores batch_id/batch to their pre-transfer
+ * values.
+ *
+ * @return array{ok:bool,message:string}
+ */
+function stt_revert_batch_transfer(array $transfer, int $user_id): array
+{
+    if (!stt_can_revert($transfer)) {
+        return ['ok' => false, 'message' => 'This transfer can no longer be reverted — either it was already reverted, or the student\'s record has changed since (e.g. another transfer happened after this one).'];
+    }
+
+    $student_id = (int)$transfer['student_id'];
+    $student    = stt_get_student($student_id);
+
+    if (!can_access_dept((int)$student['dept_id'])) {
+        return ['ok' => false, 'message' => 'You do not have permission to revert this transfer.'];
+    }
+
+    $restore_batch_id   = $transfer['from_batch_id'] !== null ? (int)$transfer['from_batch_id'] : null;
+    $restore_batch_name = $transfer['from_batch_name'];
+
+    $db = db();
+    $db->beginTransaction();
+    try {
+        $db->prepare('UPDATE students SET batch_id = ?, batch = ? WHERE id = ?')
+           ->execute([$restore_batch_id, $restore_batch_name, $student_id]);
+
+        $db->prepare('UPDATE student_transfers SET reverted_at = NOW(), reverted_by = ? WHERE id = ?')
+           ->execute([$user_id, (int)$transfer['id']]);
+
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    log_change('students', 'UPDATE', $student_id, $student['full_name'] . ' (' . $student['student_id'] . ')',
+        'batch_id', $transfer['to_batch_id'], $restore_batch_id,
+        'Batch transfer #' . $transfer['id'] . ' reverted: back to ' . ($restore_batch_name ?? '— none —'));
+
+    return ['ok' => true, 'message' => 'Batch transfer reverted — ' . $student['full_name'] . ' is back in ' . ($restore_batch_name ?? 'their previous batch') . '.'];
+}
+
 // ── Lookups for view/index pages ────────────────────────────────────────────
 
 /** Fetch a single transfer record joined with student + creator name. */
@@ -413,10 +574,11 @@ function stt_get_transfer(int $id): ?array
 {
     $stmt = db()->prepare(
         'SELECT t.*, s.full_name AS student_name, s.student_id AS student_sid,
-                u.full_name AS created_by_name
+                u.full_name AS created_by_name, r.full_name AS reverted_by_name
            FROM student_transfers t
            JOIN students s ON s.id = t.student_id
       LEFT JOIN users u     ON u.id = t.created_by
+      LEFT JOIN users r     ON r.id = t.reverted_by
           WHERE t.id = ?'
     );
     $stmt->execute([$id]);
@@ -429,4 +591,10 @@ function stt_kind_badge(string $kind): string
     return $kind === 'batch'
         ? '<span class="badge bg-info text-dark"><i class="fas fa-users me-1"></i>Batch Transfer</span>'
         : '<span class="badge bg-primary"><i class="fas fa-building me-1"></i>Department Transfer</span>';
+}
+
+/** "Reverted" badge shown next to a transfer that has been undone. */
+function stt_reverted_badge(): string
+{
+    return '<span class="badge bg-secondary"><i class="fas fa-rotate-left me-1"></i>Reverted</span>';
 }

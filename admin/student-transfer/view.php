@@ -14,28 +14,40 @@ if (!$transfer) {
 $me      = auth_user();
 $is_dept = $transfer['kind'] === 'department';
 
-// ── Handle the fee-package decision actions (department transfers only) ──────
-// These mutate data, so they require create-level access even though viewing
-// the record itself only requires can_view.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $is_dept) {
-    require_access('student-transfer', 'can_create');
-    csrf_check();
+// ── Handle mutating actions ───────────────────────────────────────────────────
+// These all mutate data, so they require more than the can_view access needed
+// to just look at the record.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? '');
 
-    if ($action === 'end_package') {
-        $result = stt_try_end_package($id, (int)$transfer['student_id'], (int)$me['id']);
+    if ($action === 'revert') {
+        require_access('student-transfer', 'can_delete');
+        csrf_check();
+        $result = stt_revert_transfer($id, (int)$me['id']);
         flash_set($result['ok'] ? 'success' : 'error', $result['message']);
         redirect(APP_URL . '/student-transfer/view.php?id=' . $id);
-    } elseif ($action === 'dismiss_package') {
-        stt_dismiss_package($id);
-        flash_set('success', 'Marked as reviewed — the existing package is unchanged.');
-        redirect(APP_URL . '/student-transfer/view.php?id=' . $id);
-    } elseif ($action === 'reopen_package') {
-        stt_reopen_package($id);
-        redirect(APP_URL . '/student-transfer/view.php?id=' . $id);
-    } elseif ($action === 'goto_assign_package') {
-        save_old(['student_id' => (int)$transfer['student_id'], 'student_label' => $transfer['student_name'] . ' (' . $transfer['student_sid'] . ')']);
-        redirect(APP_URL . '/student-accounts/create.php');
+    }
+
+    // The remaining actions only apply to department transfers.
+    if ($is_dept) {
+        require_access('student-transfer', 'can_create');
+        csrf_check();
+
+        if ($action === 'end_package') {
+            $result = stt_try_end_package($id, (int)$transfer['student_id'], (int)$me['id']);
+            flash_set($result['ok'] ? 'success' : 'error', $result['message']);
+            redirect(APP_URL . '/student-transfer/view.php?id=' . $id);
+        } elseif ($action === 'dismiss_package') {
+            stt_dismiss_package($id);
+            flash_set('success', 'Marked as reviewed — the existing package is unchanged.');
+            redirect(APP_URL . '/student-transfer/view.php?id=' . $id);
+        } elseif ($action === 'reopen_package') {
+            stt_reopen_package($id);
+            redirect(APP_URL . '/student-transfer/view.php?id=' . $id);
+        } elseif ($action === 'goto_assign_package') {
+            save_old(['student_id' => (int)$transfer['student_id'], 'student_label' => $transfer['student_name'] . ' (' . $transfer['student_sid'] . ')']);
+            redirect(APP_URL . '/student-accounts/create.php');
+        }
     }
     redirect(APP_URL . '/student-transfer/view.php?id=' . $id);
 }
@@ -58,6 +70,9 @@ if ($is_dept && !empty($transfer['old_package_id'])) {
     }
 }
 
+$is_reverted = !empty($transfer['reverted_at']);
+$can_revert  = !$is_reverted && stt_can_delete() && stt_can_revert($transfer);
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -70,7 +85,10 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
     <h1 class="h3 mb-0"><i class="fas fa-exchange-alt me-2 text-primary"></i>Transfer #<?= (int)$transfer['id'] ?></h1>
-    <?= stt_kind_badge($transfer['kind']) ?>
+    <div class="d-flex gap-2">
+        <?= stt_kind_badge($transfer['kind']) ?>
+        <?php if ($is_reverted): ?><?= stt_reverted_badge() ?><?php endif; ?>
+    </div>
 </div>
 
 <?= flash_show() ?>
@@ -130,7 +148,32 @@ require_once __DIR__ . '/../includes/header.php';
                         <div><?= h(date('d M Y, h:i A', strtotime($transfer['created_at']))) ?></div>
                     </div>
                 </div>
+
+                <?php if ($is_reverted): ?>
+                <hr>
+                <div class="alert alert-secondary small mb-0">
+                    <i class="fas fa-rotate-left me-1"></i>
+                    Reverted by <strong><?= h($transfer['reverted_by_name'] ?? '—') ?></strong>
+                    on <?= h(date('d M Y, h:i A', strtotime($transfer['reverted_at']))) ?> — the student was moved back to their previous state.
+                </div>
+                <?php endif; ?>
             </div>
+            <?php if ($can_revert): ?>
+            <div class="card-footer py-3">
+                <form method="post"
+                      onsubmit="return confirm('Revert this transfer? The student will be moved back exactly to their previous <?= $is_dept ? 'department, program and Student ID' : 'batch' ?>.<?= ($is_dept && $transfer['package_action'] === 'ended') ? ' Note: the fee package ended during this transfer was permanently deleted and will NOT be restored.' : '' ?>');">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="revert">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <i class="fas fa-rotate-left me-1"></i>Revert Transfer
+                    </button>
+                </form>
+            </div>
+            <?php elseif (!$is_reverted && stt_can_delete()): ?>
+            <div class="card-footer py-3">
+                <small class="text-muted"><i class="fas fa-info-circle me-1"></i>This transfer can no longer be reverted — the student's record has changed since (e.g. another transfer happened after this one).</small>
+            </div>
+            <?php endif; ?>
         </div>
 
         <?php if ($is_dept): ?>
