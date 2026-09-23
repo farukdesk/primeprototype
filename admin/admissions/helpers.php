@@ -229,6 +229,70 @@ function adm_sid_generate(int $program_id): string
 }
 
 /**
+ * Keep the settings-based ID counter (adm_student_id_settings.next_serial) in
+ * sync when a student ID is issued OUTSIDE adm_sid_generate() — e.g. by the
+ * Students module's or Student Transfer's own pattern-continuation generator
+ * (sm_generate_student_id()), which only looks at existing students.student_id
+ * rows and has no idea this counter table exists.
+ *
+ * If the issued ID matches this program's configured prefix (university +
+ * year + semester + faculty + subject + type_of_program codes) followed by a
+ * numeric serial, every sibling program sharing that exact prefix (they share
+ * one serial sequence — see adm_sid_generate()) is advanced past that serial,
+ * so the next real adm_sid_generate() call never reissues a number that was
+ * already handed out through a different code path.
+ *
+ * No-op when the program has no ID-settings row, or the issued ID doesn't
+ * match the configured prefix (e.g. a legacy/manual ID format) — there is
+ * nothing to keep in sync in that case.
+ */
+function adm_sid_sync_after_external_issue(int $program_id, string $issued_student_id): void
+{
+    $settings = adm_sid_get($program_id);
+    if (!$settings) {
+        return;
+    }
+
+    $prefix = $settings['university_code'] . $settings['year_code'] . $settings['semester_code']
+            . $settings['faculty_code'] . $settings['subject_code'] . $settings['type_of_program'];
+
+    if ($prefix === '' || !str_starts_with($issued_student_id, $prefix)) {
+        return;
+    }
+    $tail = substr($issued_student_id, strlen($prefix));
+    if ($tail === '' || !ctype_digit($tail)) {
+        return; // Not this numbering scheme (e.g. a manual/legacy ID) — nothing to sync.
+    }
+    $issued_serial = (int)$tail;
+
+    $db = db();
+    $db->beginTransaction();
+    try {
+        // Same guarded, sibling-wide advance as adm_sid_generate() uses, so the
+        // shared serial sequence for this prefix never regresses or duplicates.
+        $db->prepare(
+            'UPDATE adm_student_id_settings SET next_serial = ?
+              WHERE university_code = ? AND year_code = ? AND semester_code = ?
+                AND faculty_code    = ? AND subject_code = ? AND type_of_program = ?
+                AND next_serial    <= ?'
+        )->execute([
+            $issued_serial + 1,
+            $settings['university_code'],
+            $settings['year_code'],
+            $settings['semester_code'],
+            $settings['faculty_code'],
+            $settings['subject_code'],
+            $settings['type_of_program'],
+            $issued_serial,
+        ]);
+        $db->commit();
+    } catch (\Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+}
+
+/**
  * Preview a student ID from settings without incrementing the serial.
  */
 function adm_sid_preview(array $settings): string

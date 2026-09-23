@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students', 'can_edit');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../admissions/helpers.php'; // adm_sid_sync_after_external_issue()
 
 $id      = (int)($_GET['id'] ?? 0);
 $student = sm_get_student($id);
@@ -340,6 +341,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         log_change('students', 'UPDATE', $id, $full_name . ' (' . $student_id_new . ')',
                    null, null, null,
                    'Student updated: ' . $full_name);
+
+        // Keep Admissions → Settings → Student ID's "next serial" counter in
+        // sync if the ID just typed here happens to match a configured
+        // program's numbering — no-ops otherwise.
+        if ($program_id > 0 && $student_id_new !== $student['student_id']) {
+            adm_sid_sync_after_external_issue($program_id, $student_id_new);
+        }
 
         flash_set('success', 'Student <strong>' . h($full_name) . '</strong> updated successfully.');
         redirect($ret_qs !== '' ? $back_url : APP_URL . '/students/view.php?id=' . $id);

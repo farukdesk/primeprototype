@@ -23,6 +23,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../change-log/helpers.php';   // log_change()
 require_once __DIR__ . '/../students/helpers.php';     // sm_generate_student_id()
+require_once __DIR__ . '/../admissions/helpers.php';   // adm_sid_sync_after_external_issue()
 
 const STT_SLUG = 'student-transfer';
 
@@ -266,6 +267,14 @@ function stt_create_department_transfer(
     if ($new_sid !== $old_sid) {
         log_change('students', 'UPDATE', $student_id, $label, 'student_id', $old_sid, $new_sid,
             'Department transfer: Student ID reissued.');
+
+        // Keep Admissions → Settings → Student ID's "next serial" counter in
+        // sync, so a future admission never reissues the serial we just used
+        // (no-ops when the new ID doesn't match that program's configured
+        // prefix, e.g. it was typed manually or the pattern predates it).
+        if ($to_program_id > 0) {
+            adm_sid_sync_after_external_issue($to_program_id, $new_sid);
+        }
     }
 
     return ['ok' => true, 'message' => 'Department transfer recorded for ' . $student['full_name'] . '.', 'transfer_id' => $transfer_id];

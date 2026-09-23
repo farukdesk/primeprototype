@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('students', 'can_create');
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/../admissions/helpers.php'; // adm_sid_sync_after_external_issue()
 
 $page_title = 'Add New Student';
 $user       = auth_user();
@@ -300,6 +301,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user['id'],
         ]);
         $new_id = (int)$pdo->lastInsertId();
+
+        // Keep Admissions → Settings → Student ID's "next serial" counter in
+        // sync with whatever ID was just issued above (auto-generated or
+        // typed manually), so a later admission never reissues the same
+        // serial. No-ops when the program has no ID-settings row or the ID
+        // doesn't match its configured prefix.
+        if ($program_id > 0) {
+            adm_sid_sync_after_external_issue($program_id, $student_id);
+        }
 
         // Save academic qualifications
         foreach ($qual_rows as $qi => $q) {
