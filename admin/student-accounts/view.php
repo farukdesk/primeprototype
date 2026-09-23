@@ -262,6 +262,12 @@ require_once __DIR__ . '/../includes/header.php';
            class="btn btn-outline-success btn-sm" target="_blank">
             <i class="fas fa-file-invoice me-1"></i> Download Statement
         </a>
+        <?php if (sfp_can_edit()): ?>
+        <a href="<?= APP_URL ?>/student-accounts/reassign.php?id=<?= $id ?>"
+           class="btn btn-outline-warning btn-sm">
+            <i class="fas fa-right-left me-1"></i> Reassign Package
+        </a>
+        <?php endif; ?>
         <?php if (sfp_can_delete()): ?>
         <form method="post" action="<?= APP_URL ?>/student-accounts/delete.php"
               onsubmit="return confirm('Delete this student account? All semester fee records will be lost.');">

@@ -362,6 +362,187 @@ function sfp_generate_semester_fees(int $package_id, int $total_semesters, float
     }
 }
 
+// ── Reassign an existing package to entirely new terms ────────────────────────
+//
+// Used when a student's programme/fees need to be redone from scratch (e.g.
+// after a department/program change) WITHOUT losing the money already
+// collected. sfp_packages has a UNIQUE key on student_id (one package per
+// student, ever) and sfp_payments/sfp_semester_fees are only safe to touch in
+// very specific ways once payments exist — see admin/STUDENT-FEE-ARCHITECTURE.md
+// and update-tuition.php / bulk-update.php for the precedents this mirrors:
+//
+//   - The EXISTING sfp_packages row is updated in place (same id), never
+//     replaced — a new row would violate the unique key and a delete+insert
+//     would cascade-delete every sfp_payments row (real money data).
+//   - sfp_semester_fees rows for semester numbers that still exist under the
+//     new plan are updated in place (same id) and re-run through
+//     sfp_recalculate_semester(), so any sfp_payments row already linked to
+//     that semester (via semester_fee_id) stays linked and displays correctly
+//     — exactly like editing tuition today via update-tuition.php.
+//   - Only semester numbers beyond the new total are removed (mirrors
+//     bulk-update.php's incremental add/remove). Any money already paid
+//     against a removed semester is NOT lost — sfp_payments.amount is never
+//     touched and package-level totals remain a pure sum independent of the
+//     link (see acc_student_fee_summary()) — but its specific semester/month
+//     attribution is cleared by the FK (ON DELETE SET NULL), same as it
+//     already happens today when bulk-update.php shrinks a package. The
+//     affected amount is reported back so the admin isn't surprised.
+//
+// @param array $f Same field set as student-accounts/create.php's form.
+// @return array{ok:bool,message:string,orphaned_amount:float}
+function sfp_reassign_package(int $package_id, array $f, string $reason, int $user_id): array
+{
+    $db  = db();
+    $pkg = sfp_get_package($package_id);
+    if (!$pkg) {
+        return ['ok' => false, 'message' => 'Student account not found.', 'orphaned_amount' => 0.0];
+    }
+
+    $total_semesters      = max(1, (int)$f['total_semesters']);
+    $total_months         = max(1, (int)$f['total_months']);
+    $tuition_per_semester = round((float)$f['tuition_per_semester'], 2);
+    $fixed_institutional  = (int)$f['fixed_institutional_fees'];
+    $english_course_fee   = (int)$f['english_course_fee'];
+
+    $months_per_semester = round($total_months / $total_semesters, 2);
+    $monthly_fixed_fee    = round($fixed_institutional / $total_months, 4);
+    $monthly_english_fee  = round($english_course_fee / $total_months, 4);
+
+    $old_label = $pkg['program_name'] . ' (' . number_format((float)$pkg['tuition_per_semester'], 2) . '/semester)';
+    $new_label = $f['program_name'] . ' (' . number_format($tuition_per_semester, 2) . '/semester)';
+
+    $orphaned_amount = 0.0;
+
+    $db->beginTransaction();
+    try {
+        $db->prepare(
+            'UPDATE sfp_packages
+                SET cf_program_id = ?, program_name = ?,
+                    total_semesters = ?, total_months = ?, months_per_semester = ?,
+                    bi_semester_start_month = ?, tri_semester_start_month = ?,
+                    standard_tuition_full = ?, tuition_per_semester = ?, admission_fees = ?,
+                    fixed_institutional_fees = ?, english_course_fee = ?,
+                    reg_fee_per_semester = ?, form_id_fee = ?,
+                    safety_net_cap = ?, safety_net_per_semester = ?,
+                    attendance_requirement = ?, safety_net_gpa_threshold = ?,
+                    monthly_fixed_fee = ?, monthly_english_fee = ?,
+                    note = ?
+              WHERE id = ?'
+        )->execute([
+            (int)$f['cf_program_id'] > 0 ? (int)$f['cf_program_id'] : null,
+            $f['program_name'],
+            $total_semesters,
+            $total_months,
+            $months_per_semester,
+            (int)$f['bi_semester_start_month'] > 0 ? (int)$f['bi_semester_start_month'] : null,
+            (int)$f['tri_semester_start_month'] > 0 ? (int)$f['tri_semester_start_month'] : null,
+            (int)$f['standard_tuition_full'],
+            $tuition_per_semester,
+            (int)$f['admission_fees'],
+            $fixed_institutional,
+            $english_course_fee,
+            (float)$f['reg_fee_per_semester'],
+            (float)$f['form_id_fee'],
+            (float)$f['safety_net_cap'] > 0 ? (float)$f['safety_net_cap'] : null,
+            (float)$f['safety_net_per_semester'] > 0 ? (float)$f['safety_net_per_semester'] : null,
+            (int)$f['attendance_requirement'],
+            (float)$f['safety_net_gpa_threshold'],
+            $monthly_fixed_fee,
+            $monthly_english_fee,
+            $f['note'] !== '' ? $f['note'] : null,
+            $package_id,
+        ]);
+
+        // ── Reconcile sfp_semester_fees against the new semester count ──────
+        $existing = $db->prepare(
+            'SELECT id, semester_number FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number ASC'
+        );
+        $existing->execute([$package_id]);
+        $existing_rows = $existing->fetchAll(PDO::FETCH_ASSOC);
+        // Use the highest semester_number actually present, not the row
+        // count — sfp_semester_fees has no unique key on (package_id,
+        // semester_number), so a gap would otherwise make a new row collide
+        // with an existing one (mirrors the same guard bulk-update.php uses).
+        $max_existing = 0;
+        foreach ($existing_rows as $row) {
+            $max_existing = max($max_existing, (int)$row['semester_number']);
+        }
+
+        // Kept rows (same id → any linked payment keeps its semester/month
+        // attribution): update tuition_fee in place, then recompute discounts.
+        foreach ($existing_rows as $row) {
+            if ((int)$row['semester_number'] > $total_semesters) {
+                continue; // handled in the "remove" branch below
+            }
+            $db->prepare(
+                'UPDATE sfp_semester_fees SET tuition_fee = ?, updated_by = ?, updated_at = NOW() WHERE id = ?'
+            )->execute([$tuition_per_semester, $user_id, (int)$row['id']]);
+            sfp_recalculate_semester((int)$row['id'], $user_id);
+        }
+
+        // New rows for semesters added beyond what existed before.
+        if ($total_semesters > $max_existing) {
+            $ins = $db->prepare(
+                'INSERT INTO sfp_semester_fees
+                    (package_id, semester_number, tuition_fee, scholarship_discount_pct, scholarship_amount, tuition_payable)
+                 VALUES (?, ?, ?, 0, 0, ?)'
+            );
+            for ($i = $max_existing + 1; $i <= $total_semesters; $i++) {
+                $ins->execute([$package_id, $i, $tuition_per_semester, $tuition_per_semester]);
+            }
+        } elseif ($total_semesters < $max_existing) {
+            // Removing semesters beyond the new count. Capture whatever was
+            // already paid against them BEFORE removing, so the caller can
+            // tell the admin — the money itself is never deleted (package-level
+            // totals stay correct), only its per-semester tag is cleared.
+            $remove_ids = [];
+            foreach ($existing_rows as $row) {
+                if ((int)$row['semester_number'] > $total_semesters) {
+                    $remove_ids[] = (int)$row['id'];
+                }
+            }
+            if (!empty($remove_ids)) {
+                $phs = implode(',', array_fill(0, count($remove_ids), '?'));
+                $sum_stmt = $db->prepare(
+                    "SELECT COALESCE(SUM(sp.amount), 0)
+                       FROM sfp_payments sp
+                       JOIN acc_vouchers v ON v.id = sp.voucher_id
+                      WHERE sp.semester_fee_id IN ($phs) AND v.is_deleted = 0"
+                );
+                $sum_stmt->execute($remove_ids);
+                $orphaned_amount = (float)$sum_stmt->fetchColumn();
+
+                $db->prepare("DELETE FROM sfp_semester_scholarships WHERE sf_id IN ($phs)")->execute($remove_ids);
+                $db->prepare("DELETE FROM sfp_semester_fees WHERE id IN ($phs)")->execute($remove_ids);
+            }
+        }
+
+        $db->commit();
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
+    }
+
+    log_change(
+        'student-accounts', 'UPDATE', $package_id,
+        $pkg['student_name'] . ' (' . $pkg['student_sid'] . ')',
+        'reassigned',
+        $old_label,
+        $new_label,
+        'Package reassigned: ' . $old_label . ' → ' . $new_label . '. Reason: ' . $reason
+    );
+
+    $message = 'Package reassigned to <strong>' . h($f['program_name']) . '</strong>. '
+        . 'All money already paid remains on this account and now applies toward the new plan.';
+    if ($orphaned_amount > 0) {
+        $message .= ' Note: ' . sfp_money($orphaned_amount) . ' already paid was linked to semester(s) that no longer '
+            . 'exist under the new plan — it still counts toward this student\'s total paid, but no longer shows against '
+            . 'a specific semester/month. Review it on the statement if needed.';
+    }
+
+    return ['ok' => true, 'message' => $message, 'orphaned_amount' => $orphaned_amount];
+}
+
 // ── Per-semester portion of fixed institutional fees ─────────────────────────
 
 function sfp_semester_fixed_portion(array $pkg): float
