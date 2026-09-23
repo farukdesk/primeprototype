@@ -331,6 +331,7 @@ if (is_portal_student()) {
     $is_admit_card_active = strpos($current_path, '/admit-card/') !== false
                          || strpos($current_path, '/students/my-admit-card') !== false;
     $is_semester_drop_active = strpos($current_path, '/semester-drop/') !== false;
+    $is_student_transfer_active = strpos($current_path, '/student-transfer/') !== false;
     $is_clubs_active = strpos($current_path, '/clubs/') !== false;
     $is_hr_active = $is_jobs_active || (strpos($current_path, '/staff-profiles/') !== false) || (strpos($current_path, '/leave-management/') !== false) || (strpos($current_path, '/staff-attendance/') !== false);
     $is_coe_active = strpos($current_path, '/results/') !== false
@@ -1172,6 +1173,41 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/semester-drop/create-dropout.php"
                    class="<?= strpos($current_path, '/semester-drop/create-dropout.php') !== false ? 'active' : '' ?>">
                     <i class="fas fa-user-slash"></i> Add Dropout Student
+                </a>
+            </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Student Transfer ── -->
+    <?php if (is_super_admin() || can_access('student-transfer')): ?>
+    <button class="nav-group-toggle <?= $is_student_transfer_active ? '' : 'collapsed' ?>"
+            data-bs-toggle="collapse" data-bs-target="#grp-student-transfer"
+            aria-expanded="<?= $is_student_transfer_active ? 'true' : 'false' ?>">
+        <i class="fas fa-exchange-alt grp-icon" style="color:#0d6efd"></i>
+        Student Transfer
+        <i class="fas fa-chevron-down toggle-icon"></i>
+    </button>
+    <div class="collapse <?= $is_student_transfer_active ? 'show' : '' ?>" id="grp-student-transfer">
+        <ul class="nav flex-column grp-items">
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/student-transfer/index.php"
+                   class="<?= ($is_student_transfer_active && strpos($current_path, '/department.php') === false && strpos($current_path, '/batch.php') === false) ? 'active' : '' ?>">
+                    <i class="fas fa-list"></i> All Transfers
+                </a>
+            </li>
+            <?php if (is_super_admin() || can_access('student-transfer', 'can_create')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/student-transfer/department.php"
+                   class="<?= strpos($current_path, '/student-transfer/department.php') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-building"></i> Department Transfer
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/student-transfer/batch.php"
+                   class="<?= strpos($current_path, '/student-transfer/batch.php') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> Batch Transfer
                 </a>
             </li>
             <?php endif; ?>
