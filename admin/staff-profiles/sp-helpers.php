@@ -63,9 +63,10 @@ const SP_EMPLOYEE_TYPES = [
     'educational'    => 'Faculty',
 ];
 
-/** Job Type / Category options. */
+/** Job Type / Category options (Type of Appointment on the attendance statement). */
 const SP_JOB_TYPES = [
-    'Permanent', 'Contractual', 'Ad-hoc', 'Master Role', 'Daily Basis', 'Probationary',
+    'Regular', 'Permanent', 'Contractual', 'Probation', 'Probationary',
+    'Ad-hoc', 'Master Role', 'Daily Basis',
 ];
 
 /** Section options for ADMINISTRATIVE employees. */
