@@ -20,6 +20,9 @@ $report  = $_GET['report'] ?? 'daily';
 if (!in_array($report, ['daily', 'weekly', 'monthly', 'range'], true)) $report = 'daily';
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
+// Status filter: show only staff with Absent and/or Penalty Absent days.
+$status_filter = $_GET['status'] ?? '';
+if (!in_array($status_filter, ['absent', 'penalty', 'absent_or_penalty'], true)) $status_filter = '';
 
 // Resolve the reporting date range.
 $today = date('Y-m-d');
@@ -69,6 +72,57 @@ for ($d = strtotime($from); $d <= strtotime($to); $d = strtotime('+1 day', $d)) 
 $leave_by_date = [];
 foreach ($dates as $d) $leave_by_date[$d] = att_on_leave_user_ids($d);
 
+// ── Per-staff summary (shared by the status filter, CSV export and page) ────
+$summ = [];
+foreach ($staff as $s) {
+    $summ[(int)$s['id']] = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0,
+                            'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
+}
+foreach ($dates as $d) {
+    $on_leave    = $leave_by_date[$d] ?? [];
+    $holiday_off = isset($holidays[$d]);
+    foreach ($staff as $s) {
+        $uid    = (int)$s['id'];
+        $rec    = $records[$uid . '|' . $d] ?? null;
+        $sched  = att_effective_schedule($uid);
+        $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
+        // Off days are per staff member (weekly-off override and holiday user-group aware).
+        $off = ($holiday_off && att_holiday_applies($uid, $d)) || att_is_weekly_off_for($sched, $d);
+        if (!$off) $summ[$uid]['working_days']++;
+        switch ($status) {
+            case 'present':                          $summ[$uid]['present']++; break;
+            case 'late_in':      $summ[$uid]['present']++; $summ[$uid]['late']++;  break;
+            case 'early_out':    $summ[$uid]['present']++; $summ[$uid]['early']++; break;
+            case 'late_and_early': $summ[$uid]['present']++; $summ[$uid]['late']++; $summ[$uid]['early']++; break;
+            case 'short_hours':                      $summ[$uid]['present']++; break;
+            case 'incomplete':                       $summ[$uid]['present']++; break;
+            case 'leave':                            $summ[$uid]['leave']++;   break;
+            case 'absent':                           $summ[$uid]['absent']++;  break;
+        }
+        // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
+        if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
+            $summ[$uid]['pen']++;
+        }
+        if ($rec) $summ[$uid]['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
+    }
+}
+
+// ── Status filter: keep only staff with Absent / Penalty Absent days ────────
+if ($status_filter !== '') {
+    $staff = array_values(array_filter($staff, static function (array $s) use ($summ, $status_filter, $report): bool {
+        $x = $summ[(int)$s['id']];
+        $has_absent = $x['absent'] > 0;
+        // On the daily report a single late/early day can never reach a full
+        // penalty day, so match the days counting toward the penalty instead.
+        $has_penalty = $report === 'daily'
+            ? $x['pen'] > 0
+            : att_late_penalty_days((int)$x['pen']) > 0;
+        if ($status_filter === 'absent')  return $has_absent;
+        if ($status_filter === 'penalty') return $has_penalty;
+        return $has_absent || $has_penalty; // absent_or_penalty
+    }));
+}
+
 // ── CSV export – follows the exact filters & date range resolved above ──────
 if (($_GET['export'] ?? '') === 'csv') {
     // Daily is always exported day-by-day; other reports export a per-staff
@@ -93,7 +147,7 @@ if (($_GET['export'] ?? '') === 'csv') {
     fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel opens it correctly
 
     if ($detail) {
-        fputcsv($out, ['Date', 'Employee Name', 'Employee ID', 'Designation', 'Department',
+        fputcsv($out, ['Date', 'Employee Name', 'Employee ID', 'Designation', 'Department', 'Contact Number',
                        'In Time', 'Out Time', 'Total Working Hours', 'Status']);
         foreach ($dates as $d) {
             $on_leave = $leave_by_date[$d] ?? [];
@@ -109,6 +163,7 @@ if (($_GET['export'] ?? '') === 'csv') {
                     (string)($s['employee_id'] ?? ''),
                     (string)($s['designation'] ?? ''),
                     (string)($s['dept_name'] ?? ''),
+                    (string)($s['phone'] ?? ''),
                     att_display_time($rec['in_time'] ?? null),
                     att_display_time($rec['out_time'] ?? null),
                     att_format_hours($mins),
@@ -117,42 +172,19 @@ if (($_GET['export'] ?? '') === 'csv') {
             }
         }
     } else {
-        fputcsv($out, ['Employee Name', 'Employee ID', 'Designation', 'Department', 'Working Days',
+        fputcsv($out, ['Employee Name', 'Employee ID', 'Designation', 'Department', 'Contact Number', 'Working Days',
                        'Present', 'Late In', 'Early Out', 'On Leave', 'Absent',
                        'Penalty Absent (4 Late/Early = 1)', 'Total Absent (incl. Penalty)', 'Total Working Hours']);
         foreach ($staff as $s) {
-            $uid   = (int)$s['id'];
-            $sched = att_effective_schedule($uid);
-            $x = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0,
-                  'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
-            foreach ($dates as $d) {
-                $on_leave = $leave_by_date[$d] ?? [];
-                $off      = (isset($holidays[$d]) && att_holiday_applies($uid, $d)) || att_is_weekly_off_for($sched, $d);
-                $rec      = $records[$uid . '|' . $d] ?? null;
-                $status   = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
-                if (!$off) $x['working_days']++;
-                switch ($status) {
-                    case 'present':                              $x['present']++; break;
-                    case 'late_in':        $x['present']++; $x['late']++;  break;
-                    case 'early_out':      $x['present']++; $x['early']++; break;
-                    case 'late_and_early': $x['present']++; $x['late']++; $x['early']++; break;
-                    case 'short_hours':                          $x['present']++; break;
-                    case 'incomplete':                           $x['present']++; break;
-                    case 'leave':                                $x['leave']++;   break;
-                    case 'absent':                               $x['absent']++;  break;
-                }
-                // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
-                if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
-                    $x['pen']++;
-                }
-                if ($rec) $x['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
-            }
+            $uid = (int)$s['id'];
+            $x   = $summ[$uid];
             $pen_abs = att_late_penalty_days((int)$x['pen']);
             fputcsv($out, [
                 (string)$s['full_name'],
                 (string)($s['employee_id'] ?? ''),
                 (string)($s['designation'] ?? ''),
                 (string)($s['dept_name'] ?? ''),
+                (string)($s['phone'] ?? ''),
                 $x['working_days'],
                 $x['present'],
                 $x['late'],
@@ -178,13 +210,14 @@ $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri'
 $staff_month = date('Y-m', strtotime($from));
 
 /** URL to a staff member's calendar drill-down, preserving the report filters. */
-$staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $search, $from, $to): string {
+$staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $search, $status_filter, $from, $to): string {
     $params = [
         'user_id' => $uid,
         'month'   => $staff_month,
         'report'  => $report,
         'dept'    => $dept_id,
         'q'       => $search,
+        'status'  => $status_filter,
     ];
     // Carry the custom range through so "Back to report" restores it.
     if ($report === 'range') { $params['from'] = $from; $params['to'] = $to; }
@@ -240,12 +273,12 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                 </select>
             </div>
             <?php if ($report === 'monthly'): ?>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label fw-semibold small mb-1">Month</label>
                 <input type="month" name="month" class="form-control" value="<?= h(date('Y-m', strtotime($from))) ?>">
             </div>
             <?php elseif ($report === 'range'): ?>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label fw-semibold small mb-1">From – To</label>
                 <div class="input-group">
                     <input type="date" name="from" class="form-control" value="<?= h($from) ?>" title="From date">
@@ -253,12 +286,12 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                 </div>
             </div>
             <?php else: ?>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label fw-semibold small mb-1"><?= $report === 'weekly' ? 'Week of' : 'Date' ?></label>
                 <input type="date" name="date" class="form-control" value="<?= h($from) ?>">
             </div>
             <?php endif; ?>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label fw-semibold small mb-1">Department</label>
                 <select name="dept" class="form-select">
                     <option value="0">All Departments</option>
@@ -267,6 +300,15 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                         <?= h($d['name']) ?> (<?= ucfirst($d['type']) ?>)
                     </option>
                     <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold small mb-1">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Staff</option>
+                    <option value="absent"            <?= $status_filter === 'absent'            ? 'selected' : '' ?>>Has Absent</option>
+                    <option value="penalty"           <?= $status_filter === 'penalty'           ? 'selected' : '' ?>>Has Penalty Absent</option>
+                    <option value="absent_or_penalty" <?= $status_filter === 'absent_or_penalty' ? 'selected' : '' ?>>Absent or Penalty</option>
                 </select>
             </div>
             <div class="col-md-2">
@@ -292,7 +334,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             <?php
             // Export links are rebuilt from the RESOLVED filters, so the CSV
             // always matches exactly the dates and staff shown on screen.
-            $export_base = ['report' => $report, 'dept' => $dept_id, 'q' => $search, 'export' => 'csv'];
+            $export_base = ['report' => $report, 'dept' => $dept_id, 'q' => $search, 'status' => $status_filter, 'export' => 'csv'];
             if ($report === 'monthly')     { $export_base['month'] = date('Y-m', strtotime($from)); }
             elseif ($report === 'range')   { $export_base['from'] = $from; $export_base['to'] = $to; }
             else                           { $export_base['date'] = $from; }
@@ -358,6 +400,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <th>Employee ID</th>
                             <th>Designation</th>
                             <th>Department</th>
+                            <th>Contact</th>
                             <th>In Time</th>
                             <th>Out Time</th>
                             <th>Total Working Hours</th>
@@ -379,6 +422,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <td><?= h($s['employee_id'] ?? '—') ?></td>
                             <td class="small"><?= h(($s['designation'] ?? '') !== '' ? $s['designation'] : '—') ?></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
+                            <td class="small"><?= ($s['phone'] ?? '') !== '' ? '<a href="tel:' . h($s['phone']) . '" class="text-decoration-none" onclick="event.stopPropagation()">' . h($s['phone']) . '</a>' : '<span class="text-muted">—</span>' ?></td>
                             <td><?= h(att_display_time($rec['in_time'] ?? null)) ?></td>
                             <td><?= h(att_display_time($rec['out_time'] ?? null)) ?></td>
                             <td><?= h(att_format_hours($mins)) ?></td>
@@ -396,42 +440,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                     </tbody>
                 </table>
             </div>
-        <?php else:
-            // ── Weekly / monthly summary aggregation ──
-            $summ = [];
-            foreach ($staff as $s) {
-                $uid = (int)$s['id'];
-                $summ[$uid] = ['present' => 0, 'late' => 0, 'early' => 0, 'absent' => 0, 'leave' => 0, 'minutes' => 0, 'working_days' => 0, 'pen' => 0];
-            }
-            foreach ($dates as $d) {
-                $on_leave    = $leave_by_date[$d] ?? [];
-                $holiday_off = isset($holidays[$d]);
-                foreach ($staff as $s) {
-                    $uid    = (int)$s['id'];
-                    $rec    = $records[$uid . '|' . $d] ?? null;
-                    $sched  = att_effective_schedule($uid);
-                    $status = att_compute_status($rec, $uid, $d, $sched, $holidays, $on_leave);
-                    // Off days are per staff member (weekly-off override and holiday user-group aware).
-                    $off = ($holiday_off && att_holiday_applies($uid, $d)) || att_is_weekly_off_for($sched, $d);
-                    if (!$off) $summ[$uid]['working_days']++;
-                    switch ($status) {
-                        case 'present':                          $summ[$uid]['present']++; break;
-                        case 'late_in':      $summ[$uid]['present']++; $summ[$uid]['late']++;  break;
-                        case 'early_out':    $summ[$uid]['present']++; $summ[$uid]['early']++; break;
-                        case 'late_and_early': $summ[$uid]['present']++; $summ[$uid]['late']++; $summ[$uid]['early']++; break;
-                        case 'short_hours':                      $summ[$uid]['present']++; break;
-                        case 'incomplete':                       $summ[$uid]['present']++; break;
-                        case 'leave':                            $summ[$uid]['leave']++;   break;
-                        case 'absent':                           $summ[$uid]['absent']++;  break;
-                    }
-                    // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
-                    if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
-                        $summ[$uid]['pen']++;
-                    }
-                    if ($rec) $summ[$uid]['minutes'] += att_worked_minutes($rec['in_time'], $rec['out_time']);
-                }
-            }
-        ?>
+        <?php else: // ── Weekly / monthly summary (aggregated above in $summ) ── ?>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
@@ -440,6 +449,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <th>Employee ID</th>
                             <th>Designation</th>
                             <th>Department</th>
+                            <th>Contact</th>
                             <th>Working Days</th>
                             <th>Present</th>
                             <th>Late In</th>
@@ -461,6 +471,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= h($s['employee_id'] ?? '—') ?></a></td>
                             <td class="small"><?= h(($s['designation'] ?? '') !== '' ? $s['designation'] : '—') ?></td>
                             <td class="small"><?= h($s['dept_name'] ?? '—') ?></td>
+                            <td class="small"><?= ($s['phone'] ?? '') !== '' ? '<a href="tel:' . h($s['phone']) . '" class="text-decoration-none" onclick="event.stopPropagation()">' . h($s['phone']) . '</a>' : '<span class="text-muted">—</span>' ?></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><?= (int)$x['working_days'] ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><span class="badge bg-success"><?= (int)$x['present'] ?></span></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['late']  ? '<span class="badge bg-warning text-dark">' . (int)$x['late']  . '</span>' : '<span class="text-muted">0</span>' ?></a></td>

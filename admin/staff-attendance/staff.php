@@ -128,6 +128,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
 // Filters to carry back to the report.
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
+$status_flt = $_GET['status'] ?? '';
+if (!in_array($status_flt, ['absent', 'penalty', 'absent_or_penalty'], true)) $status_flt = '';
 $report  = $_GET['report'] ?? 'monthly';
 if (!in_array($report, ['daily', 'weekly', 'monthly', 'range'], true)) $report = 'monthly';
 $r_from  = $report === 'range' ? att_normalize_date($_GET['from'] ?? '') : null;
@@ -152,6 +154,7 @@ $report_qs = http_build_query(array_filter([
     'to'     => $r_to,
     'dept'   => $dept_id ?: null,
     'q'      => $search ?: null,
+    'status' => $status_flt ?: null,
 ]));
 
 if (!$member):

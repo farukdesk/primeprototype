@@ -1036,7 +1036,16 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
     }
     $acad_expr = $acad_parts ? 'COALESCE(' . implode(', ', $acad_parts) . ')' : 'NULL';
 
+    // Contact number: the user's phone, falling back to the faculty profile
+    // phone when the user record has none.
+    $phone_expr = att_table_exists('faculty_profiles')
+        ? "COALESCE(NULLIF(u.phone, ''),
+              (SELECT NULLIF(fp0.phone, '') FROM faculty_profiles fp0
+                WHERE fp0.user_id = u.id LIMIT 1))"
+        : 'u.phone';
+
     $sql = 'SELECT u.id, u.full_name, u.username,
+                   ' . $phone_expr . ' AS phone,
                    ' . $emp_expr . ' AS employee_id, sp.designation, sp.staff_dept_id, sd.name AS dept_name,
                    ' . $acad_expr . ' AS academic_dept_name
               FROM users u
