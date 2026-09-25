@@ -123,6 +123,33 @@ if ($status_filter !== '') {
     }));
 }
 
+// ── Pending leave applications (shown when a status filter is applied) ──────
+// For each staff member still listed, load their pending leave requests so the
+// report can show whether an absence may be explained by an application that is
+// waiting for approval. Each entry links directly to the application.
+$pending_leaves = [];
+if ($status_filter !== '' && !empty($staff)) {
+    $ids = array_map(static fn(array $s): int => (int)$s['id'], $staff);
+    $ph  = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare(
+        "SELECT id, user_id, category, days, start_date, end_date
+           FROM leave_requests
+          WHERE status = 'pending' AND user_id IN ($ph)
+          ORDER BY start_date"
+    );
+    $stmt->execute($ids);
+    foreach ($stmt->fetchAll() as $r) {
+        $pending_leaves[(int)$r['user_id']][] = $r;
+    }
+}
+
+/** "1 day" / "2.5 days" for a leave request's day count. */
+function att_leave_days_label(float $days): string
+{
+    $txt = rtrim(rtrim(number_format($days, 1, '.', ''), '0'), '.');
+    return $txt . ' day' . ($days == 1.0 ? '' : 's');
+}
+
 // ── CSV export – follows the exact filters & date range resolved above ──────
 if (($_GET['export'] ?? '') === 'csv') {
     // Daily is always exported day-by-day; other reports export a per-staff
@@ -457,6 +484,9 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <th>Early Out</th>
                             <th>On Leave</th>
                             <th>Absent</th>
+                            <?php if ($status_filter !== ''): ?>
+                            <th title="Leave applications still awaiting approval — click one to open it">Pending Leave</th>
+                            <?php endif; ?>
                             <th title="Every 4 Late In / Early Out days = 1 Absent day (effective 01 Jun 2026)">Penalty Absent</th>
                             <th>Total Working Hours</th>
                         </tr>
@@ -479,6 +509,31 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['early'] ? '<span class="badge bg-warning text-dark">' . (int)$x['early'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['leave'] ? '<span class="badge bg-primary">' . (int)$x['leave'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none"><?= $x['absent'] ? '<span class="badge bg-danger">' . (int)$x['absent'] . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <?php if ($status_filter !== ''): ?>
+                            <td onclick="event.stopPropagation()">
+                                <?php $pls = $pending_leaves[$uid] ?? []; ?>
+                                <?php if (empty($pls)): ?>
+                                    <span class="text-muted small">—</span>
+                                <?php else: ?>
+                                    <div class="d-flex flex-column gap-1">
+                                    <?php foreach ($pls as $pl):
+                                        $pl_url   = APP_URL . '/leave-management/view.php?id=' . (int)$pl['id'];
+                                        $pl_dates = date('d M', strtotime($pl['start_date'])) . ' – ' . date('d M Y', strtotime($pl['end_date']));
+                                        $pl_cat   = ucwords(str_replace('_', ' ', (string)$pl['category']));
+                                    ?>
+                                        <a href="<?= h($pl_url) ?>"
+                                           class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning text-decoration-none text-start"
+                                           style="font-weight:500;"
+                                           title="<?= h($pl_cat . ' leave · ' . $pl_dates . ' — click to open the application') ?>">
+                                            <i class="fas fa-hourglass-half me-1"></i><?= h(att_leave_days_label((float)$pl['days'])) ?>
+                                            <span class="opacity-75">· <?= h($pl_cat) ?></span>
+                                            <i class="fas fa-arrow-up-right-from-square ms-1 opacity-50"></i>
+                                        </a>
+                                    <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                            <?php endif; ?>
                             <?php $pen_abs = att_late_penalty_days((int)($x['pen'] ?? 0)); ?>
                             <td><a href="<?= $slink ?>" class="text-decoration-none" title="<?= (int)($x['pen'] ?? 0) ?> Late In / Early Out day(s) since 01 Jun 2026 — every 4 = 1 Absent"><?= $pen_abs ? '<span class="badge bg-danger">' . $pen_abs . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><strong><?= h(att_format_hours((int)$x['minutes'])) ?></strong></a></td>
