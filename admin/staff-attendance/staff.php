@@ -63,7 +63,8 @@ if ($self_only) {
 
 // ── Quick day actions (module editors / super admin) ────────────────────
 // Posted from the calendar day modal: set clock in/out times, mark the day
-// Absent / Weekend / Holiday for THIS staff member only, or reset the day.
+// Absent / Weekend / Holiday or Casual / Sick Leave (deducted from the yearly
+// leave balance) for THIS staff member only, or reset the day.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
     csrf_check();
     $act   = $_POST['day_action'] ?? '';
@@ -90,7 +91,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
                  VALUES (?,?,?,?,?)
                  ON DUPLICATE KEY UPDATE in_time = VALUES(in_time), out_time = VALUES(out_time)'
             )->execute([$user_id, $pdate, $in_t, $out_t, $me_id]);
-            // A manual time entry cancels any Absent / Weekend / Holiday mark.
+            // A manual time entry cancels any Absent / Weekend / Holiday mark
+            // and any Casual / Sick Leave created from this calendar (the day
+            // is returned to the leave balance).
+            try {
+                $st = db()->prepare(
+                    "SELECT leave_request_id FROM att_day_status
+                      WHERE user_id = ? AND status_date = ? AND status = 'approved_leave'
+                        AND source = 'manual' AND leave_request_id IS NOT NULL"
+                );
+                $st->execute([$user_id, $pdate]);
+                $lrid = (int)$st->fetchColumn();
+                if ($lrid > 0) {
+                    db()->prepare(
+                        "UPDATE leave_requests SET status = 'cancelled'
+                          WHERE id = ? AND status = 'approved' AND start_date = ? AND end_date = ?"
+                    )->execute([$lrid, $pdate, $pdate]);
+                    db()->prepare(
+                        "DELETE FROM att_day_status
+                          WHERE user_id = ? AND status_date = ? AND status = 'approved_leave'
+                            AND source = 'manual' AND leave_request_id = ?"
+                    )->execute([$user_id, $pdate, $lrid]);
+                }
+            } catch (Throwable $e) { /* leave module not installed – ignore */ }
             try {
                 db()->prepare(
                     "DELETE FROM att_day_status
@@ -105,14 +128,113 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
         $mark = $_POST['mark'];
         $note = trim($_POST['note'] ?? '');
         try {
+            // Cancel a leave previously created from this calendar for the day
+            // (the mark below overwrites it), returning it to the balance.
+            try {
+                $st = db()->prepare(
+                    "SELECT leave_request_id FROM att_day_status
+                      WHERE user_id = ? AND status_date = ? AND status = 'approved_leave'
+                        AND source = 'manual' AND leave_request_id IS NOT NULL"
+                );
+                $st->execute([$user_id, $pdate]);
+                $lrid = (int)$st->fetchColumn();
+                if ($lrid > 0) {
+                    db()->prepare(
+                        "UPDATE leave_requests SET status = 'cancelled'
+                          WHERE id = ? AND status = 'approved' AND start_date = ? AND end_date = ?"
+                    )->execute([$lrid, $pdate, $pdate]);
+                }
+            } catch (Throwable $e) { /* leave module not installed – ignore */ }
             att_mark_dayoff($user_id, $pdate, $mark, $note !== '' ? mb_substr($note, 0, 255) : null, 'manual', null, $me_id);
             log_change('staff-attendance', 'UPDATE', $user_id, 'Day mark ' . $pdate, null, null, $mark);
             flash_set('success', date('d M Y', strtotime($pdate)) . ' marked as ' . ucfirst($mark) . '.');
         } catch (Throwable $e) {
             flash_set('error', 'Could not save the mark. Please run the staff-attendance-day-marks-v1.sql migration first.');
         }
+    } elseif ($act === 'mark' && in_array($_POST['mark'] ?? '', ['casual', 'sick'], true)) {
+        // Mark the day as Casual / Sick Leave: creates an approved single-day
+        // leave request so the day is deducted from the yearly leave balance.
+        $cat  = $_POST['mark'];
+        $note = trim($_POST['note'] ?? '');
+        try {
+            require_once __DIR__ . '/../leave-management/helpers.php';
+            $db = db();
+            // Skip when an approved leave already covers this date.
+            $chk = $db->prepare(
+                "SELECT id FROM leave_requests
+                  WHERE user_id = ? AND status = 'approved' AND ? BETWEEN start_date AND end_date LIMIT 1"
+            );
+            $chk->execute([$user_id, $pdate]);
+            if ($chk->fetchColumn()) {
+                flash_set('error', 'An approved leave already covers ' . date('d M Y', strtotime($pdate)) . '.');
+            } else {
+                $year    = (int)substr($pdate, 0, 4);
+                $balance = lm_get_balance($user_id, $year);
+                $total   = $cat === 'casual' ? $balance['casual_total'] : $balance['sick_total'];
+                $remaining = $total - lm_used_days($user_id, $year, $cat, true);
+                if ($remaining < 1) {
+                    flash_set('error', sprintf(
+                        'Insufficient %s balance for %d: %s day(s) remaining (including pending requests).',
+                        lm_category_label($cat), $year,
+                        rtrim(rtrim(number_format($remaining, 1), '0'), '.')
+                    ));
+                } else {
+                    $db->beginTransaction();
+                    try {
+                        $db->prepare(
+                            'INSERT INTO leave_requests
+                                (user_id, category, pay_type, start_date, end_date, start_time, end_time, days, reason, makeup_plan, status, current_step)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+                        )->execute([
+                            $user_id, $cat, null, $pdate, $pdate, null, null, 1.0,
+                            $note !== '' ? mb_substr($note, 0, 255) : 'Marked from the staff attendance calendar',
+                            null, 'approved', 0,
+                        ]);
+                        $rid = (int)$db->lastInsertId();
+                        // source 'manual' marks it as calendar-created so Reset Day can undo it.
+                        att_mark_dayoff($user_id, $pdate, 'approved_leave',
+                            lm_category_label($cat) . ' (request #' . $rid . ')', 'manual', $rid, $me_id);
+                        $db->commit();
+                        log_change('staff-attendance', 'UPDATE', $user_id, 'Day mark ' . $pdate, null, null,
+                            lm_category_label($cat) . ' (request #' . $rid . ')');
+                        flash_set('success', sprintf(
+                            '%s marked as %s — 1 day deducted from the %d balance (%s day(s) now remaining).',
+                            date('d M Y', strtotime($pdate)), lm_category_label($cat), $year,
+                            rtrim(rtrim(number_format($remaining - 1, 1), '0'), '.')
+                        ));
+                    } catch (Throwable $e) {
+                        $db->rollBack();
+                        throw $e;
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            flash_set('error', 'Could not save the leave. Please make sure the Leave Management module is installed.');
+        }
     } elseif ($act === 'reset') {
         db()->prepare('DELETE FROM att_records WHERE user_id = ? AND work_date = ?')->execute([$user_id, $pdate]);
+        try {
+            // A leave created from this calendar (source 'manual' + linked
+            // request) is cancelled so the day returns to the leave balance.
+            $st = db()->prepare(
+                "SELECT leave_request_id FROM att_day_status
+                  WHERE user_id = ? AND status_date = ? AND status = 'approved_leave'
+                    AND source = 'manual' AND leave_request_id IS NOT NULL"
+            );
+            $st->execute([$user_id, $pdate]);
+            $lrid = (int)$st->fetchColumn();
+            if ($lrid > 0) {
+                db()->prepare(
+                    "UPDATE leave_requests SET status = 'cancelled'
+                      WHERE id = ? AND status = 'approved' AND start_date = ? AND end_date = ?"
+                )->execute([$lrid, $pdate, $pdate]);
+                db()->prepare(
+                    "DELETE FROM att_day_status
+                      WHERE user_id = ? AND status_date = ? AND status = 'approved_leave'
+                        AND source = 'manual' AND leave_request_id = ?"
+                )->execute([$user_id, $pdate, $lrid]);
+            }
+        } catch (Throwable $e) { /* leave module not installed – ignore */ }
         try {
             db()->prepare(
                 "DELETE FROM att_day_status
@@ -511,7 +633,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                         <button class="btn btn-primary btn-sm w-100"><i class="fas fa-save me-1"></i> Save</button>
                     </div>
                 </form>
-                <div class="form-text mb-3">Saving times removes any Absent / Weekend / Holiday mark on this day.</div>
+                <div class="form-text mb-3">Saving times removes any day mark (Absent / Weekend / Holiday / calendar-marked Leave) on this day.</div>
 
                 <hr class="my-2">
                 <form method="POST" class="mb-1">
@@ -526,9 +648,11 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                         <button name="mark" value="absent" class="btn btn-outline-danger btn-sm"><i class="fas fa-user-slash me-1"></i> Absent</button>
                         <button name="mark" value="weekend" class="btn btn-outline-secondary btn-sm"><i class="fas fa-couch me-1"></i> Weekend</button>
                         <button name="mark" value="holiday" class="btn btn-outline-success btn-sm"><i class="fas fa-umbrella-beach me-1"></i> Holiday</button>
+                        <button name="mark" value="casual" class="btn btn-outline-info btn-sm"><i class="fas fa-mug-hot me-1"></i> Casual Leave</button>
+                        <button name="mark" value="sick" class="btn btn-outline-warning btn-sm"><i class="fas fa-briefcase-medical me-1"></i> Sick Leave</button>
                     </div>
-                    <input type="text" name="note" class="form-control form-control-sm" maxlength="255" placeholder="Note (optional)">
-                    <div class="form-text">Applies to this staff member only. University-wide holidays are managed on the Holidays page.</div>
+                    <input type="text" name="note" class="form-control form-control-sm" maxlength="255" placeholder="Note / reason (optional)">
+                    <div class="form-text">Applies to this staff member only. University-wide holidays are managed on the Holidays page. Casual / Sick Leave deducts 1 day from the yearly leave balance (Reset Day restores it).</div>
                 </form>
 
                 <hr class="my-2">
