@@ -6,6 +6,17 @@ require_access('access');
 $page_title = 'Module Access';
 $db = db();
 
+// Ensure the transfer module can be assigned even when its SQL migration was not run.
+$db->exec(
+    "INSERT IGNORE INTO modules
+        (name, slug, description, icon, parent_id, sort_order,
+         is_active, can_view, can_create, can_edit, can_delete)
+     VALUES
+        ('Student Transfer', 'student-transfer',
+         'Transfer students between departments/programs or batches, with a full history log.',
+         'fas fa-exchange-alt', NULL, 96, 1, 1, 1, 1, 1)"
+);
+
 // Determine mode: 'group' or 'user'
 $mode     = in_array($_GET['mode'] ?? '', ['group', 'user'], true) ? ($_GET['mode'] ?? 'group') : 'group';
 $group_id = (int)($_GET['group_id'] ?? 0);
