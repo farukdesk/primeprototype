@@ -26,6 +26,25 @@ $faculty_users = db()->query(
      WHERE ug.name = 'Faculty' AND u.is_active = 1
      ORDER BY u.full_name"
 )->fetchAll();
+
+// Always include the currently linked user, even if they are inactive or not
+// in the 'Faculty' group. Otherwise the dropdown silently falls back to
+// "Not linked" and saving any edit (e.g. sort order or designation) unlinks
+// the user account – which removes the teacher from marks entry and result
+// sheet access.
+if (!empty($member['user_id'])) {
+    $linked_present = false;
+    foreach ($faculty_users as $fu) {
+        if ((int)$fu['id'] === (int)$member['user_id']) { $linked_present = true; break; }
+    }
+    if (!$linked_present) {
+        $lu = db()->prepare('SELECT id, full_name, email FROM users WHERE id = ?');
+        $lu->execute([(int)$member['user_id']]);
+        if ($linked_user = $lu->fetch()) {
+            array_unshift($faculty_users, $linked_user);
+        }
+    }
+}
 clear_old();
 
 function dept_upload_file(array $file, string $subdir, array $allowed_exts, array $allowed_mimes): string|false {

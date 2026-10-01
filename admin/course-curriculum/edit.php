@@ -58,6 +58,22 @@ if (!can_access_dept($dept_id)) {
 // Load faculty for this department
 $dept_faculty = cc_get_dept_faculty($dept_id);
 
+// Keep the currently assigned teacher in the list even if they are now
+// inactive; otherwise saving this form silently unassigns the teacher.
+if (!empty($course['assigned_faculty_id'])) {
+    $assigned_present = false;
+    foreach ($dept_faculty as $f) {
+        if ((int)$f['id'] === (int)$course['assigned_faculty_id']) { $assigned_present = true; break; }
+    }
+    if (!$assigned_present) {
+        $af = db()->prepare('SELECT id, name, designation FROM dept_faculty WHERE id = ? LIMIT 1');
+        $af->execute([(int)$course['assigned_faculty_id']]);
+        if ($assigned_row = $af->fetch()) {
+            array_unshift($dept_faculty, $assigned_row);
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
