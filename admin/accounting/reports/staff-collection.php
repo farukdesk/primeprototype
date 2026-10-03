@@ -297,22 +297,18 @@ arsort($staff_totals);
 arsort($by_pay_method);
 arsort($by_fee_type);
 
-// ── Staff × Collection-channel cross-tab (for print summary) ───────────────
+// ── Collection channels (per fee line) ──────────────────────────────────────
 // A "channel" is finer than the payment method: Cash, each mobile-banking
 // provider (bKash / Nagad / Rocket), each bank the money was deposited to
 // (bank_name chosen at collection; older rows fall back to the receipt
 // voucher's receiving account), and Old ERP.
 $mb_provider_labels = ['bkash' => 'bKash', 'nagad' => 'Nagad', 'rocket' => 'Rocket'];
-$group_labels       = ['cash' => 'Cash', 'mobile_banking' => 'Mobile Banking', 'bank' => 'Bank', 'old_erp' => 'Old ERP'];
 $group_order        = ['cash' => 0, 'mobile_banking' => 1, 'bank' => 2, 'old_erp' => 3];
 $provider_order     = ['bkash' => 0, 'nagad' => 1, 'rocket' => 2];
 
 $channel_group  = [];   // [channel_key] => group (cash|mobile_banking|bank|old_erp)
 $channel_label  = [];   // [channel_key] => column label
-$channel_totals = [];   // [channel_key] => amount (all staff)
-$channel_rcpts  = [];   // [channel_key] => [voucher_id => true]
-$staff_matrix   = [];   // [staff_name][channel_key] => amount
-$staff_txns     = [];   // [staff_name] => number of receipts (vouchers)
+$officer_matrix = [];   // [staff_name][fee_type][channel_key] => amount (officer-wise print sheet)
 foreach ($rows as $r) {
     $amt  = (float)$r['amount'];
     $name = $r['collected_by'];
@@ -339,14 +335,10 @@ foreach ($rows as $r) {
     }
     $channel_group[$key]       = $group;
     $channel_label[$key]       = $label;
-    $channel_totals[$key]      = ($channel_totals[$key] ?? 0.0) + $amt;
-    $channel_rcpts[$key][(int)$r['voucher_id']] = true;
-    $staff_matrix[$name][$key] = ($staff_matrix[$name][$key] ?? 0.0) + $amt;
+    // Officer-wise sheet: fee type × channel per collecting staff
+    $ftk = (string)$r['fee_type'];
+    $officer_matrix[$name][$ftk][$key] = ($officer_matrix[$name][$ftk][$key] ?? 0.0) + $amt;
 }
-foreach ($receipts as $rc) {
-    $staff_txns[$rc['collected_by']] = ($staff_txns[$rc['collected_by']] ?? 0) + 1;
-}
-
 // Column order: Cash → bKash, Nagad, Rocket → banks (A–Z) → Old ERP
 $channel_keys = array_keys($channel_label);
 usort($channel_keys, static function (string $a, string $b) use ($channel_group, $channel_label, $group_order, $provider_order): int {
@@ -361,43 +353,57 @@ usort($channel_keys, static function (string $a, string $b) use ($channel_group,
     return strcasecmp($channel_label[$a], $channel_label[$b]);
 });
 
-// Group the columns for the two-row header. A group with more than one
-// channel (e.g. several banks) also gets a "<Group> Total" subtotal column.
-$summary_groups = [];   // [group] => ['label' => ..., 'cols' => [['key','label','subtotal'], ...]]
+// ── Officer-wise daily cash collection sheet (print) ────────────────────────
+// One sheet per collecting officer: fee-type rows × payment-channel columns
+// (Software/Cash first, then wallets and banks), with a cash total and a
+// grand total column — mirrors the manual Excel sheet used by Accounts.
+
+// Non-cash channel columns, in the global channel order (cash is its own column)
+$officer_channels = [];   // [channel_key] => label
 foreach ($channel_keys as $k) {
-    $g = $channel_group[$k];
-    $summary_groups[$g]['label']  = $group_labels[$g] ?? ucfirst($g);
-    $summary_groups[$g]['cols'][] = ['key' => $k, 'label' => $channel_label[$k], 'subtotal' => false];
+    if ($k !== 'cash') { $officer_channels[$k] = $channel_label[$k]; }
 }
-$has_sub_header = false;
-foreach ($summary_groups as $g => &$grp) {
-    if (count($grp['cols']) > 1) {
-        $grp['cols'][] = ['key' => 'sub:' . $g, 'label' => $grp['label'] . ' Total', 'subtotal' => true];
-        $has_sub_header = true;
-    }
-}
-unset($grp);
 
-// Amount for one summary cell (a channel or a group subtotal). Null = nothing collected.
-$summary_cell = static function (array $amounts, array $col) use ($summary_groups): ?float {
-    if ($col['subtotal']) {
-        $g   = substr($col['key'], 4);
-        $sum = 0.0;
-        $any = false;
-        foreach ($summary_groups[$g]['cols'] as $c) {
-            if (!$c['subtotal'] && isset($amounts[$c['key']])) { $sum += $amounts[$c['key']]; $any = true; }
-        }
-        return $any ? $sum : null;
-    }
-    return $amounts[$col['key']] ?? null;
-};
+// Fee-type rows: every fee type seen in the filtered data, highest total first
+$officer_fee_rows = array_keys($fee_summary);   // already sorted by amount desc
 
-// Order staff rows by their total collection (desc) to match $staff_totals
-$staff_matrix_sorted = [];
+// Order officer sheets by total collection (desc), same as $staff_totals
+$officer_sheets = [];   // [staff_name] => [fee_type][channel_key] => amount
 foreach ($staff_totals as $name => $tot) {
-    if (isset($staff_matrix[$name])) { $staff_matrix_sorted[$name] = $staff_matrix[$name]; }
+    if (isset($officer_matrix[$name])) { $officer_sheets[$name] = $officer_matrix[$name]; }
 }
-$staff_matrix = $staff_matrix_sorted;
+
+// Amount in words (Bangladeshi units: Crore / Lakh / Thousand)
+if (!function_exists('sc_taka_words')) {
+    function sc_taka_words(float $amount): string
+    {
+        $n = (int)round($amount);
+        if ($n <= 0) { return 'Taka Zero only'; }
+        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+                 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+        $two  = static function (int $x) use ($ones, $tens): string {
+            if ($x < 20) { return $ones[$x]; }
+            return trim($tens[intdiv($x, 10)] . ($x % 10 ? ' ' . $ones[$x % 10] : ''));
+        };
+        $parts = [];
+        $crore = intdiv($n, 10000000); $n %= 10000000;
+        $lakh  = intdiv($n, 100000);   $n %= 100000;
+        $thou  = intdiv($n, 1000);     $n %= 1000;
+        $hund  = intdiv($n, 100);      $rest = $n % 100;
+        if ($crore) { $parts[] = $two($crore) . ' Crore'; }
+        if ($lakh)  { $parts[] = $two($lakh) . ' Lakh'; }
+        if ($thou)  { $parts[] = $two($thou) . ' Thousand'; }
+        if ($hund)  { $parts[] = $ones[$hund] . ' Hundred'; }
+        if ($rest)  { $parts[] = $two($rest); }
+        return 'Taka ' . implode(' ', $parts) . ' only';
+    }
+}
+
+// Sheet date: single day ⇒ "5-Sep-26", otherwise the full period
+$sheet_date = ($date_from && $date_from === $date_to)
+    ? date('j-M-y', strtotime($date_from))
+    : $period_label;
 
 // ── Staff list for filter dropdown ─────────────────────────────────────────
 $staff_list = db()->query(
@@ -506,165 +512,92 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <div id="printArea">
 
-<!-- ── Print header ── -->
-<div class="print-header d-none d-print-block mb-4">
-    <table width="100%" style="border-bottom:2px solid #0d6efd;padding-bottom:10px;margin-bottom:10px">
-        <tr>
-            <td width="70"><img src="<?= h(acc_university_logo_url()) ?>" alt="Logo" style="height:56px;width:auto"></td>
-            <td style="padding-left:12px">
-                <div style="font-size:15pt;font-weight:700;color:#0d6efd">Prime University</div>
-                <div style="font-size:8pt;color:#555"><?= h(acc_university_address()) ?></div>
-                <div style="font-size:8pt;color:#555"><?= h(acc_university_website()) ?></div>
-            </td>
-            <td align="right" style="vertical-align:top">
-                <div style="font-size:13pt;font-weight:700;color:#198754">Staff Collection Report</div>
-                <div style="font-size:8pt;color:#666">Period: <?= h($period_label) ?></div>
-                <?php if ($fee_type):   ?><div style="font-size:8pt;color:#666">Fee Type: <?= h(acc_fee_type_label($fee_type)) ?></div><?php endif; ?>
-                <?php if ($pay_method): ?><div style="font-size:8pt;color:#666">Method: <?= h($pay_methods[$pay_method] ?? $pay_method) ?></div><?php endif; ?>
-                <div style="font-size:7.5pt;color:#999;margin-top:4px">Printed: <?= date('d M Y, h:i A') ?></div>
-            </td>
-        </tr>
-    </table>
+<!-- ── Print: Accounts Officer wise daily cash collection Report (one sheet per officer) ── -->
+<?php if (!empty($officer_sheets)): ?>
+<div class="d-none d-print-block">
+    <?php $pidx = 0; foreach ($officer_sheets as $officer => $fee_matrix): $pidx++;
+        // Per-column totals for this officer's sheet
+        $col_tot = ['cash' => 0.0, 'grand' => 0.0];
+        foreach ($officer_channels as $ck => $cl) { $col_tot[$ck] = 0.0; }
+        foreach ($fee_matrix as $ft => $chans) {
+            foreach ($chans as $ck => $amt) {
+                if ($ck === 'cash') { $col_tot['cash'] += $amt; }
+                elseif (isset($col_tot[$ck])) { $col_tot[$ck] += $amt; }
+                $col_tot['grand'] += $amt;
+            }
+        }
+    ?>
+    <div class="oc-sheet<?= $pidx > 1 ? ' oc-break' : '' ?>">
+        <div class="oc-head">
+            <div class="oc-uni">Prime University</div>
+            <div class="oc-addr"><?= h(acc_university_address()) ?></div>
+            <div class="oc-title">Accounts Officer wise daily cash collection Report</div>
+        </div>
+        <table class="oc-meta">
+            <tr>
+                <td class="oc-recv">Received by: <?= h($officer) ?></td>
+                <td class="oc-date">Date: <strong><?= h($sheet_date) ?></strong></td>
+            </tr>
+        </table>
+        <table class="oc-grid">
+            <thead>
+                <tr>
+                    <th class="oc-c" style="width:4%">SL</th>
+                    <th class="oc-c" style="width:26%">PARTICULARS</th>
+                    <th class="oc-c">Software<br>(Cash)</th>
+                    <th class="oc-c">Total Amount<br>(Tk.)</th>
+                    <?php foreach ($officer_channels as $ck => $cl): ?>
+                    <th class="oc-c"><?= h($cl) ?></th>
+                    <?php endforeach; ?>
+                    <th class="oc-c">Total Amount<br>(Tk.)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php $sl = 0; foreach ($officer_fee_rows as $ft): $sl++;
+                    $chans   = $fee_matrix[$ft] ?? [];
+                    $cash    = (float)($chans['cash'] ?? 0);
+                    $row_tot = array_sum(array_map('floatval', $chans));
+                ?>
+                <tr>
+                    <td class="oc-c"><?= $sl ?></td>
+                    <td class="oc-l"><?= h($fee_summary[$ft]['label'] ?? acc_fee_type_label($ft)) ?></td>
+                    <td class="oc-r"><?= $cash > 0 ? number_format($cash, 2) : '-' ?></td>
+                    <td class="oc-r"><?= $cash > 0 ? number_format($cash, 2) : '-' ?></td>
+                    <?php foreach ($officer_channels as $ck => $cl): $v = (float)($chans[$ck] ?? 0); ?>
+                    <td class="oc-r"><?= $v > 0 ? number_format($v, 2) : '-' ?></td>
+                    <?php endforeach; ?>
+                    <td class="oc-r"><?= $row_tot > 0 ? number_format($row_tot, 2) : '-' ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+            <tfoot>
+                <tr class="oc-totrow">
+                    <td colspan="2" class="oc-r"><strong>Total:</strong></td>
+                    <td class="oc-r"><strong><?= $col_tot['cash'] > 0 ? number_format($col_tot['cash'], 2) : '-' ?></strong></td>
+                    <td class="oc-r"><strong><?= $col_tot['cash'] > 0 ? number_format($col_tot['cash'], 2) : '-' ?></strong></td>
+                    <?php foreach ($officer_channels as $ck => $cl): ?>
+                    <td class="oc-r"><strong><?= $col_tot[$ck] > 0 ? number_format($col_tot[$ck], 2) : '-' ?></strong></td>
+                    <?php endforeach; ?>
+                    <td class="oc-r"><strong><?= $col_tot['grand'] > 0 ? number_format($col_tot['grand'], 2) : '-' ?></strong></td>
+                </tr>
+                <tr>
+                    <td colspan="<?= 5 + count($officer_channels) ?>" class="oc-l oc-words"><strong>In Words:</strong> <?= h(sc_taka_words($col_tot['grand'])) ?></td>
+                </tr>
+            </tfoot>
+        </table>
+        <table class="oc-sign">
+            <tr>
+                <td class="oc-sig-l"><span>Recipient's signature</span></td>
+                <td></td>
+                <td class="oc-sig-r"><span>DD (Accounts)</span></td>
+            </tr>
+        </table>
+    </div>
+    <?php endforeach; ?>
 </div>
+<?php endif; ?>
 
 <?php if (!empty($rows)): ?>
-<!-- ── Print-only summary: staff × collection channel (Cash / bKash / Nagad / Rocket / each Bank) ── -->
-<div class="d-none d-print-block mb-3">
-    <div style="font-size:10pt;font-weight:700;color:#0d6efd;margin-bottom:5px">Collection Summary — by Staff &amp; Payment Channel</div>
-    <table class="sc-summary">
-        <thead>
-            <tr>
-                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">#</th>
-                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-l">Staff</th>
-                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Receipts</th>
-                <?php foreach ($summary_groups as $g => $grp): $ncols = count($grp['cols']); ?>
-                    <?php if ($ncols === 1): ?>
-                    <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r"><?= h(($g === 'bank' ? 'Bank – ' : '') . $grp['cols'][0]['label']) ?></th>
-                    <?php else: ?>
-                    <th colspan="<?= $ncols ?>" class="sc-c sc-grp"><?= h($grp['label']) ?></th>
-                    <?php endif; ?>
-                <?php endforeach; ?>
-                <th rowspan="<?= $has_sub_header ? 2 : 1 ?>" class="sc-r">Total (<?= h($currency) ?>)</th>
-            </tr>
-            <?php if ($has_sub_header): ?>
-            <tr>
-                <?php foreach ($summary_groups as $grp): if (count($grp['cols']) === 1) continue; ?>
-                    <?php foreach ($grp['cols'] as $col): ?>
-                    <th class="sc-r<?= $col['subtotal'] ? ' sc-sub' : '' ?>"><?= h($col['label']) ?></th>
-                    <?php endforeach; ?>
-                <?php endforeach; ?>
-            </tr>
-            <?php endif; ?>
-        </thead>
-        <tbody>
-            <?php $sidx = 0; foreach ($staff_matrix as $sname => $amounts): $sidx++; ?>
-            <tr>
-                <td class="sc-muted"><?= $sidx ?></td>
-                <td class="sc-name"><?= h($sname) ?></td>
-                <td class="sc-r sc-muted"><?= (int)($staff_txns[$sname] ?? 0) ?></td>
-                <?php foreach ($summary_groups as $grp): foreach ($grp['cols'] as $col): $v = $summary_cell($amounts, $col); ?>
-                <td class="sc-r<?= $col['subtotal'] ? ' sc-sub' : '' ?>"><?= $v !== null ? number_format($v, 2) : '—' ?></td>
-                <?php endforeach; endforeach; ?>
-                <td class="sc-r sc-total"><?= number_format($staff_totals[$sname] ?? 0, 2) ?></td>
-            </tr>
-            <?php endforeach; ?>
-        </tbody>
-        <tfoot>
-            <tr>
-                <td colspan="2" class="sc-r">Total Collection</td>
-                <td class="sc-r"><?= count($receipts) ?></td>
-                <?php foreach ($summary_groups as $grp): foreach ($grp['cols'] as $col): $v = $summary_cell($channel_totals, $col); ?>
-                <td class="sc-r"><?= $v !== null ? number_format($v, 2) : '—' ?></td>
-                <?php endforeach; endforeach; ?>
-                <td class="sc-r sc-grand"><?= number_format($grand_total, 2) ?></td>
-            </tr>
-        </tfoot>
-    </table>
-    <div style="font-size:7pt;color:#777;margin-top:3px">Mobile Banking is split by wallet provider. Bank columns show the bank the payment was deposited to, as selected at collection time.</div>
-</div>
-
-<!-- ── Print-only summaries: by Fee Type (left) and by Payment Channel (right) ── -->
-<div class="d-none d-print-block mb-3">
-    <table style="width:100%;border-collapse:separate;border-spacing:0">
-        <tr>
-            <td style="width:57%;vertical-align:top;padding-right:8px">
-                <div class="sc-title">Collection by Fee Type</div>
-                <table class="sc-summary">
-                    <thead>
-                        <tr>
-                            <th class="sc-l">#</th>
-                            <th class="sc-l">Fee Type</th>
-                            <th class="sc-r">Receipts</th>
-                            <th class="sc-r">Amount (<?= h($currency) ?>)</th>
-                            <th class="sc-r">Share</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php $fidx = 0; foreach ($fee_summary as $fs): $fidx++; ?>
-                        <tr>
-                            <td class="sc-muted"><?= $fidx ?></td>
-                            <td class="sc-name"><?= h($fs['label']) ?></td>
-                            <td class="sc-r sc-muted"><?= count($fs['receipts']) ?></td>
-                            <td class="sc-r sc-total"><?= number_format($fs['amount'], 2) ?></td>
-                            <td class="sc-r sc-muted"><?= $grand_total > 0 ? number_format($fs['amount'] / $grand_total * 100, 1) . '%' : '—' ?></td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="2" class="sc-r">Total</td>
-                            <td class="sc-r"><?= count($receipts) ?></td>
-                            <td class="sc-r sc-grand"><?= number_format($grand_total, 2) ?></td>
-                            <td class="sc-r">100%</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </td>
-            <td style="width:43%;vertical-align:top;padding-left:8px">
-                <div class="sc-title">Collection by Payment Channel</div>
-                <table class="sc-summary">
-                    <thead>
-                        <tr>
-                            <th class="sc-l">Channel</th>
-                            <th class="sc-r">Receipts</th>
-                            <th class="sc-r">Amount (<?= h($currency) ?>)</th>
-                            <th class="sc-r">Share</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($summary_groups as $g => $grp): $gcols = array_values(array_filter($grp['cols'], static fn(array $c): bool => !$c['subtotal'])); ?>
-                            <?php foreach ($gcols as $col): $v = (float)($channel_totals[$col['key']] ?? 0); ?>
-                            <tr>
-                                <td class="sc-name"><?= h($g === 'bank' ? 'Bank – ' . $col['label'] : $col['label']) ?></td>
-                                <td class="sc-r sc-muted"><?= count($channel_rcpts[$col['key']] ?? []) ?></td>
-                                <td class="sc-r sc-total"><?= number_format($v, 2) ?></td>
-                                <td class="sc-r sc-muted"><?= $grand_total > 0 ? number_format($v / $grand_total * 100, 1) . '%' : '—' ?></td>
-                            </tr>
-                            <?php endforeach; ?>
-                            <?php if (count($gcols) > 1): $gsum = 0.0; $grc = []; foreach ($gcols as $col) { $gsum += (float)($channel_totals[$col['key']] ?? 0); $grc += ($channel_rcpts[$col['key']] ?? []); } ?>
-                            <tr class="sc-subrow">
-                                <td class="sc-r"><?= h($grp['label']) ?> Total</td>
-                                <td class="sc-r"><?= count($grc) ?></td>
-                                <td class="sc-r"><?= number_format($gsum, 2) ?></td>
-                                <td class="sc-r"><?= $grand_total > 0 ? number_format($gsum / $grand_total * 100, 1) . '%' : '—' ?></td>
-                            </tr>
-                            <?php endif; ?>
-                        <?php endforeach; ?>
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td class="sc-r">Total Collection</td>
-                            <td class="sc-r"><?= count($receipts) ?></td>
-                            <td class="sc-r sc-grand"><?= number_format($grand_total, 2) ?></td>
-                            <td class="sc-r">100%</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </td>
-        </tr>
-    </table>
-</div>
-
 <!-- ── Summary stat cards (screen) ── -->
 <div class="row g-3 mb-3 no-print">
     <div class="col-6 col-md-3">
@@ -715,8 +648,8 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- ── Detail table ── -->
-<div class="card border-0 shadow-sm">
+<!-- ── Detail table (screen only — print shows the officer-wise sheets) ── -->
+<div class="card border-0 shadow-sm no-print">
     <div class="card-header py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <strong class="small"><i class="fas fa-table me-1 text-info"></i> Transaction Breakdown · <span id="recCount"><?= count($receipts) ?></span> receipt(s) <span class="text-muted fw-normal">(<?= count($rows) ?> fee line(s))</span></strong>
         <div class="d-flex align-items-center gap-2 no-print">
@@ -828,56 +761,37 @@ require_once __DIR__ . '/../../includes/header.php';
 .bd-head { display:inline-flex; flex-wrap:wrap; align-items:baseline; gap:4px 6px; }
 .bd-ctx { font-size:.72rem; }
 .bd-amt { font-variant-numeric:tabular-nums; white-space:nowrap; font-size:.78rem; color:#495057; }
-/* Print summary: staff × collection channel */
-.sc-summary { width:100%; border-collapse:collapse; font-size:8pt; }
-.sc-summary th, .sc-summary td { padding:3px 6px; border:1px solid #ccc; vertical-align:middle; }
-.sc-summary thead th { background:#dce8ff; border-color:#b9c9ef; font-weight:700; text-align:right; white-space:nowrap; }
-.sc-summary .sc-l { text-align:left; }
-.sc-summary .sc-c { text-align:center; }
-.sc-summary .sc-r { text-align:right; white-space:nowrap; }
-.sc-summary thead th.sc-grp { background:#c9daff; }
-.sc-summary .sc-sub { background:#f3f6fd; font-weight:600; }
-.sc-summary .sc-muted { color:#666; }
-.sc-summary .sc-name { font-weight:600; text-align:left; }
-.sc-summary .sc-total { font-weight:700; }
-.sc-summary tfoot td { background:#e0eaff; border-color:#b9c9ef; font-weight:700; }
-.sc-summary .sc-grand { color:#0d6efd; }
-.sc-summary tr.sc-subrow td { background:#f3f6fd; font-weight:600; }
-.sc-title { font-size:10pt; font-weight:700; color:#0d6efd; margin-bottom:5px; }
+/* ── Officer-wise daily cash collection sheet (print) ── */
+.oc-sheet { font-family:"Times New Roman", Georgia, serif; color:#000; }
+.oc-head { text-align:center; margin-bottom:6px; }
+.oc-uni { font-size:16pt; font-weight:700; }
+.oc-addr { font-size:9pt; }
+.oc-title { font-size:12pt; font-weight:700; margin-top:2px; }
+.oc-meta { width:100%; border-collapse:collapse; margin:6px 0 4px; }
+.oc-meta .oc-recv { font-size:11pt; font-weight:700; text-align:left; }
+.oc-meta .oc-date { font-size:10.5pt; text-align:right; }
+.oc-grid { width:100%; border-collapse:collapse; font-size:9pt; }
+.oc-grid th, .oc-grid td { border:1px solid #000; padding:3px 5px; }
+.oc-grid thead th { font-weight:700; vertical-align:middle; }
+.oc-grid .oc-c { text-align:center; }
+.oc-grid .oc-l { text-align:left; }
+.oc-grid .oc-r { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.oc-grid tfoot .oc-totrow td { font-weight:700; }
+.oc-grid .oc-words { font-size:9.5pt; padding:4px 5px; }
+.oc-sign { width:100%; border-collapse:collapse; margin-top:48px; font-size:9.5pt; }
+.oc-sign td { width:33%; }
+.oc-sign .oc-sig-l span, .oc-sign .oc-sig-r span { display:inline-block; border-top:1px solid #000; padding:2px 14px 0; font-weight:700; }
+.oc-sign .oc-sig-l { text-align:left; }
+.oc-sign .oc-sig-r { text-align:right; }
 @media print {
     #sidebar, #topbar, .no-print, nav[aria-label="breadcrumb"] { display:none !important; }
-    #main-wrapper, body, html { margin:0 !important; padding:0 !important; }
+    #main-wrapper, body, html { margin:0 !important; padding:0 !important; background:#fff !important; }
     #printArea { width:100%; }
-    .sc-summary { -webkit-print-color-adjust:exact; print-color-adjust:exact; page-break-inside:avoid; }
-    .sc-summary thead { display:table-header-group; }
-    .sc-summary tr { page-break-inside:avoid; }
-    #collectionTable { font-size:7.2pt !important; border-collapse:collapse; width:100%; table-layout:fixed; }
-    #collectionTable th, #collectionTable td { padding:2px 4px !important; border:1px solid #ccc !important; vertical-align:top !important; word-break:break-word; overflow-wrap:anywhere; white-space:normal !important; line-height:1.25; }
-    #collectionTable thead th { font-size:6.8pt !important; }
-    /* Proportional column widths so all 6 columns fit one A4 landscape page */
-    #collectionTable th:nth-child(1), #collectionTable td:nth-child(1) { width:3%; }   /* # */
-    #collectionTable th:nth-child(2), #collectionTable td:nth-child(2) { width:11%; }  /* Date & Invoice */
-    #collectionTable th:nth-child(3), #collectionTable td:nth-child(3) { width:22%; }  /* Student */
-    #collectionTable th:nth-child(4), #collectionTable td:nth-child(4) { width:14%; }  /* Collected By & Method */
-    #collectionTable th:nth-child(5), #collectionTable td:nth-child(5) { width:39%; }  /* Fee Breakdown */
-    #collectionTable th:nth-child(6), #collectionTable td:nth-child(6) { width:11%; text-align:right; } /* Amount */
-    #collectionTable .small, #collectionTable .bd-ctx { font-size:6.5pt !important; }
-    .bd-cell { min-width:0; }
-    .bd-line { gap:4px; }
-    .bd-line + .bd-line { border-top:1px dotted #bbb; margin-top:1px; padding-top:1px; }
-    .bd-ctx { color:#555 !important; }
-    .bd-amt { font-size:7pt; color:#000; }
-    #collectionTable td:nth-child(2) .inv-link { font-family:inherit !important; font-size:6.5pt !important; word-break:break-all; }
-    #collectionTable td:nth-child(6) { font-size:7pt !important; white-space:nowrap !important; }
-    #collectionTable thead { background:#dce8ff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; display:table-header-group; }
-    #collectionTable tfoot { background:#e0eaff !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-    #collectionTable tr { page-break-inside:avoid; }
-    .inv-link .fa-external-link-alt { display:none !important; }
-    .inv-link { color:#000 !important; text-decoration:none !important; }
-    .data-row { display:table-row !important; }
-    .card { box-shadow:none !important; border:1px solid #dee2e6 !important; }
-    .badge { display:inline !important; border:0 !important; padding:0 4px 0 0 !important; background:transparent !important; color:#000 !important; font-weight:400 !important; font-size:inherit !important; white-space:normal !important; word-break:break-word; overflow-wrap:anywhere; }
-    #tableWrapper { overflow:visible !important; }
+    .oc-sheet { page-break-inside:avoid; }
+    .oc-break { page-break-before:always; }
+    .oc-grid { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .oc-grid thead { display:table-header-group; }
+    .oc-grid tr { page-break-inside:avoid; }
 }
 @page { size: A4 landscape; margin: 10mm 10mm 12mm 10mm; }
 </style>
