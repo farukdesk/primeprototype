@@ -400,6 +400,13 @@ if (!function_exists('sc_taka_words')) {
     }
 }
 
+// ── Period label for display ───────────────────────────────────────────────
+$period_label = ($date_from === $date_to && $date_from === date('Y-m-d'))
+    ? 'Today — ' . date('d M Y')
+    : (($date_from ? date('d M Y', strtotime($date_from)) : 'All time')
+       . ' — '
+       . ($date_to ? date('d M Y', strtotime($date_to)) : 'All time'));
+
 // Sheet date: single day ⇒ "5-Sep-26", otherwise the full period
 $sheet_date = ($date_from && $date_from === $date_to)
     ? date('j-M-y', strtotime($date_from))
@@ -415,13 +422,6 @@ $staff_list = db()->query(
 
 $fee_types   = acc_student_fee_types();
 $pay_methods = ['cash' => 'Cash', 'bank' => 'Bank', 'mobile_banking' => 'Mobile Banking', 'old_erp' => 'Old ERP'];
-
-// ── Period label for display ───────────────────────────────────────────────
-$period_label = ($date_from === $date_to && $date_from === date('Y-m-d'))
-    ? 'Today — ' . date('d M Y')
-    : (($date_from ? date('d M Y', strtotime($date_from)) : 'All time')
-       . ' — '
-       . ($date_to ? date('d M Y', strtotime($date_to)) : 'All time'));
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
