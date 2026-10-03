@@ -302,6 +302,24 @@ arsort($by_fee_type);
 // provider (bKash / Nagad / Rocket), each bank the money was deposited to
 // (bank_name chosen at collection; older rows fall back to the receipt
 // voucher's receiving account), and Old ERP.
+// Short display names for well-known banks (keeps print columns compact)
+if (!function_exists('sc_bank_short_name')) {
+    function sc_bank_short_name(string $bank): string
+    {
+        $shorts = [
+            'shahjalal'         => 'SJIBL',
+            'jamuna'            => 'Jamuna',
+            'united commercial' => 'UCBL',
+            'ucb'               => 'UCBL',
+            'brac'              => 'Brac',
+        ];
+        foreach ($shorts as $needle => $short) {
+            if (stripos($bank, $needle) !== false) { return $short; }
+        }
+        return $bank;
+    }
+}
+
 $mb_provider_labels = ['bkash' => 'bKash', 'nagad' => 'Nagad', 'rocket' => 'Rocket'];
 $group_order        = ['cash' => 0, 'mobile_banking' => 1, 'bank' => 2, 'old_erp' => 3];
 $provider_order     = ['bkash' => 0, 'nagad' => 1, 'rocket' => 2];
@@ -324,7 +342,7 @@ foreach ($rows as $r) {
             $bank  = trim((string)($r['bank_name'] ?? ''));
             if ($bank === '') { $bank = trim((string)($r['received_into'] ?? '')); }
             $key   = 'bank:' . ($bank !== '' ? $bank : 'unspecified');
-            $label = $bank !== '' ? $bank : 'Unspecified';
+            $label = $bank !== '' ? sc_bank_short_name($bank) : 'Unspecified';
             $group = 'bank';
             break;
         case 'old_erp':
@@ -529,6 +547,9 @@ require_once __DIR__ . '/../../includes/header.php';
     ?>
     <div class="oc-sheet<?= $pidx > 1 ? ' oc-break' : '' ?>">
         <div class="oc-head">
+            <?php $oc_logo = acc_university_logo_url(); if ($oc_logo): ?>
+            <img src="<?= h($oc_logo) ?>" alt="Logo" class="oc-logo">
+            <?php endif; ?>
             <div class="oc-uni">Prime University</div>
             <div class="oc-addr"><?= h(acc_university_address()) ?></div>
             <div class="oc-title">Accounts Officer wise daily cash collection Report</div>
@@ -545,7 +566,6 @@ require_once __DIR__ . '/../../includes/header.php';
                     <th class="oc-c" style="width:4%">SL</th>
                     <th class="oc-c" style="width:26%">PARTICULARS</th>
                     <th class="oc-c">Software<br>(Cash)</th>
-                    <th class="oc-c">Total Amount<br>(Tk.)</th>
                     <?php foreach ($officer_channels as $ck => $cl): ?>
                     <th class="oc-c"><?= h($cl) ?></th>
                     <?php endforeach; ?>
@@ -562,7 +582,6 @@ require_once __DIR__ . '/../../includes/header.php';
                     <td class="oc-c"><?= $sl ?></td>
                     <td class="oc-l"><?= h($fee_summary[$ft]['label'] ?? acc_fee_type_label($ft)) ?></td>
                     <td class="oc-r"><?= $cash > 0 ? number_format($cash, 2) : '-' ?></td>
-                    <td class="oc-r"><?= $cash > 0 ? number_format($cash, 2) : '-' ?></td>
                     <?php foreach ($officer_channels as $ck => $cl): $v = (float)($chans[$ck] ?? 0); ?>
                     <td class="oc-r"><?= $v > 0 ? number_format($v, 2) : '-' ?></td>
                     <?php endforeach; ?>
@@ -574,14 +593,13 @@ require_once __DIR__ . '/../../includes/header.php';
                 <tr class="oc-totrow">
                     <td colspan="2" class="oc-r"><strong>Total:</strong></td>
                     <td class="oc-r"><strong><?= $col_tot['cash'] > 0 ? number_format($col_tot['cash'], 2) : '-' ?></strong></td>
-                    <td class="oc-r"><strong><?= $col_tot['cash'] > 0 ? number_format($col_tot['cash'], 2) : '-' ?></strong></td>
                     <?php foreach ($officer_channels as $ck => $cl): ?>
                     <td class="oc-r"><strong><?= $col_tot[$ck] > 0 ? number_format($col_tot[$ck], 2) : '-' ?></strong></td>
                     <?php endforeach; ?>
                     <td class="oc-r"><strong><?= $col_tot['grand'] > 0 ? number_format($col_tot['grand'], 2) : '-' ?></strong></td>
                 </tr>
                 <tr>
-                    <td colspan="<?= 5 + count($officer_channels) ?>" class="oc-l oc-words"><strong>In Words:</strong> <?= h(sc_taka_words($col_tot['grand'])) ?></td>
+                    <td colspan="<?= 4 + count($officer_channels) ?>" class="oc-l oc-words"><strong>In Words:</strong> <?= h(sc_taka_words($col_tot['grand'])) ?></td>
                 </tr>
             </tfoot>
         </table>
@@ -763,7 +781,8 @@ require_once __DIR__ . '/../../includes/header.php';
 .bd-amt { font-variant-numeric:tabular-nums; white-space:nowrap; font-size:.78rem; color:#495057; }
 /* ── Officer-wise daily cash collection sheet (print) ── */
 .oc-sheet { font-family:"Times New Roman", Georgia, serif; color:#000; }
-.oc-head { text-align:center; margin-bottom:6px; }
+.oc-head { text-align:center; margin-bottom:6px; position:relative; }
+.oc-logo { position:absolute; left:0; top:0; height:52px; width:auto; }
 .oc-uni { font-size:16pt; font-weight:700; }
 .oc-addr { font-size:9pt; }
 .oc-title { font-size:12pt; font-weight:700; margin-top:2px; }
