@@ -715,6 +715,34 @@ function att_on_leave_user_ids(string $date): array
 // ── Status computation ──────────────────────────────────────────────────────
 
 /**
+ * Whether the user has an APPROVED short leave (Leave Management category
+ * 'short') covering the given date. A short leave excuses the member for part
+ * of the working day, so the day must not be flagged Late In / Early Out /
+ * Insufficient Hours. Cached per date so a month render issues at most one
+ * query per day. Returns false when the Leave Management tables are missing.
+ */
+function att_short_leave(int $user_id, string $date): bool
+{
+    static $cache = [];
+    if (!array_key_exists($date, $cache)) {
+        $ids = [];
+        try {
+            $stmt = db()->prepare(
+                "SELECT DISTINCT user_id FROM leave_requests
+                  WHERE category = 'short' AND status = 'approved'
+                    AND ? BETWEEN start_date AND end_date"
+            );
+            $stmt->execute([$date]);
+            foreach ($stmt->fetchAll() as $r) $ids[(int)$r['user_id']] = true;
+        } catch (Throwable $e) {
+            // Leave Management module not installed – ignore.
+        }
+        $cache[$date] = $ids;
+    }
+    return isset($cache[$date][$user_id]);
+}
+
+/**
  * Admin per-day quick mark (from the staff calendar): 'absent', 'weekend' or
  * 'holiday' for a user on a date, or null when none. Stored in att_day_status
  * alongside the Approved Leave / Day Off marks; cached per date so a month
@@ -770,6 +798,10 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // are never counted Late In / Early Out / Insufficient Hours.
     $exam_exempt = att_exam_exempt($user_id, $date);
 
+    // Approved short leave (Leave Management): the member was excused for part
+    // of this day, so never count Late In / Early Out / Insufficient Hours.
+    $short_leave = $has_in && att_short_leave($user_id, $date);
+
     // Group-restricted holidays only apply to members of the selected groups.
     if (isset($holidays[$date]) && att_holiday_applies($user_id, $date)) {
         return $has_in ? 'present' : 'holiday';
@@ -808,7 +840,7 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     if ($slot_win === null && $policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
         if (!$has_out) return 'incomplete';
         if (att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES) return 'present';
-        return $exam_exempt ? 'present' : 'short_hours';
+        return ($exam_exempt || $short_leave) ? 'present' : 'short_hours';
     }
 
     if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
@@ -843,7 +875,8 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     }
 
     // Exam-period exemption: never Late In / Early Out during active exams.
-    if ($exam_exempt) {
+    // An approved short leave likewise excuses the late arrival / early exit.
+    if ($exam_exempt || $short_leave) {
         $late  = false;
         $early = false;
     }
@@ -858,6 +891,7 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     if ($policy && $etype === 'educational' && $slot_win === null) {
         if (att_worked_minutes($record['in_time'], $record['out_time']) < ATT_POLICY_FACULTY_MIN_MINUTES) {
             if ($exam_exempt) return 'present'; // exam duty replaces the office schedule
+            if ($short_leave) return 'present'; // short leave covers the missing hours
             return $late ? 'late_in' : 'short_hours';
         }
         $early = false;
