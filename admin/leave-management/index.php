@@ -25,22 +25,37 @@ $fmt        = fn(float $n) => rtrim(rtrim(number_format($n, 1), '0'), '.');
 $view = $_GET['view'] ?? 'mine';
 if ($view === 'all' && !$is_admin) $view = 'mine';
 
-// ── Filters (status + leave-date range), applied to the requests list ─────────
+// ── Filters (status + category + leave-date range + user search) ──────────────
 $f_status = $_GET['status'] ?? '';
 if (!in_array($f_status, ['pending', 'approved', 'rejected', 'cancelled'], true)) $f_status = '';
+$f_cat = $_GET['category'] ?? '';
+if (!in_array($f_cat, LM_CATEGORIES, true)) $f_cat = '';
 $valid_date = fn(string $d): bool => (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d) !== false;
 $f_from = (string)($_GET['from'] ?? '');
 $f_to   = (string)($_GET['to'] ?? '');
 if (!$valid_date($f_from)) $f_from = '';
 if (!$valid_date($f_to))   $f_to   = '';
-$has_filters = ($f_status !== '' || $f_from !== '' || $f_to !== '');
+$f_q = trim((string)($_GET['q'] ?? ''));
+$has_filters = ($f_status !== '' || $f_cat !== '' || $f_from !== '' || $f_to !== '' || $f_q !== '');
 
 $filter_sql    = '';
 $filter_params = [];
 if ($f_status !== '') { $filter_sql .= ' AND r.status = ?';      $filter_params[] = $f_status; }
+if ($f_cat !== '')    { $filter_sql .= ' AND r.category = ?';    $filter_params[] = $f_cat; }
 // A request matches the date range when its leave dates overlap the range.
 if ($f_from !== '')   { $filter_sql .= ' AND r.end_date >= ?';   $filter_params[] = $f_from; }
 if ($f_to !== '')     { $filter_sql .= ' AND r.start_date <= ?'; $filter_params[] = $f_to; }
+
+// User search (All Requests view only): name, email, phone, employee ID or user ID.
+$search_sql    = '';
+$search_params = [];
+if ($f_q !== '') {
+    $like = '%' . $f_q . '%';
+    $search_sql = ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ? OR sp.employee_id LIKE ?';
+    $search_params = [$like, $like, $like, $like];
+    if (ctype_digit($f_q)) { $search_sql .= ' OR u.id = ?'; $search_params[] = (int)$f_q; }
+    $search_sql .= ')';
+}
 
 // ── My requests ────────────────────────────────────────────────────────────────
 $mine_stmt = $db->prepare(
@@ -81,11 +96,11 @@ if ($is_admin && $view === 'all') {
            JOIN users u ON u.id = r.user_id
       LEFT JOIN staff_profiles sp ON sp.user_id = u.id
       LEFT JOIN staff_departments sd ON sd.id = sp.staff_dept_id
-          WHERE 1=1$filter_sql
+          WHERE 1=1$filter_sql$search_sql
           ORDER BY r.created_at DESC
           LIMIT 200"
     );
-    $all_stmt->execute($filter_params);
+    $all_stmt->execute(array_merge($filter_params, $search_params));
     $all_requests = $all_stmt->fetchAll();
 
     // Approval steps for the listed requests, for the Approval Progress column.
@@ -270,10 +285,22 @@ function lm_render_rows(array $rows, bool $show_user, callable $fmt, ?array $flo
         </ul>
         <form method="get" class="d-flex gap-2 align-items-center flex-wrap">
             <input type="hidden" name="view" value="<?= h($view) ?>">
+            <?php if ($view === 'all'): ?>
+            <div class="input-group input-group-sm" style="width:auto;">
+                <input type="text" name="q" class="form-control form-control-sm" style="width:200px;" value="<?= h($f_q) ?>" placeholder="Name, email, phone or ID" title="Search staff by name, email, phone, employee ID or user ID">
+                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Search"><i class="fas fa-search"></i></button>
+            </div>
+            <?php endif; ?>
             <select name="status" class="form-select form-select-sm" style="width:auto;" title="Filter by status" onchange="this.form.submit()">
                 <option value="">All statuses</option>
                 <?php foreach (['pending', 'approved', 'rejected', 'cancelled'] as $s): ?>
                 <option value="<?= $s ?>" <?= $f_status === $s ? 'selected' : '' ?>><?= ucfirst($s) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <select name="category" class="form-select form-select-sm" style="width:auto;" title="Filter by leave category" onchange="this.form.submit()">
+                <option value="">All categories</option>
+                <?php foreach (LM_CATEGORIES as $c): ?>
+                <option value="<?= $c ?>" <?= $f_cat === $c ? 'selected' : '' ?>><?= h(lm_category_label($c)) ?></option>
                 <?php endforeach; ?>
             </select>
             <div class="d-flex align-items-center gap-1">
