@@ -342,6 +342,9 @@ foreach ($dates as $d) {
         'minutes'  => $mins,
         'off'      => $off,
         'holiday'  => $holidays[$d] ?? null,
+        // Approved short leave: the status is excused to Present, but the day
+        // still carries a visible "Short Leave" mark on the calendar/table.
+        'short_lv' => !empty($rec['in_time']) && att_short_leave($user_id, $d),
     ];
 }
 
@@ -516,14 +519,15 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 }
 
                 echo '<td class="' . $cls . $is_today . '">';
+                $status_txt = att_status_label($status) . ($info['short_lv'] ? ' (Short Leave approved)' : '');
                 echo $can_edit
                     ? '<a class="cal-cell js-day" href="' . $link . '"'
                         . ' data-date="' . h($d) . '"'
                         . ' data-label="' . h(date('D, d M Y', strtotime($d))) . '"'
                         . ' data-in="' . h(att_normalize_time($rec['in_time'] ?? '') ?? '') . '"'
                         . ' data-out="' . h(att_normalize_time($rec['out_time'] ?? '') ?? '') . '"'
-                        . ' data-status="' . h(att_status_label($status)) . '"'
-                        . ' title="' . h(att_status_label($status)) . ' — click to manage">'
+                        . ' data-status="' . h($status_txt) . '"'
+                        . ' title="' . h($status_txt) . ' — click to manage">'
                     : '<span class="cal-cell">';
                 echo '<span class="cal-day">' . (int)date('j', strtotime($d)) . '</span>';
                 if ($rec && !empty($rec['in_time'])) {
@@ -536,6 +540,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                     elseif ($status === 'early_out') echo '<span class="cal-tag text-warning">Early</span>';
                     elseif ($status === 'short_hours') echo '<span class="cal-tag text-warning">Short</span>';
                     elseif ($status === 'incomplete') echo '<span class="cal-tag text-info">No out</span>';
+                    elseif ($info['short_lv']) echo '<span class="cal-tag text-primary">Short Leave</span>';
                 } elseif ($tag !== '') {
                     echo '<div class="cal-io">' . $tag . '</div>';
                 }
@@ -585,6 +590,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                             echo $info['holiday']
                                 ? '<span class="badge bg-secondary">Holiday: ' . h($info['holiday']) . '</span>'
                                 : att_status_badge($info['status']);
+                            if ($info['short_lv']) echo ' <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Short Leave</span>';
                         ?></td>
                         <?php if ($can_edit): ?>
                         <td class="text-end pe-3 no-print">
