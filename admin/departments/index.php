@@ -8,6 +8,10 @@ $page_title = 'Departments';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action']) && $_POST['_action'] === 'toggle') {
     csrf_check();
     $tid = (int)($_POST['id'] ?? 0);
+    if (!can_access_dept($tid)) {
+        flash_set('error', 'You do not have permission to modify this department.');
+        redirect(APP_URL . '/departments/index.php');
+    }
     db()->prepare('UPDATE dept_departments SET is_active = 1 - is_active WHERE id = ?')->execute([$tid]);
     flash_set('success', 'Department status updated.');
     redirect(APP_URL . '/departments/index.php');

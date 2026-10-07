@@ -279,10 +279,48 @@ function can_access(string $slug, string $permission = 'can_view'): bool {
 }
 
 /**
+ * Own department id(s) for FACULTY users (faculty_profiles / dept_faculty).
+ * Returns null  → current user is not a faculty member.
+ * Returns int[] → the faculty member's own department id(s).
+ */
+function faculty_own_dept_ids(): ?array {
+    $user = auth_user();
+    if (!$user) return [];
+
+    static $cached = '__unset__';
+    if ($cached !== '__unset__') return $cached;
+
+    $uid    = (int)$user['id'];
+    $own    = [];
+    $is_fac = false;
+    try {
+        $st = db()->prepare('SELECT dept_id FROM faculty_profiles WHERE user_id = ?');
+        $st->execute([$uid]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) {
+            $is_fac = true;
+            if ($d !== null) $own[] = (int)$d;
+        }
+    } catch (Throwable $e) {}
+    try {
+        $st = db()->prepare('SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_active = 1');
+        $st->execute([$uid]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) {
+            $is_fac = true;
+            if ($d !== null) $own[] = (int)$d;
+        }
+    } catch (Throwable $e) {}
+
+    $cached = $is_fac ? array_values(array_unique($own)) : null;
+    return $cached;
+}
+
+/**
  * Check whether the current user can access a specific department.
  * Super admins bypass all checks.
  * User-level dept scope overrides group-level scope.
- * No scope rows = unrestricted (access all departments).
+ * No scope rows = unrestricted (access all departments), EXCEPT for
+ * faculty members (faculty_profiles / dept_faculty) who are always
+ * limited to their own department(s).
  */
 function can_access_dept(int $dept_id): bool {
     if (is_super_admin()) return true;
@@ -326,8 +364,13 @@ function can_access_dept(int $dept_id): bool {
         }
     }
 
-    // No group scope rows = unrestricted (all departments)
-    if (empty($group_dept_cache)) return true;
+    // No group scope rows: faculty members fall back to their own dept(s);
+    // other staff without any explicit scope stay unrestricted.
+    if (empty($group_dept_cache)) {
+        $fac = faculty_own_dept_ids();
+        if ($fac === null) return true;
+        return in_array($dept_id, $fac, true);
+    }
 
     foreach ($group_dept_cache as $d) {
         if ($d === null || $d === '') return true;  // NULL = all depts
@@ -351,6 +394,7 @@ function require_access(string $slug, string $permission = 'can_view'): void {
  * Return the department scope for the current user.
  * Returns null  → unrestricted (all departments allowed).
  * Returns int[] → only those specific dept_ids are allowed.
+ * Faculty members without an explicit scope default to their own dept(s).
  */
 function get_dept_scope(): ?array {
     if (is_super_admin()) return null;
@@ -373,14 +417,20 @@ function get_dept_scope(): ?array {
 
     // Group-level scope
     $group_ids = $user['group_ids'];
-    if (empty($group_ids)) { $cached = null; return null; }
+    $rows = [];
+    if (!empty($group_ids)) {
+        $placeholders = implode(',', array_fill(0, count($group_ids), '?'));
+        $stmt = db()->prepare("SELECT dept_id FROM group_dept_scope WHERE group_id IN ($placeholders)");
+        $stmt->execute($group_ids);
+        $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
 
-    $placeholders = implode(',', array_fill(0, count($group_ids), '?'));
-    $stmt = db()->prepare("SELECT dept_id FROM group_dept_scope WHERE group_id IN ($placeholders)");
-    $stmt->execute($group_ids);
-    $rows = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
-    if (empty($rows)) { $cached = null; return null; }
+    if (empty($rows)) {
+        // No explicit scope: faculty members fall back to their own dept(s);
+        // other staff stay unrestricted.
+        $cached = faculty_own_dept_ids();
+        return $cached;
+    }
     if (in_array(null, $rows, true)) { $cached = null; return null; }
     $cached = array_map('intval', array_unique($rows));
     return $cached;
