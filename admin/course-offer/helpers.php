@@ -621,7 +621,10 @@ function co_batch_students_filtered(int $batch_id, array $filters = [], int $pag
         $params[] = $shift;
     }
 
-    $whereSQL = $where ? implode(' AND ', $where) : '1=1';
+    // Only active students may be enrolled; hide inactive/graduated/dropped ones.
+    $where[] = "s.status = 'Active'";
+
+    $whereSQL = implode(' AND ', $where);
 
     $countSt = db()->prepare("SELECT COUNT(*) FROM students s WHERE $whereSQL");
     $countSt->execute($params);
@@ -697,7 +700,7 @@ function co_registrations_by_subject(int $offer_id): array
            JOIN students           s   ON s.id  = r.student_id
            LEFT JOIN dept_departments d ON d.id = s.dept_id
            LEFT JOIN student_batches  b ON b.id = s.batch_id
-          WHERE cos.offer_id = ?
+          WHERE cos.offer_id = ? AND s.status = 'Active'
           ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC"
     );
     $st->execute([$offer_id]);

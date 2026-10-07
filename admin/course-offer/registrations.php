@@ -307,7 +307,8 @@ try {
         "SELECT r.offer_subject_id, r.student_id
            FROM co_registrations r
            JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
-          WHERE cos.offer_id = ? AND r.status = 'pending'"
+           JOIN students          s   ON s.id   = r.student_id
+          WHERE cos.offer_id = ? AND r.status = 'pending' AND s.status = 'Active'"
     );
     $pst->execute([$offer_id]);
     foreach ($pst->fetchAll() as $pr) {
