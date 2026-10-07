@@ -19,6 +19,9 @@ require_once __DIR__ . '/helpers.php';
 $page_title = 'Unscheduled Courses';
 $db = db();
 
+// Department scope: faculty users only see their own department's data
+$ac_scope = ac_dept_scope();
+
 // Optional schema column (course rows are linked to offer subjects when present)
 $has_subject_col = false;
 try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
@@ -64,7 +67,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'set_s
     $slot = acu_slot_label($start, $end);
 
     if ($cc_id > 0) {
-        // Update the existing row on the card
+        // Update the existing row on the card (department scope enforced)
+        $cd = $db->prepare(
+            'SELECT a.dept_id FROM ac_admit_card_courses cc
+               JOIN ac_admit_cards a ON a.id = cc.admit_card_id
+              WHERE cc.id = ?'
+        );
+        $cd->execute([$cc_id]);
+        $cc_dept = $cd->fetchColumn();
+        if ($cc_dept === false || !ac_can_access_card_dept((int)$cc_dept)) {
+            flash_set('danger', 'You do not have access to this admit card\'s department.');
+            redirect($ret);
+        }
         $db->prepare('UPDATE ac_admit_card_courses SET exam_date = ?, time_slot = ? WHERE id = ?')
            ->execute([$date, $slot !== '' ? $slot : null, $cc_id]);
         flash_set('success', 'Exam date/time saved on the admit card.');
@@ -81,8 +95,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'set_s
         flash_set('danger', 'Target admit card no longer exists.');
         redirect($ret);
     }
+    if (!ac_can_access_card_dept((int)$card['dept_id'])) {
+        flash_set('danger', 'You do not have access to this admit card\'s department.');
+        redirect($ret);
+    }
     $st = $db->prepare(
-        'SELECT cos.id, c.course_code, c.course_name, o.section, o.shift
+        'SELECT cos.id, c.course_code, c.course_name, o.section, o.shift, o.dept_id
            FROM co_offer_subjects cos
            JOIN course_curriculum c ON c.id = cos.curriculum_id
            JOIN co_offers o ON o.id = cos.offer_id
@@ -92,6 +110,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'set_s
     $subj = $st->fetch();
     if (!$subj) {
         flash_set('danger', 'Course offer subject not found.');
+        redirect($ret);
+    }
+    if (!ac_can_access_card_dept((int)$subj['dept_id'])) {
+        flash_set('danger', 'You do not have access to this course\'s department.');
         redirect($ret);
     }
     $so = $db->prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 FROM ac_admit_card_courses WHERE admit_card_id = ?');
@@ -127,8 +149,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'set_s
 $f_sem   = trim($_GET['offer_semester'] ?? '');
 $f_dept  = (int)($_GET['dept_id'] ?? 0);
 $f_batch = (int)($_GET['batch_id'] ?? 0);
+if ($f_dept > 0 && !ac_can_access_card_dept($f_dept)) $f_dept = 0;
 
-$filter_depts   = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+if ($ac_scope !== null) {
+    if (empty($ac_scope)) {
+        $filter_depts = [];
+    } else {
+        $dph = implode(',', array_fill(0, count($ac_scope), '?'));
+        $fd  = $db->prepare("SELECT id, name FROM dept_departments WHERE is_active = 1 AND id IN ($dph) ORDER BY name ASC");
+        $fd->execute($ac_scope);
+        $filter_depts = $fd->fetchAll();
+    }
+} else {
+    $filter_depts = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+}
 $filter_batches = $db->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")->fetchAll();
 $filter_sems    = $db->query("SELECT DISTINCT semester FROM co_offers WHERE status = 'active' AND semester IS NOT NULL AND semester <> '' ORDER BY semester ASC")->fetchAll(PDO::FETCH_COLUMN);
 
@@ -139,6 +173,14 @@ $params = [];
 if ($f_sem   !== '') { $where[] = 'o.semester = ?'; $params[] = $f_sem; }
 if ($f_dept  > 0)    { $where[] = 'o.dept_id = ?';  $params[] = $f_dept; }
 if ($f_batch > 0)    { $where[] = 'o.batch_id = ?'; $params[] = $f_batch; }
+if ($ac_scope !== null) {
+    if (empty($ac_scope)) {
+        $where[] = '1 = 0';
+    } else {
+        $where[]  = 'o.dept_id IN (' . implode(',', array_fill(0, count($ac_scope), '?')) . ')';
+        $params   = array_merge($params, $ac_scope);
+    }
+}
 $whereSQL = implode(' AND ', $where);
 
 $st = $db->prepare(
@@ -210,10 +252,25 @@ if ($subjects && $has_subject_col) {
 
 // All active cards + their (code-keyed) rows: fallback matching for manual /
 // bulk-imported cards without subject links, and target cards for inserts.
-$active_cards = $db->query(
-    'SELECT a.id, a.exam_name, a.semester, a.dept_id, a.program_id, a.batch_id, a.created_at
-       FROM ac_admit_cards a WHERE a.is_active = 1 ORDER BY a.created_at DESC, a.id DESC'
-)->fetchAll();
+if ($ac_scope !== null) {
+    if (empty($ac_scope)) {
+        $active_cards = [];
+    } else {
+        $dph = implode(',', array_fill(0, count($ac_scope), '?'));
+        $acq = $db->prepare(
+            "SELECT a.id, a.exam_name, a.semester, a.dept_id, a.program_id, a.batch_id, a.created_at
+               FROM ac_admit_cards a WHERE a.is_active = 1 AND a.dept_id IN ($dph)
+              ORDER BY a.created_at DESC, a.id DESC"
+        );
+        $acq->execute($ac_scope);
+        $active_cards = $acq->fetchAll();
+    }
+} else {
+    $active_cards = $db->query(
+        'SELECT a.id, a.exam_name, a.semester, a.dept_id, a.program_id, a.batch_id, a.created_at
+           FROM ac_admit_cards a WHERE a.is_active = 1 ORDER BY a.created_at DESC, a.id DESC'
+    )->fetchAll();
+}
 $card_rows_by_code = [];   // card_id => code_key => row
 if ($active_cards) {
     $cids = array_map(static fn($c) => (int)$c['id'], $active_cards);
