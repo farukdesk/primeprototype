@@ -104,6 +104,18 @@ function acg_slot_label(string $start, string $end): string
     return $fmt($start) . ($end !== '' ? ' - ' . $fmt($end) : '');
 }
 
+/** "1:00 PM - 3:00 PM" → ["13:00", "15:00"] (24-hour, '' when missing). */
+function acg_parse_slot(string $slot): array
+{
+    $parts = array_map('trim', explode('-', $slot, 2));
+    $to24  = static function (string $t): string {
+        if ($t === '') return '';
+        $ts = strtotime($t);
+        return $ts === false ? '' : date('H:i', $ts);
+    };
+    return [$to24($parts[0] ?? ''), $to24($parts[1] ?? '')];
+}
+
 /**
  * Load the registered courses of every matching ACTIVE course offer,
  * grouped BATCH WISE. Every batch bucket contains one class group per
@@ -269,6 +281,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nx = acg_code_key($exam_name);
         foreach ($db->query('SELECT id, exam_name, semester FROM ac_admit_cards WHERE is_active = 1')->fetchAll() as $c) {
             if (acg_code_key((string)$c['exam_name']) === $nx) $dup_cards[] = $c;
+        }
+    }
+
+    // Pre-fill the date/time inputs with the schedule of those existing
+    // ACTIVE cards, so the already created admit card schedule is shown
+    // instead of empty fields (posted values always win).
+    if ($dup_cards && !$was_generate && $batches !== null) {
+        // Course-code → offer_subject_ids of the loaded batches, used for
+        // legacy card rows without an offer_subject_id link.
+        $code_osids = [];
+        foreach ($batches as $b) {
+            foreach ($b['groups'] as $g) {
+                foreach ($g['courses'] as $c) {
+                    $code_osids[acg_code_key($c['course_code'])][] = (int)$c['offer_subject_id'];
+                }
+            }
+        }
+        $dup_ids = array_map(static fn($c) => (int)$c['id'], $dup_cards);
+        $cph     = implode(',', array_fill(0, count($dup_ids), '?'));
+        $cols    = 'course_code, exam_date, time_slot' . ($has_subject_col ? ', offer_subject_id' : '');
+        $st      = $db->prepare("SELECT $cols FROM ac_admit_card_courses WHERE admit_card_id IN ($cph) ORDER BY admit_card_id ASC, sort_order ASC");
+        $st->execute($dup_ids);
+        foreach ($st->fetchAll() as $r) {
+            $osids = ($has_subject_col && (int)($r['offer_subject_id'] ?? 0) > 0)
+                ? [(int)$r['offer_subject_id']]
+                : ($code_osids[acg_code_key((string)$r['course_code'])] ?? []);
+            if (!$osids) continue;
+            $date = (string)($r['exam_date'] ?? '');
+            [$slot_start, $slot_end] = acg_parse_slot((string)($r['time_slot'] ?? ''));
+            foreach ($osids as $osid) {
+                if ($date !== '' && trim((string)($in_dates[$osid] ?? '')) === '')        $in_dates[$osid]  = $date;
+                if ($slot_start !== '' && trim((string)($in_starts[$osid] ?? '')) === '') $in_starts[$osid] = $slot_start;
+                if ($slot_end !== '' && trim((string)($in_ends[$osid] ?? '')) === '')     $in_ends[$osid]   = $slot_end;
+            }
         }
     }
 
@@ -542,6 +588,7 @@ require_once __DIR__ . '/../includes/header.php';
     <?php if ($dup_cards): ?>
     <div class="alert alert-danger small">
         <strong><?= count($dup_cards) ?> ACTIVE admit card(s) with this exam name already exist.</strong>
+        Their saved exam dates/times are pre-filled in the course rows below.
         Student PDFs merge the courses of every active card with the same exam name, so generating
         again now would mix the old dates/times into the new cards. Deactivate or delete these first:
         <ul class="mb-0 ps-3">
