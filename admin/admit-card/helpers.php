@@ -821,7 +821,7 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
     // Course rows
     $course_rows = '';
     foreach ($courses as $c) {
-        $date_str = $c['exam_date'] ? date('d-m-Y', strtotime($c['exam_date'])) : '—';
+        $date_str = $c['exam_date'] ? date('d/m/Y', strtotime($c['exam_date'])) : '—';
         $course_rows .= '<tr>'
             . '<td style="border:1px solid #000;padding:6px;">' . h($c['course_code'])  . '</td>'
             . '<td style="border:1px solid #000;padding:6px;text-align:left;">' . h($c['course_title']) . '</td>'

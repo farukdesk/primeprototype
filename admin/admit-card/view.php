@@ -297,7 +297,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <tr>
                             <td class="px-3"><?= h($c['course_code']) ?></td>
                             <td><?= h($c['course_title']) ?></td>
-                            <td><?= $c['exam_date'] ? date('d-m-Y', strtotime($c['exam_date'])) : '—' ?></td>
+                            <td><?= $c['exam_date'] ? date('d/m/Y', strtotime($c['exam_date'])) : '—' ?></td>
                             <td><?= h($c['time_slot'] ?? '—') ?></td>
                         </tr>
                         <?php endforeach; ?>
