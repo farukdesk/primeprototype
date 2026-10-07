@@ -146,9 +146,7 @@ function att_ot_day_breakdown(?array $record, array $cfg, bool $uncapped, bool $
 /** Resolve weekends using effective-dated staff schedules and manual day marks. */
 function att_ot_is_weekend(int $user_id, string $date, array $sched): bool
 {
-    $override = att_day_override($user_id, $date);
-    if ($override !== null) return $override === 'weekend';
-    return att_is_weekly_off_for($sched, $date);
+    return att_day_override($user_id, $date) === 'weekend' || att_is_weekly_off_for($sched, $date);
 }
 
 /**
