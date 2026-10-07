@@ -12,6 +12,10 @@ if (!$card) {
     flash_set('error', 'Admit card not found.');
     redirect(APP_URL . '/admit-card/index.php');
 }
+if (!ac_can_access_card_dept((int)$card['dept_id'])) {
+    flash_set('error', 'You can only delete admit cards of your own department.');
+    redirect(APP_URL . '/admit-card/index.php');
+}
 
 db()->prepare('DELETE FROM ac_admit_cards WHERE id = ?')->execute([$id]);
 
