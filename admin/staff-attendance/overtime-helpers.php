@@ -11,8 +11,8 @@
  *   • Daily overtime is capped (default 3 hours). Designations marked
  *     "actual hours" (e.g. Driver) are exempt from the cap and are paid for
  *     the real time worked after the OT start time.
- *   • Weekend / holiday work is NOT overtime by itself: only time after the
- *     OT start time counts, under exactly the same rules as normal days.
+ *   • Weekend overtime starts after eight hours from clock-in, without the
+ *     weekday grace window. Holidays on working days retain the weekday rule.
  *   • Only staff whose designation is enabled in Overtime Settings are
  *     eligible; each designation carries its own hourly rate (Tk).
  *
@@ -24,6 +24,7 @@ require_once __DIR__ . '/helpers.php';
 const ATT_OT_START         = '17:00'; // overtime counted from this time
 const ATT_OT_THRESHOLD_MIN = 30;      // leaving within this window → no OT
 const ATT_OT_CAP_MIN       = 180;     // daily maximum OT (3 hours)
+const ATT_OT_WEEKEND_WORK_MIN = 480;  // eight worked hours before weekend OT
 
 /** Designations eligible for overtime by default (until configured). */
 const ATT_OT_DEFAULT_DESIGNATIONS = [
@@ -89,31 +90,65 @@ function att_ot_save_config(array $cfg): void
 /**
  * Overtime minutes for a single day.
  *
- * No in/out time → 0. Out at or before OT start + grace window (5:30 PM by
- * default) → 0. Otherwise OT runs from the OT start time (or the clock-in
- * time when the staff member arrived after it, e.g. an evening call-out) to
- * the clock-out, capped at the daily maximum unless $uncapped (Driver rule:
- * paid for actual hours worked).
+ * Uses the same breakdown shown in the calendar. Weekend days use eight
+ * worked hours instead of the configured start time and weekday grace window.
  */
-function att_ot_day_minutes(?array $record, array $cfg, bool $uncapped): int
+function att_ot_day_minutes(?array $record, array $cfg, bool $uncapped, bool $weekend = false): int
 {
-    if (empty($record['in_time']) || empty($record['out_time'])) return 0;
-    $start = (int)att_time_to_minutes($cfg['start_time']);
-    $in    = att_time_to_minutes($record['in_time']);
-    $out   = att_time_to_minutes($record['out_time']);
-    if ($in === null || $out === null || $out <= $in) return 0;
+    return att_ot_day_breakdown($record, $cfg, $uncapped, $weekend)['ot_minutes'];
+}
 
-    // Left within the grace window (e.g. by 5:30 PM) → no overtime today.
-    if ($out <= $start + (int)$cfg['threshold_minutes']) return 0;
-
-    // Past the window → count from the OT start time (5:00 PM), or from the
-    // actual clock-in when they arrived after it.
-    $ot = $out - max($start, $in);
-    if ($ot <= 0) return 0;
+/** Calculation details for every day, including incomplete and zero-OT days. */
+function att_ot_day_breakdown(?array $record, array $cfg, bool $uncapped, bool $weekend = false): array
+{
+    $in    = att_time_to_minutes($record['in_time'] ?? null);
+    $out   = att_time_to_minutes($record['out_time'] ?? null);
+    $start = $weekend
+        ? ($in !== null ? $in + ATT_OT_WEEKEND_WORK_MIN : null)
+        : max((int)att_time_to_minutes($cfg['start_time']), $in ?? 0);
+    $day = [
+        'in_time'        => att_display_time($record['in_time'] ?? null),
+        'out_time'       => att_display_time($record['out_time'] ?? null),
+        'weekend'        => $weekend,
+        'start_minutes'  => $start,
+        'worked_minutes' => att_worked_minutes($record['in_time'] ?? null, $record['out_time'] ?? null),
+        'raw_minutes'    => 0,
+        'ot_minutes'     => 0,
+        'reason'         => '',
+    ];
+    if ($in === null || $out === null) {
+        $day['reason'] = $in === null && $out === null ? 'No clock-in/out recorded.' : 'Missing clock-in or clock-out; no overtime.';
+        return $day;
+    }
+    if ($out <= $in) {
+        $day['reason'] = 'Clock-out must be later than clock-in; no overtime.';
+        return $day;
+    }
+    if ($weekend && $out <= $start) {
+        $day['reason'] = 'Eight worked hours not exceeded; no overtime.';
+        return $day;
+    }
+    if (!$weekend && $out <= (int)att_time_to_minutes($cfg['start_time']) + (int)$cfg['threshold_minutes']) {
+        $day['reason'] = 'Clock-out is within the weekday no-overtime window.';
+        return $day;
+    }
+    $ot = max(0, $out - $start);
+    $day['raw_minutes'] = $ot;
     if (!$uncapped && (int)$cfg['cap_minutes'] > 0) {
         $ot = min($ot, (int)$cfg['cap_minutes']);
     }
-    return $ot;
+    $day['ot_minutes'] = $ot;
+    $day['reason'] = $weekend ? 'Time beyond eight worked hours.' : 'Time after the weekday OT start (or later clock-in).';
+    if ($ot < $day['raw_minutes']) $day['reason'] .= ' Daily cap applied.';
+    return $day;
+}
+
+/** Resolve weekends using effective-dated staff schedules and manual day marks. */
+function att_ot_is_weekend(int $user_id, string $date, array $sched): bool
+{
+    $override = att_day_override($user_id, $date);
+    if ($override !== null) return $override === 'weekend';
+    return att_is_weekly_off_for($sched, $date);
 }
 
 /**
@@ -164,10 +199,12 @@ function att_ot_report(string $from, string $to, array $cfg, string $desig_filte
     foreach ($staff as $s) {
         $uid   = (int)$s['id'];
         $d_cfg = $cfg['designations'][$s['ot_key']];
+        $sched = att_effective_schedule($uid);
         $days  = [];
         $total = 0;
         foreach ($dates as $d) {
-            $mins = att_ot_day_minutes($records[$uid . '|' . $d] ?? null, $cfg, (bool)$d_cfg['uncapped']);
+            $mins = att_ot_day_minutes($records[$uid . '|' . $d] ?? null, $cfg, (bool)$d_cfg['uncapped'],
+                att_ot_is_weekend($uid, $d, $sched));
             if ($mins > 0) {
                 $days[$d] = $mins;
                 $total   += $mins;

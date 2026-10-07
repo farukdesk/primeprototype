@@ -77,14 +77,40 @@ $pdf_url = APP_URL . '/staff-attendance/overtime-pdf.php?' . http_build_query([
 ]);
 
 $settings_rows = att_ot_settings_rows($cfg);
+$calendar_staff = att_ot_staff($cfg, $desig);
+$calendar_user = null;
+$requested_user = (int)($_GET['staff'] ?? 0);
+foreach ($calendar_staff as $s) {
+    if ((int)$s['id'] === $requested_user) $calendar_user = $s;
+}
+if ($calendar_user === null && !empty($calendar_staff)) $calendar_user = $calendar_staff[0];
+$calendar_days = [];
+if ($calendar_user !== null) {
+    $uid = (int)$calendar_user['id'];
+    $records = att_records_map([$uid], $from, $to);
+    $sched = att_effective_schedule($uid);
+    $uncapped = (bool)$cfg['designations'][$calendar_user['ot_key']]['uncapped'];
+    for ($d = strtotime($from); $d <= strtotime($to); $d = strtotime('+1 day', $d)) {
+        $date = date('Y-m-d', $d);
+        $calendar_days[$date] = att_ot_day_breakdown($records[$uid . '|' . $date] ?? null, $cfg, $uncapped,
+            att_ot_is_weekend($uid, $date, $sched));
+    }
+}
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
+<style>
+    .ot-calendar { table-layout:fixed; min-width:980px; }
+    .ot-calendar td { vertical-align:top; height:170px; }
+    .ot-calendar .ot-day { font-size:.75rem; }
+    .ot-calendar .ot-empty { background:#f8f9fa; }
+</style>
+
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h1 class="h3 mb-0"><i class="fas fa-business-time me-2 text-primary"></i>Staff Overtime</h1>
-        <p class="text-muted mb-0 small">Overtime after <?= h(date('g:i A', strtotime($cfg['start_time']))) ?> for eligible designations, with per-designation hourly rates.</p>
+        <p class="text-muted mb-0 small">Weekday overtime after <?= h(date('g:i A', strtotime($cfg['start_time']))) ?>; weekend overtime after eight worked hours, for eligible designations.</p>
     </div>
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
@@ -102,11 +128,12 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="card-body py-3">
         <h6 class="fw-semibold mb-2"><i class="fas fa-scale-balanced me-2 text-primary"></i>Overtime Rules</h6>
         <ul class="small mb-0 ps-3">
-            <li>Overtime counts only <strong>after <?= h(date('g:i A', strtotime($cfg['start_time']))) ?></strong>.</li>
-            <li>Leaving within the first <strong><?= (int)$cfg['threshold_minutes'] ?> minutes</strong> (by <?= h(date('g:i A', strtotime($cfg['start_time']) + $cfg['threshold_minutes'] * 60)) ?>) earns <strong>no overtime</strong> for that day.</li>
-            <li>Leaving later counts overtime <strong>from <?= h(date('g:i A', strtotime($cfg['start_time']))) ?></strong>, not from the end of the grace window.</li>
-            <li>Daily maximum: <strong><?= h(att_format_hours((int)$cfg['cap_minutes'])) ?></strong> — except designations marked <em>actual hours</em> (e.g. Driver), which are paid for the real time worked.</li>
-            <li>Weekend / holiday work is <strong>not</strong> overtime by itself; only time after <?= h(date('g:i A', strtotime($cfg['start_time']))) ?> counts, under the same rules.</li>
+            <li>On working days, overtime counts <strong>after <?= h(date('g:i A', strtotime($cfg['start_time']))) ?></strong>, or clock-in if later.</li>
+            <li>On working days, leaving within the first <strong><?= (int)$cfg['threshold_minutes'] ?> minutes</strong> (by <?= h(date('g:i A', strtotime($cfg['start_time']) + $cfg['threshold_minutes'] * 60)) ?>) earns <strong>no overtime</strong>.</li>
+            <li>Leaving later counts overtime from the start time (or later clock-in), <strong>not</strong> from the end of the grace window.</li>
+            <li>On weekends (the staff member’s effective weekly-off day or a manually marked weekend), overtime starts <strong>eight hours after clock-in</strong>. Exactly eight hours earns no overtime; every minute beyond eight hours counts, without the weekday grace window.</li>
+            <li>Daily maximum on both day types: <strong><?= (int)$cfg['cap_minutes'] > 0 ? h(att_format_hours((int)$cfg['cap_minutes'])) : 'No cap' ?></strong> — except designations marked <em>actual hours</em> (e.g. Driver). A maximum of 0 means no cap.</li>
+            <li>Worked hours are the recorded clock-in to clock-out interval. Missing or invalid clock times earn no overtime. Holidays on working days retain the weekday rule.</li>
         </ul>
     </div>
 </div>
@@ -120,19 +147,19 @@ require_once __DIR__ . '/../includes/header.php';
                 <?= csrf_field() ?>
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
-                        <label class="form-label fw-semibold small mb-1">Overtime Starts After</label>
+                        <label class="form-label fw-semibold small mb-1">Weekday Overtime Starts After</label>
                         <input type="time" name="ot_start_time" class="form-control" value="<?= h($cfg['start_time']) ?>" required>
-                        <div class="form-text">Only time after this counts as overtime (default 5:00 PM).</div>
+                        <div class="form-text">Working days only (default 5:00 PM). Weekends use clock-in + 8 hours.</div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold small mb-1">No-Overtime Grace Window (minutes)</label>
                         <input type="number" name="ot_threshold" class="form-control" min="0" max="240" value="<?= (int)$cfg['threshold_minutes'] ?>">
-                        <div class="form-text">Leaving within this window after the start time earns no overtime.</div>
+                        <div class="form-text">Working days only; not applied to weekend overtime.</div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold small mb-1">Daily Maximum (minutes)</label>
                         <input type="number" name="ot_cap" class="form-control" min="0" max="720" value="<?= (int)$cfg['cap_minutes'] ?>">
-                        <div class="form-text">180 = 3 hours. Ignored for designations marked “actual hours”.</div>
+                        <div class="form-text">180 = 3 hours; 0 = no cap. Applies on weekdays and weekends; ignored for “actual hours”.</div>
                     </div>
                 </div>
 
@@ -205,11 +232,69 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="col-md-3">
+                <label for="ot-staff" class="form-label fw-semibold small mb-1">Calendar Staff</label>
+                <select name="staff" id="ot-staff" class="form-select">
+                    <?php if (empty($calendar_staff)): ?><option value="">No eligible staff</option><?php endif; ?>
+                    <?php foreach ($calendar_staff as $s): ?>
+                    <option value="<?= (int)$s['id'] ?>" <?= (int)$s['id'] === (int)($calendar_user['id'] ?? 0) ? 'selected' : '' ?>><?= h($s['full_name']) ?><?= !empty($s['employee_id']) ? ' — ' . h($s['employee_id']) : '' ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="col-md-2 d-flex gap-2">
                 <button class="btn btn-primary w-100"><i class="fas fa-filter me-1"></i> Apply</button>
                 <a href="<?= APP_URL ?>/staff-attendance/overtime.php" class="btn btn-secondary"><i class="fas fa-times"></i></a>
             </div>
         </form>
+    </div>
+</div>
+
+<div class="card mb-4" style="border-radius:12px;">
+    <div class="card-header py-3 px-4">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-calendar-alt me-2 text-muted"></i>Overtime Calendar<?= $calendar_user !== null ? ' — ' . h($calendar_user['full_name']) : '' ?></h6>
+        <div class="small text-muted mt-1">All days in the selected range, including days with no overtime. Times use the attendance system’s local timezone. The staff selection affects only this calendar, not the report or PDF.</div>
+    </div>
+    <div class="card-body">
+        <?php if ($calendar_user === null): ?>
+        <p class="text-muted mb-0">No eligible staff for this designation. Check Overtime Settings.</p>
+        <?php else: ?>
+        <p class="small text-muted">Green cells earned overtime; shaded cells are outside the selected date range. “Raw OT” is before the daily cap; “Payable OT” is after it.</p>
+        <?php for ($month = strtotime(date('Y-m-01', strtotime($from))); $month <= strtotime($to); $month = strtotime('+1 month', $month)):
+            $month_days = (int)date('t', $month);
+            $offset = (int)date('N', $month) - 1;
+            $cells = (int)(ceil(($offset + $month_days) / 7) * 7);
+        ?>
+        <h6 class="fw-semibold"><?= h(date('F Y', $month)) ?></h6>
+        <div class="table-responsive mb-3">
+            <table class="table table-bordered ot-calendar mb-0">
+                <thead class="table-light"><tr><?php foreach (['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as $weekday): ?><th scope="col"><?= $weekday ?></th><?php endforeach; ?></tr></thead>
+                <tbody>
+                <?php for ($cell = 0; $cell < $cells; $cell++):
+                    if ($cell % 7 === 0) echo '<tr>';
+                    $number = $cell - $offset + 1;
+                    $date = date('Y-m-', $month) . sprintf('%02d', $number);
+                    $day = $number > 0 && $number <= $month_days ? ($calendar_days[$date] ?? null) : null;
+                ?>
+                    <td class="<?= $day === null ? 'ot-empty' : ($day['ot_minutes'] > 0 ? 'table-success' : '') ?>">
+                        <?php if ($number > 0 && $number <= $month_days): ?>
+                        <div class="fw-semibold"><?= $number ?></div>
+                        <?php if ($day !== null): ?>
+                        <div class="ot-day">
+                            <div class="fw-semibold"><?= $day['weekend'] ? 'Weekend · 8-hour rule' : 'Working day · fixed-time rule' ?></div>
+                            <div>In: <?= h($day['in_time']) ?> · Out: <?= h($day['out_time']) ?></div>
+                            <div>Worked: <?= h($day['worked_minutes'] > 0 ? att_format_hours($day['worked_minutes']) : '0m') ?></div>
+                            <div>OT starts: <strong><?= $day['start_minutes'] !== null ? h(date('H:i', strtotime($date . ' 00:00') + $day['start_minutes'] * 60)) . ($day['start_minutes'] >= 1440 ? ' (next day)' : '') : 'Needs clock-in' ?></strong></div>
+                            <div>Raw OT: <?= h($day['raw_minutes'] > 0 ? att_format_hours($day['raw_minutes']) : '0m') ?></div>
+                            <div class="fw-semibold">Payable OT: <?= h($day['ot_minutes'] > 0 ? att_format_hours($day['ot_minutes']) : '0m') ?></div>
+                            <div class="text-muted mt-1"><?= h($day['reason']) ?></div>
+                        </div>
+                        <?php endif; endif; ?>
+                    </td>
+                <?php if ($cell % 7 === 6) echo '</tr>'; endfor; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endfor; endif; ?>
     </div>
 </div>
 

@@ -129,11 +129,12 @@ ob_start();
 
     <div class="rules">
         <strong>Overtime rules:</strong>
-        counted only after <strong><?= h($ot_start) ?></strong>;
-        leaving within the first <?= (int)$cfg['threshold_minutes'] ?> minutes (by <?= h($grace_end) ?>) earns no overtime;
-        leaving later counts overtime from <?= h($ot_start) ?>;
-        daily maximum <?= h(att_format_hours((int)$cfg['cap_minutes'])) ?> — designations marked <em>(actual hours)</em>, e.g. Driver, are paid for the real time worked without the cap;
-        weekend / holiday work is not overtime by itself — only time after <?= h($ot_start) ?> counts under the same rules.
+        on working days, counted after <strong><?= h($ot_start) ?></strong> (or later clock-in);
+        leaving within the first <?= (int)$cfg['threshold_minutes'] ?> minutes (by <?= h($grace_end) ?>) earns no overtime on working days;
+        leaving later counts overtime from <?= h($ot_start) ?> (or later clock-in), not the end of the grace window;
+        on weekends (effective weekly-off days or manually marked weekends), overtime starts <strong>eight hours after clock-in</strong>, with no weekday grace window;
+        daily maximum on both day types <?= (int)$cfg['cap_minutes'] > 0 ? h(att_format_hours((int)$cfg['cap_minutes'])) : 'no cap' ?> — designations marked <em>(actual hours)</em>, e.g. Driver, are paid for time beyond the applicable overtime start without the cap;
+        worked hours use the recorded clock-in/out interval; missing or invalid times earn no overtime. Holidays on working days retain the weekday rule.
     </div>
 
     <table class="sign">
