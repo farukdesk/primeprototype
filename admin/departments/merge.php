@@ -9,8 +9,9 @@ clear_old();
 // Pre-select source from query-string (coming from index page)
 $pre_source = (int)($_GET['id'] ?? 0);
 
-// Load all departments for the dropdowns
+// Load departments for the dropdowns (limited to the user's dept scope)
 $all_depts = db()->query('SELECT id, name, code FROM dept_departments ORDER BY name ASC')->fetchAll();
+$all_depts = array_values(array_filter($all_depts, fn($d) => can_access_dept((int)$d['id'])));
 
 // ── Handle POST ───────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -23,6 +24,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$target_id) $errors[] = 'Please select the destination department (target).';
     if ($source_id && $target_id && $source_id === $target_id) {
         $errors[] = 'Source and destination must be different departments.';
+    }
+    if ($source_id && !can_access_dept($source_id)) {
+        $errors[] = 'You do not have permission to access the source department.';
+    }
+    if ($target_id && !can_access_dept($target_id)) {
+        $errors[] = 'You do not have permission to access the destination department.';
     }
 
     $source = null;
