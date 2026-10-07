@@ -27,6 +27,9 @@ $errors     = [];
 $batches    = null;   // loaded batch-wise course data
 $dup_cards  = [];
 
+// Department scope: faculty users may only generate cards for their own department
+$ac_scope = ac_dept_scope();
+
 $exam_name   = trim((string)($_POST['exam_name'] ?? ''));
 $semester    = trim((string)($_POST['semester'] ?? ''));
 $is_active   = ($_SERVER['REQUEST_METHOD'] === 'POST') ? ((int)($_POST['is_active'] ?? 0) ? 1 : 0) : 1;
@@ -72,7 +75,14 @@ if ($exam_name !== '' && $exam_name_opts && !in_array($exam_name, $exam_name_opt
 }
 
 // Filter dropdown data
-$filter_depts   = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+if ($ac_scope !== null && !empty($ac_scope)) {
+    $dph = implode(',', array_fill(0, count($ac_scope), '?'));
+    $st  = $db->prepare("SELECT id, name FROM dept_departments WHERE is_active = 1 AND id IN ($dph) ORDER BY name ASC");
+    $st->execute($ac_scope);
+    $filter_depts = $st->fetchAll();
+} else {
+    $filter_depts = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+}
 $filter_batches = $db->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")->fetchAll();
 $filter_sems    = $db->query("SELECT DISTINCT semester FROM co_offers WHERE status = 'active' AND semester IS NOT NULL AND semester <> '' ORDER BY semester ASC")->fetchAll(PDO::FETCH_COLUMN);
 
@@ -105,7 +115,7 @@ function acg_slot_label(string $start, string $end): string
  *        students, courses => [[offer_subject_id, course_code,
  *        course_title, section, reg_count], …]], …]]
  */
-function acg_load_batches(string $offer_sem, int $dept_id, int $batch_id, array &$errors): array
+function acg_load_batches(string $offer_sem, int $dept_id, int $batch_id, array &$errors, ?array $dept_scope = null): array
 {
     $db     = db();
     $where  = ["o.status = 'active'"];
@@ -113,6 +123,14 @@ function acg_load_batches(string $offer_sem, int $dept_id, int $batch_id, array 
     if ($offer_sem !== '') { $where[] = 'o.semester = ?'; $params[] = $offer_sem; }
     if ($dept_id  > 0)     { $where[] = 'o.dept_id = ?';  $params[] = $dept_id; }
     if ($batch_id > 0)     { $where[] = 'o.batch_id = ?'; $params[] = $batch_id; }
+    if ($dept_scope !== null) {
+        if (empty($dept_scope)) {
+            $errors[] = 'Your account is not linked to any department, so no courses can be loaded.';
+            return [];
+        }
+        $where[]  = 'o.dept_id IN (' . implode(',', array_fill(0, count($dept_scope), '?')) . ')';
+        $params   = array_merge($params, $dept_scope);
+    }
     $whereSQL = implode(' AND ', $where);
 
     $st = $db->prepare(
@@ -235,9 +253,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($semester === '')  $errors[] = 'Semester is required.';
+    if ($f_dept_id > 0 && !ac_can_access_card_dept($f_dept_id)) {
+        $errors[] = 'You can only generate admit cards for your own department.';
+    }
 
     if (empty($errors)) {
-        $batches = acg_load_batches($f_offer_sem, $f_dept_id, $f_batch_id, $errors);
+        $batches = acg_load_batches($f_offer_sem, $f_dept_id, $f_batch_id, $errors, $ac_scope);
         if (!$batches) $batches = null;
     }
 
@@ -258,6 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($b['groups'] as $g) {
                 if (!in_array($g['hash'], $in_sel, true)) continue;
                 if ($g['no_program']) continue;
+                if (!ac_can_access_card_dept((int)$g['dept_id'])) continue;
                 $courses = [];
                 foreach ($g['courses'] as $c) {
                     $osid = (int)$c['offer_subject_id'];
@@ -477,6 +499,16 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle"><?= count($batches) ?> batch(es)</span>
         <span class="badge bg-light text-dark border"><?= $total_groups ?> class group(s)</span>
         <span class="badge bg-light text-dark border"><?= $total_courses ?> registered course(s)</span>
+        <?php $en_lc = mb_strtolower($exam_name); ?>
+        <?php if (preg_match('/\bmid\b|midterm|mid-term|mid term/', $en_lc)): ?>
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" title="Pick a start time and the end time is set automatically to the slot's end.">
+            <i class="fas fa-clock me-1"></i>Mid-term slots: 11:00 AM–12:30 PM · 3:00–4:30 PM · 7:00–8:30 PM (end time auto-set)
+        </span>
+        <?php elseif (strpos($en_lc, 'final') !== false): ?>
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" title="Pick a start time and the end time is set automatically 2 hours later.">
+            <i class="fas fa-clock me-1"></i>Final exam: 2-hour slot (end time auto-set, e.g. 11:00 AM → 1:00 PM)
+        </span>
+        <?php endif; ?>
         <span class="ms-auto small">
             <button type="button" class="btn btn-link btn-sm p-0" id="sel_all">Select all</button>
             <span class="text-muted">/</span>
@@ -638,6 +670,59 @@ require_once __DIR__ . '/../includes/header.php';
         var dated = false;
         document.querySelectorAll('.ac-date').forEach(function (i) { if (i.value) dated = true; });
         if (!dated) { e.preventDefault(); alert('Set an exam date for at least one course.'); }
+    });
+
+    // ── Auto end time ──────────────────────────────────────────────────
+    // Mid-term exams use three fixed 1.5-hour slots:
+    //   11:00 AM – 12:30 PM, 3:00 PM – 4:30 PM, 7:00 PM – 8:30 PM.
+    // A start time inside a slot snaps the end time to that slot's end
+    // (e.g. 11:30 AM → 12:30 PM); outside a slot, end = start + 1.5h.
+    // Final exams are 2-hour slots: end = start + 2h (11:00 AM → 1:00 PM).
+    var examName = <?= json_encode(mb_strtolower($exam_name)) ?>;
+    var isMid    = /\bmid\b|midterm|mid-term|mid term/.test(examName);
+    var isFinal  = !isMid && /final/.test(examName);
+    var MID_SLOTS = [
+        { s: 11 * 60,      e: 12 * 60 + 30 },  // 11:00 AM – 12:30 PM
+        { s: 15 * 60,      e: 16 * 60 + 30 },  //  3:00 PM –  4:30 PM
+        { s: 19 * 60,      e: 20 * 60 + 30 }   //  7:00 PM –  8:30 PM
+    ];
+
+    function toMin(t) {
+        var m = String(t || '').match(/^(\d{1,2}):(\d{2})$/);
+        return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
+    }
+    function toTime(min) {
+        min = ((min % 1440) + 1440) % 1440;
+        var h = Math.floor(min / 60), mm = min % 60;
+        return (h < 10 ? '0' : '') + h + ':' + (mm < 10 ? '0' : '') + mm;
+    }
+    function autoEndFor(startVal) {
+        var start = toMin(startVal);
+        if (start === null) return '';
+        if (isMid) {
+            for (var i = 0; i < MID_SLOTS.length; i++) {
+                if (start >= MID_SLOTS[i].s && start < MID_SLOTS[i].e) return toTime(MID_SLOTS[i].e);
+            }
+            return toTime(start + 90);   // outside the fixed slots: 1.5-hour exam
+        }
+        if (isFinal) return toTime(start + 120);  // final exams are 2-hour slots
+        return '';
+    }
+
+    document.addEventListener('change', function (ev) {
+        var el = ev.target;
+        if (!el.classList) return;
+        var end = null;
+        if (el.classList.contains('ac-start')) {
+            var tr = el.closest('tr');
+            end = tr && tr.querySelector('.ac-end');
+        } else if (el.classList.contains('qf-start')) {
+            var card = el.closest('[data-batch]');
+            end = card && card.querySelector('.qf-end');
+        }
+        if (!end) return;
+        var v = autoEndFor(el.value);
+        if (v) end.value = v;
     });
 
     // ── CSV schedule fill ──────────────────────────────────────────────

@@ -12,11 +12,23 @@ if (!$card) {
     flash_set('error', 'Admit card not found.');
     redirect(APP_URL . '/admit-card/index.php');
 }
+if (!ac_can_access_card_dept((int)$card['dept_id'])) {
+    flash_set('error', 'You can only edit admit cards of your own department.');
+    redirect(APP_URL . '/admit-card/index.php');
+}
 
 $page_title = 'Edit Admit Card – ' . $card['exam_name'];
 $db = db();
 
-$depts   = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+$ac_scope = ac_dept_scope();
+if ($ac_scope !== null && !empty($ac_scope)) {
+    $dph = implode(',', array_fill(0, count($ac_scope), '?'));
+    $st  = $db->prepare("SELECT id, name FROM dept_departments WHERE is_active = 1 AND id IN ($dph) ORDER BY name ASC");
+    $st->execute($ac_scope);
+    $depts = $st->fetchAll();
+} else {
+    $depts = $db->query("SELECT id, name FROM dept_departments WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+}
 $batches = $db->query("SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC")->fetchAll();
 
 $year = (int)date('Y');
@@ -58,6 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($semester === '')  $errors[] = 'Semester is required.';
     if ($dept_id <= 0)     $errors[] = 'Please select a department.';
+    if ($dept_id > 0 && !ac_can_access_card_dept($dept_id)) {
+        $errors[] = 'You can only assign admit cards to your own department.';
+    }
     if ($program_id <= 0)  $errors[] = 'Please select a program.';
 
     if (empty($errors)) {

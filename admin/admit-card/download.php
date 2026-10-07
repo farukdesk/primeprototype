@@ -35,6 +35,12 @@ if (!$card) {
     http_response_code(404);
     die('Admit card not found.');
 }
+// Admin users restricted to a department scope (e.g. faculty) may only
+// download cards of their own department.
+if (!is_portal_student() && !ac_can_access_card_dept((int)$card['dept_id'])) {
+    http_response_code(403);
+    die('Access denied: this admit card belongs to another department.');
+}
 // Portal students may only download active cards; admins can download
 // a student's admit card even when the card is inactive.
 if (!$card['is_active'] && is_portal_student()) {

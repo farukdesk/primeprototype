@@ -9,12 +9,27 @@ require_once __DIR__ . '/helpers.php';
 
 $page_title = 'Admit Cards';
 
+// Department scope: faculty users only see/manage their own department's cards
+$ac_scope = ac_dept_scope();
+
 // ── Bulk activate / deactivate ──────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['bulk_action'] ?? '') !== '')) {
     csrf_check();
     $ret = APP_URL . '/admit-card/index.php'
          . ((string)($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : '');
     $bulk_ids = array_values(array_filter(array_map('intval', (array)($_POST['card_ids'] ?? [])), static fn($v) => $v > 0));
+    // Restrict bulk targets to the user's department scope
+    if ($ac_scope !== null && $bulk_ids) {
+        if (empty($ac_scope)) {
+            $bulk_ids = [];
+        } else {
+            $iph = implode(',', array_fill(0, count($bulk_ids), '?'));
+            $dph = implode(',', array_fill(0, count($ac_scope), '?'));
+            $sc  = db()->prepare("SELECT id FROM ac_admit_cards WHERE id IN ($iph) AND dept_id IN ($dph)");
+            $sc->execute(array_merge($bulk_ids, $ac_scope));
+            $bulk_ids = array_map('intval', $sc->fetchAll(PDO::FETCH_COLUMN));
+        }
+    }
     $bulk_act = (string)$_POST['bulk_action'];
     if ($bulk_act === 'delete' ? !ac_can_delete() : !ac_can_edit()) {
         flash_set('danger', $bulk_act === 'delete'
@@ -81,6 +96,16 @@ $offset    = ($cur_page - 1) * $per_page;
 $db = db();
 $where  = '1=1';
 $params = [];
+
+// ── Department scope (faculty: own department only) ─────────────────────
+if ($ac_scope !== null) {
+    if (empty($ac_scope)) {
+        $where .= ' AND 1=0';
+    } else {
+        $where .= ' AND ac.dept_id IN (' . implode(',', array_fill(0, count($ac_scope), '?')) . ')';
+        $params = array_merge($params, $ac_scope);
+    }
+}
 
 // ── Find a student's admit cards by their Student ID (includes inactive cards) ──
 $f_student_row = null;
@@ -193,7 +218,14 @@ if ($f_from !== '' || $f_to !== '') {
 }
 
 // Dropdown data for the filter bar
-$flt_depts    = $db->query('SELECT id, name FROM dept_departments ORDER BY name ASC')->fetchAll();
+if ($ac_scope !== null && !empty($ac_scope)) {
+    $dph = implode(',', array_fill(0, count($ac_scope), '?'));
+    $st  = $db->prepare("SELECT id, name FROM dept_departments WHERE id IN ($dph) ORDER BY name ASC");
+    $st->execute($ac_scope);
+    $flt_depts = $st->fetchAll();
+} else {
+    $flt_depts = $db->query('SELECT id, name FROM dept_departments ORDER BY name ASC')->fetchAll();
+}
 $flt_programs = $db->query('SELECT id, program_name FROM dept_academic_programs ORDER BY program_name ASC')->fetchAll();
 $flt_batches  = $db->query('SELECT id, name FROM student_batches ORDER BY sort_order ASC, name ASC')->fetchAll();
 $flt_sems     = $db->query("SELECT DISTINCT semester FROM ac_admit_cards WHERE semester IS NOT NULL AND semester <> '' ORDER BY semester ASC")->fetchAll(PDO::FETCH_COLUMN);

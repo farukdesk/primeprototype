@@ -13,6 +13,10 @@ if (!$card) {
     flash_set('error', 'Admit card not found.');
     redirect(APP_URL . '/admit-card/index.php');
 }
+if (!ac_can_access_card_dept((int)$card['dept_id'])) {
+    flash_set('error', 'You can only view admit cards of your own department.');
+    redirect(APP_URL . '/admit-card/index.php');
+}
 
 $page_title = 'Admit Card – ' . $card['exam_name'];
 $db = db();

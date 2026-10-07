@@ -31,6 +31,61 @@ function ac_can_delete(): bool
     return is_super_admin() || can_access('admit-card', 'can_delete');
 }
 
+/**
+ * Department scope for the admit-card module.
+ * Returns null  → unrestricted (all departments allowed).
+ * Returns int[] → only those dept_ids are allowed.
+ *
+ * Starts from the global get_dept_scope(). When no explicit scope is
+ * configured (null → unrestricted) and the user is a FACULTY member
+ * (faculty_profiles / dept_faculty), they are still limited to their own
+ * department(s) so they never see, create or edit other departments'
+ * admit cards.
+ */
+function ac_dept_scope(): ?array
+{
+    if (is_super_admin()) return null;
+    $user = auth_user();
+    if (!$user) return [];
+
+    static $cached = '__unset__';
+    if ($cached !== '__unset__') return $cached;
+
+    $scope = get_dept_scope();
+    if ($scope !== null) { $cached = $scope; return $cached; }
+
+    $uid       = (int)$user['id'];
+    $own_depts = [];
+    $is_fac    = false;
+    try {
+        $st = db()->prepare('SELECT dept_id FROM faculty_profiles WHERE user_id = ?');
+        $st->execute([$uid]);
+        foreach ($st->fetchAll() as $r) {
+            $is_fac = true;
+            if ($r['dept_id'] !== null) $own_depts[] = (int)$r['dept_id'];
+        }
+    } catch (Throwable $e) {}
+    try {
+        $st = db()->prepare('SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_active = 1');
+        $st->execute([$uid]);
+        foreach ($st->fetchAll() as $r) {
+            $is_fac = true;
+            if ($r['dept_id'] !== null) $own_depts[] = (int)$r['dept_id'];
+        }
+    } catch (Throwable $e) {}
+
+    // Non-faculty staff without an explicit scope stay unrestricted.
+    $cached = $is_fac ? array_values(array_unique($own_depts)) : null;
+    return $cached;
+}
+
+/** Whether the current user may work with admit cards of the given department. */
+function ac_can_access_card_dept(int $dept_id): bool
+{
+    $scope = ac_dept_scope();
+    return $scope === null || in_array($dept_id, $scope, true);
+}
+
 // ── Fetch a single admit card with dept/program/batch joins ───────────────────
 
 function ac_get_card(int $id): array|false
