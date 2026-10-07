@@ -155,7 +155,7 @@ if ($routine_id > 0) {
          JOIN co_registrations reg ON reg.student_id = s.id
          JOIN exam_routine_items i ON i.offer_subject_id = reg.offer_subject_id AND i.routine_id = ?
          LEFT JOIN sfp_packages p ON p.student_id = s.id
-         WHERE s.status NOT IN ('Withdrawn','Expelled')
+         WHERE s.status = 'Active'
          GROUP BY s.id
          ORDER BY s.full_name ASC"
     );
@@ -167,13 +167,34 @@ if ($routine_id > 0) {
          FROM students s
          LEFT JOIN sfp_packages p ON p.student_id = s.id
          WHERE s.dept_id = ? AND s.program_id = ? $batch_cond
-           AND s.status NOT IN ('Withdrawn','Expelled')
+           AND s.status = 'Active'
          GROUP BY s.id
          ORDER BY s.full_name ASC"
     );
     $students_stmt->execute(array_merge([$card['dept_id'], $card['program_id']], $batch_params));
 }
 $students = $students_stmt->fetchAll();
+
+// Last payment (date + amount) per listed student — shown under the Blocked
+// badge in the Due Check column so staff can see when the student last paid.
+$last_payments = [];
+if ($students) {
+    $sids = array_map('intval', array_column($students, 'id'));
+    $ph   = implode(',', array_fill(0, count($sids), '?'));
+    $lp   = $db->prepare(
+        "SELECT p.student_id, p.amount, p.collected_at
+           FROM sfp_payments p
+           JOIN (SELECT student_id, MAX(collected_at) AS last_at
+                   FROM sfp_payments
+                  WHERE student_id IN ($ph)
+                  GROUP BY student_id) m
+             ON m.student_id = p.student_id AND m.last_at = p.collected_at"
+    );
+    $lp->execute($sids);
+    foreach ($lp->fetchAll() as $row) {
+        $last_payments[(int)$row['student_id']] = $row;
+    }
+}
 
 // Existing overrides
 $ov_stmt = $db->prepare(
@@ -434,6 +455,15 @@ require_once __DIR__ . '/../includes/header.php';
                                     <span class="badge bg-danger" title="<?= h($access['reason'] ?? '') ?>">
                                         <i class="fas fa-lock me-1"></i>Blocked (৳<?= number_format($access['due'] ?? 0, 0) ?>)
                                     </span>
+                                    <?php $lp = $last_payments[(int)$s['id']] ?? null; ?>
+                                    <div class="small text-muted mt-1">
+                                        <?php if ($lp): ?>
+                                            Last paid ৳<?= number_format((float)$lp['amount'], 0) ?>
+                                            on <?= h(date('d M Y', strtotime($lp['collected_at']))) ?>
+                                        <?php else: ?>
+                                            No payment found
+                                        <?php endif; ?>
+                                    </div>
                                 <?php endif; ?>
                             </td>
                             <td>
