@@ -61,6 +61,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         redirect($ret);
     }
 
+    if ($action === 'assign_one') {
+        $p_student = (int)($_POST['student_id'] ?? 0);
+        $p_seat    = trim((string)($_POST['seat'] ?? ''));
+        $p_dept    = (int)($_POST['dept_id'] ?? 0);
+        $p_program = (int)($_POST['program_id'] ?? 0);
+        $p_batch   = (int)($_POST['batch_id'] ?? 0);
+        $p_date    = trim($_POST['exam_date'] ?? '');
+        $p_section = trim($_POST['section'] ?? '');
+        $p_shift   = trim($_POST['shift'] ?? '');
+        if ($p_student <= 0 || !preg_match('/^\d+:\d+$/', $p_seat) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
+            flash_set('error', 'Pick a student, a seat and an exam date to assign manually.');
+        } else {
+            [$col_no, $seat_no] = array_map('intval', explode(':', $p_seat));
+            [$ok, $msg] = hm_assign_single_student($hall_id, $p_date, $p_student, $col_no, $seat_no, [
+                'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
+                'section' => $p_section, 'shift' => $p_shift,
+            ]);
+            flash_set($ok ? 'success' : 'error', $msg);
+        }
+        // Keep the student preview open so more students can be seated
+        $ret .= '&preview=1&a_dept=' . $p_dept . '&a_program=' . $p_program . '&a_batch=' . $p_batch
+              . '&a_date=' . urlencode($p_date) . '&a_section=' . urlencode($p_section) . '&a_shift=' . urlencode($p_shift);
+        redirect($ret);
+    }
+
     if ($action === 'unassign') {
         $aid = (int)($_POST['assignment_id'] ?? 0);
         $st  = db()->prepare('DELETE FROM hm_hall_assignments WHERE id = ? AND hall_id = ?');
@@ -352,6 +377,16 @@ require_once __DIR__ . '/../includes/header.php';
             $free_cnt  = max(0, (int)$hall['total_capacity'] - count($assignments));
             $new_cnt   = 0;
             foreach ($preview as $stu) { if (!isset($busy_ids[(int)$stu['id']])) $new_cnt++; }
+            // Free seat options for manual (single-student) assignment
+            $seat_opts = '';
+            foreach ($columns as $col) {
+                $cno = (int)$col['col_no'];
+                for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
+                    if (!isset($assignments[$cno . ':' . $s])) {
+                        $seat_opts .= '<option value="' . $cno . ':' . $s . '">C' . $cno . '-S' . $s . '</option>';
+                    }
+                }
+            }
         ?>
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
             <div style="font-size:.9rem;">
@@ -371,14 +406,17 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="hidden" name="shift" value="<?= h($f_shift) ?>">
                 <button type="submit" class="btn btn-sm btn-success" style="border-radius:8px;"
                         onclick="return confirm('Assign <?= $new_cnt ?> student(s) to the free seats of this hall?');">
-                    <i class="fas fa-chair me-1"></i> Assign to Seats
+                    <i class="fas fa-chair me-1"></i> Auto Assign to Seats
                 </button>
             </form>
+        </div>
+        <div class="text-muted mb-2" style="font-size:.8rem;">
+            <i class="fas fa-hand-pointer me-1"></i>Or seat a single student manually with the seat picker in each row.
         </div>
         <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
             <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                 <thead class="table-light" style="position:sticky;top:0;">
-                    <tr><th>#</th><th>Student ID</th><th>Name</th><th>Batch</th><th>Shift</th><th>Section</th><th>Status</th></tr>
+                    <tr><th>#</th><th>Student ID</th><th>Name</th><th>Batch</th><th>Shift</th><th>Section</th><th>Status</th><th style="min-width:170px;">Manual Seat</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($preview as $i => $stu): ?>
@@ -393,6 +431,31 @@ require_once __DIR__ . '/../includes/header.php';
                             <?= isset($busy_ids[(int)$stu['id']])
                                 ? '<span class="badge bg-secondary">Already seated</span>'
                                 : '<span class="badge bg-success">Will be seated</span>' ?>
+                        </td>
+                        <td>
+                            <?php if (!isset($busy_ids[(int)$stu['id']]) && $seat_opts !== ''): ?>
+                            <form method="post" class="d-flex gap-1 mb-0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="assign_one">
+                                <input type="hidden" name="student_id" value="<?= (int)$stu['id'] ?>">
+                                <input type="hidden" name="dept_id" value="<?= $f_dept ?>">
+                                <input type="hidden" name="program_id" value="<?= $f_program ?>">
+                                <input type="hidden" name="batch_id" value="<?= $f_batch ?>">
+                                <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
+                                <input type="hidden" name="section" value="<?= h($f_section) ?>">
+                                <input type="hidden" name="shift" value="<?= h($f_shift) ?>">
+                                <select name="seat" class="form-select form-select-sm" required style="width:auto;font-size:.75rem;">
+                                    <option value="">Seat…</option>
+                                    <?= $seat_opts ?>
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-outline-success py-0" style="border-radius:6px;font-size:.75rem;"
+                                        title="Seat this student manually">
+                                    <i class="fas fa-chair"></i>
+                                </button>
+                            </form>
+                            <?php else: ?>
+                            <span class="text-muted">—</span>
+                            <?php endif; ?>
                         </td>
                     </tr>
                     <?php endforeach; ?>
