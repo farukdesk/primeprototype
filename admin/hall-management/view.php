@@ -266,12 +266,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                         <thead class="table-light">
-                            <tr><th class="ps-3">Batch</th><th>Course Code</th><th>Course Title</th><th>Course Teacher</th><th class="pe-3">Time Slot</th></tr>
+                            <tr><th class="ps-3">Batch</th><th>Course Code</th><th>Course Title</th><th>Course Teacher</th><th>Time Slot</th><th class="pe-3 text-center">Students Here</th></tr>
                         </thead>
                         <tbody>
                             <?php foreach ($batch_colors as $bk => $clr):
                                 $courses = $batch_courses[$bk] ?? [];
-                                if (!$courses) $courses = [['course_code' => '—', 'course_title' => 'No admit-card exam found for this date', 'teachers' => '', 'time_slot' => '']];
+                                if (!$courses) $courses = [['course_code' => '—', 'course_title' => 'No admit-card exam found for this date', 'teachers' => '', 'time_slot' => '', 'student_count' => null]];
                                 foreach ($courses as $ci => $crs): ?>
                             <tr>
                                 <?php if ($ci === 0): ?>
@@ -284,7 +284,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 <td class="fw-semibold"><?= h($crs['course_code']) ?></td>
                                 <td><?= h($crs['course_title']) ?></td>
                                 <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '<span class="text-muted">—</span>' ?></td>
-                                <td class="pe-3"><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '<span class="text-muted">—</span>' ?></td>
+                                <td><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '<span class="text-muted">—</span>' ?></td>
+                                <td class="pe-3 text-center"><?php if (isset($crs['student_count']) && $crs['student_count'] !== null): ?><span class="badge bg-primary-subtle text-primary border" style="font-size:.75rem;"><?= (int)$crs['student_count'] ?></span><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
                             </tr>
                             <?php endforeach; endforeach; ?>
                         </tbody>
