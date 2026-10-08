@@ -325,6 +325,9 @@ require_once __DIR__ . '/../includes/header.php';
         </ol></nav>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= APP_URL ?>/admit-card/report.php" class="btn btn-outline-info" style="border-radius:10px;">
+            <i class="fas fa-chart-pie me-1"></i> Exam Report
+        </a>
         <a href="<?= APP_URL ?>/admit-card/conflicts.php" class="btn btn-outline-warning" style="border-radius:10px;">
             <i class="fas fa-flag me-1"></i> Clash Report
         </a>
