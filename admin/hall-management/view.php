@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('hall-management');
 require_once __DIR__ . '/helpers.php';
 
+hm_ensure_schedule_columns();
 $hall_id = (int)($_GET['id'] ?? 0);
 $hall    = $hall_id > 0 ? hm_get_hall($hall_id) : null;
 if (!$hall) {
@@ -225,6 +226,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <table class="table table-sm mb-0" style="font-size:.9rem;">
                     <tr><th class="text-muted" style="width:45%;">Room Number</th><td class="fw-semibold"><?= h($hall['room_number']) ?></td></tr>
                     <tr><th class="text-muted">Department</th><td><?= h($hall['dept_name']) ?></td></tr>
+                    <tr><th class="text-muted">Exam Date &amp; Time</th><td><?= h(hm_slot_label($hall['exam_date'] ?? null, $hall['exam_time'] ?? null)) ?></td></tr>
                     <tr><th class="text-muted">Columns</th><td><?= (int)$hall['num_columns'] ?></td></tr>
                     <tr><th class="text-muted">Rows</th><td><?= (int)$hall['num_rows'] ?></td></tr>
                     <tr><th class="text-muted">Total Seat Capacity</th><td><span class="badge bg-primary"><?= (int)$hall['total_capacity'] ?> seats</span></td></tr>

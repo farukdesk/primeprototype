@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS `hm_halls` (
   `id`             INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
   `dept_id`        INT(10) UNSIGNED NOT NULL COMMENT 'FK → dept_departments.id',
   `room_number`    VARCHAR(100) NOT NULL,
+  `exam_date`      DATE DEFAULT NULL COMMENT 'Exam date this room is booked for',
+  `exam_time`      TIME DEFAULT NULL COMMENT 'Exam start time this room is booked for',
   `num_columns`    INT(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Number of seat columns',
   `num_rows`       INT(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Number of seat rows (max seats per column)',
   `total_capacity` INT(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Sum of column seat capacities',
@@ -22,7 +24,7 @@ CREATE TABLE IF NOT EXISTS `hm_halls` (
   `created_at`     TIMESTAMP NOT NULL DEFAULT current_timestamp(),
   `updated_at`     TIMESTAMP NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_hm_dept_room` (`dept_id`, `room_number`),
+  UNIQUE KEY `uq_hm_room_slot` (`dept_id`, `room_number`, `exam_date`, `exam_time`),
   KEY `idx_hm_dept` (`dept_id`),
   CONSTRAINT `fk_hm_dept` FOREIGN KEY (`dept_id`)
       REFERENCES `dept_departments` (`id`) ON DELETE CASCADE

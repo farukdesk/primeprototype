@@ -83,6 +83,61 @@ function hm_save_columns(int $hall_id, array $caps): void
     }
 }
 
+/**
+ * Make sure hm_halls has the exam_date / exam_time columns and that the
+ * unique key allows the same room on different dates/times (safe to run on
+ * every request; mirrors admin/hall-management-schema.sql).
+ */
+function hm_ensure_schedule_columns(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $has = db()->query("SHOW COLUMNS FROM hm_halls LIKE 'exam_date'")->fetch();
+        if (!$has) {
+            db()->exec(
+                'ALTER TABLE hm_halls
+                   ADD COLUMN exam_date DATE DEFAULT NULL AFTER room_number,
+                   ADD COLUMN exam_time TIME DEFAULT NULL AFTER exam_date'
+            );
+        }
+        $idx = db()->query("SHOW INDEX FROM hm_halls WHERE Key_name = 'uq_hm_dept_room'")->fetch();
+        if ($idx) {
+            db()->exec(
+                'ALTER TABLE hm_halls
+                  DROP INDEX uq_hm_dept_room,
+                   ADD UNIQUE KEY uq_hm_room_slot (dept_id, room_number, exam_date, exam_time)'
+            );
+        }
+    } catch (Throwable $e) {
+        // best effort — queries will surface real problems
+    }
+}
+
+/**
+ * True when another hall row already books the same room for the same exam
+ * date AND the same exam time (same date + different time is allowed).
+ */
+function hm_room_slot_taken(string $room_number, string $exam_date, string $exam_time, int $exclude_id = 0): bool
+{
+    $sql    = 'SELECT COUNT(*) FROM hm_halls WHERE room_number = ? AND exam_date = ? AND exam_time = ?';
+    $params = [$room_number, $exam_date, $exam_time];
+    if ($exclude_id > 0) { $sql .= ' AND id <> ?'; $params[] = $exclude_id; }
+    $st = db()->prepare($sql);
+    $st->execute($params);
+    return (int)$st->fetchColumn() > 0;
+}
+
+/** Human-readable "d M Y, g:i A" label for a hall's exam date/time. */
+function hm_slot_label(?string $exam_date, ?string $exam_time): string
+{
+    if (!$exam_date) return '—';
+    $label = date('d M Y', strtotime($exam_date));
+    if ($exam_time) $label .= ', ' . date('g:i A', strtotime($exam_time));
+    return $label;
+}
+
 /* ========================================================================
  * Student seat assignments (students come from generated admit cards)
  * ======================================================================== */
