@@ -218,6 +218,27 @@ if ($students) {
     }
 }
 
+// Source offer of each card course row — generator-built cards store the
+// offer_subject_id, so staff can jump from a listed course to its offer.
+$course_offer_map = [];
+$cc_osids = array_values(array_unique(array_filter(array_map(
+    static fn($c) => (int)($c['offer_subject_id'] ?? 0),
+    $courses
+))));
+if ($cc_osids) {
+    $ph = implode(',', array_fill(0, count($cc_osids), '?'));
+    $co = $db->prepare(
+        "SELECT os.id AS osid, o.id AS offer_id, o.semester, o.academic_intake
+           FROM co_offer_subjects os
+           JOIN co_offers o ON o.id = os.offer_id
+          WHERE os.id IN ($ph)"
+    );
+    $co->execute($cc_osids);
+    foreach ($co->fetchAll() as $row) {
+        $course_offer_map[(int)$row['osid']] = $row;
+    }
+}
+
 // Existing overrides
 $ov_stmt = $db->prepare(
     'SELECT ov.*, s.full_name AS student_name, s.student_id AS student_sid, u.full_name AS allowed_by_name
@@ -312,15 +333,31 @@ require_once __DIR__ . '/../includes/header.php';
                 <div class="table-responsive">
                     <table class="table table-sm mb-0">
                         <thead class="table-light">
-                            <tr><th class="px-3">Code</th><th>Title</th><th>Date</th><th>Time</th></tr>
+                            <tr><th class="px-3">Code</th><th>Title</th><th>Date</th><th>Time</th><th>Offer</th></tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($courses as $c): ?>
+                        <?php foreach ($courses as $c):
+                            $c_osid  = (int)($c['offer_subject_id'] ?? 0);
+                            $c_offer = $c_osid > 0 ? ($course_offer_map[$c_osid] ?? null) : null;
+                        ?>
                         <tr>
                             <td class="px-3"><?= h($c['course_code']) ?></td>
                             <td><?= h($c['course_title']) ?></td>
                             <td><?= $c['exam_date'] ? date('d/m/Y', strtotime($c['exam_date'])) : '—' ?></td>
                             <td><?= h($c['time_slot'] ?? '—') ?></td>
+                            <td>
+                                <?php if ($c_offer):
+                                    $c_lbl = trim((string)($c_offer['semester'] ?? '')
+                                        . (($c_offer['academic_intake'] ?? '') !== '' ? ' · ' . $c_offer['academic_intake'] : ''));
+                                    if ($c_lbl === '') { $c_lbl = 'Offer #' . (int)$c_offer['offer_id']; }
+                                ?>
+                                <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= (int)$c_offer['offer_id'] ?>"
+                                   class="badge bg-primary-subtle text-primary border text-decoration-none"
+                                   title="Open this course offer's registrations"><?= h($c_lbl) ?></a>
+                                <?php else: ?>
+                                <span class="text-muted small" title="Not linked to a course offer">Manual</span>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -511,6 +548,21 @@ require_once __DIR__ . '/../includes/header.php';
                                    target="_blank">
                                     <i class="fas fa-download me-1"></i>PDF
                                 </a>
+                                <button type="button"
+                                        class="btn btn-xs btn-outline-info js-ac-courses-btn" style="font-size:.75rem;padding:2px 8px;"
+                                        data-target="ac-courses-<?= (int)$s['id'] ?>"
+                                        data-url="<?= APP_URL ?>/admit-card/student-courses.php?card=<?= $id ?>&student=<?= (int)$s['id'] ?>"
+                                        title="See every course printed on this student's admit card and which course offer it comes from">
+                                    <i class="fas fa-list me-1"></i>Courses
+                                </button>
+                            </td>
+                        </tr>
+                        <tr id="ac-courses-<?= (int)$s['id'] ?>" class="d-none">
+                            <td colspan="4" class="bg-light p-2">
+                                <div class="small text-muted mb-1 px-1">
+                                    Courses printed on <strong><?= h($s['full_name']) ?></strong>'s admit card and the offer each comes from:
+                                </div>
+                                <div class="js-ac-courses-box"></div>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -522,5 +574,26 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+
+<script>
+// Lazy-load the per-student printed-course → offer breakdown.
+document.querySelectorAll('.js-ac-courses-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        var tr = document.getElementById(btn.dataset.target);
+        if (!tr) return;
+        var hidden = tr.classList.toggle('d-none');
+        if (hidden || tr.dataset.loaded) return;
+        tr.dataset.loaded = '1';
+        var box = tr.querySelector('.js-ac-courses-box');
+        box.innerHTML = '<div class="text-muted small px-3 py-2"><i class="fas fa-spinner fa-spin me-1"></i>Loading…</div>';
+        fetch(btn.dataset.url)
+            .then(function (r) { if (!r.ok) throw new Error(); return r.text(); })
+            .then(function (html) { box.innerHTML = html; })
+            .catch(function () {
+                box.innerHTML = '<div class="text-danger small px-3 py-2">Could not load the course list.</div>';
+            });
+    });
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
