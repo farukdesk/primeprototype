@@ -70,20 +70,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         $p_date    = trim($_POST['exam_date'] ?? '');
         $p_section = trim($_POST['section'] ?? '');
         $p_shift   = trim($_POST['shift'] ?? '');
+        $p_force   = (string)($_POST['force'] ?? '') === '1';
         if ($p_student <= 0 || !preg_match('/^\d+:\d+$/', $p_seat) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
             flash_set('error', 'Pick a student, a seat and an exam date to assign manually.');
         } else {
             [$col_no, $seat_no] = array_map('intval', explode(':', $p_seat));
-            [$ok, $msg] = hm_assign_single_student($hall_id, $p_date, $p_student, $col_no, $seat_no, [
+            [$ok, $msg, $warnings] = hm_assign_single_student($hall_id, $p_date, $p_student, $col_no, $seat_no, [
                 'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
                 'section' => $p_section, 'shift' => $p_shift,
-            ]);
-            flash_set($ok ? 'success' : 'error', $msg);
+            ], $p_force);
+            if (!$ok && $warnings) {
+                // Rule conflicts — render the page with a confirmation panel
+                // instead of blocking; the user may confirm to seat anyway.
+                $pending_confirm = [
+                    'student_id' => $p_student, 'seat' => $p_seat,
+                    'col_no' => $col_no, 'seat_no' => $seat_no,
+                    'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
+                    'exam_date' => $p_date, 'section' => $p_section, 'shift' => $p_shift,
+                    'warnings' => $warnings,
+                ];
+                $cs = db()->prepare('SELECT student_id, full_name FROM students WHERE id = ?');
+                $cs->execute([$p_student]);
+                $pending_confirm['student'] = $cs->fetch() ?: null;
+            } else {
+                flash_set($ok ? 'success' : 'error', $msg);
+            }
         }
-        // Keep the student preview open so more students can be seated
-        $ret .= '&preview=1&a_dept=' . $p_dept . '&a_program=' . $p_program . '&a_batch=' . $p_batch
-              . '&a_date=' . urlencode($p_date) . '&a_section=' . urlencode($p_section) . '&a_shift=' . urlencode($p_shift);
-        redirect($ret);
+        if (!isset($pending_confirm)) {
+            // Keep the student preview open so more students can be seated
+            $ret .= '&preview=1&a_dept=' . $p_dept . '&a_program=' . $p_program . '&a_batch=' . $p_batch
+                  . '&a_date=' . urlencode($p_date) . '&a_section=' . urlencode($p_section) . '&a_shift=' . urlencode($p_shift);
+            redirect($ret);
+        }
     }
 
     if ($action === 'unassign') {
@@ -153,6 +171,49 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php flash_show(); ?>
+
+<?php if (isset($pending_confirm)): ?>
+<div class="card mb-4 border-warning" style="border-radius:12px;border-width:2px;">
+    <div class="card-header fw-semibold text-dark" style="border-radius:10px 10px 0 0;background:#fff7e6;">
+        <i class="fas fa-triangle-exclamation me-2 text-warning"></i>Seating Rule Conflicts — confirm to seat anyway
+    </div>
+    <div class="card-body">
+        <p class="mb-2" style="font-size:.9rem;">
+            Seating
+            <strong><?= h($pending_confirm['student']['full_name'] ?? 'this student') ?></strong>
+            <?php if (!empty($pending_confirm['student']['student_id'])): ?>(<?= h($pending_confirm['student']['student_id']) ?>)<?php endif; ?>
+            at <strong>C<?= (int)$pending_confirm['col_no'] ?>-S<?= (int)$pending_confirm['seat_no'] ?></strong>
+            on <strong><?= h(date('d M Y', strtotime($pending_confirm['exam_date']))) ?></strong>
+            breaks the following rule(s):
+        </p>
+        <ul class="mb-3" style="font-size:.88rem;">
+            <?php foreach ($pending_confirm['warnings'] as $w): ?>
+            <li class="text-danger"><?= h($w) ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <div class="d-flex gap-2">
+            <form method="post" class="mb-0">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="assign_one">
+                <input type="hidden" name="force" value="1">
+                <input type="hidden" name="student_id" value="<?= (int)$pending_confirm['student_id'] ?>">
+                <input type="hidden" name="seat" value="<?= h($pending_confirm['seat']) ?>">
+                <input type="hidden" name="dept_id" value="<?= (int)$pending_confirm['dept_id'] ?>">
+                <input type="hidden" name="program_id" value="<?= (int)$pending_confirm['program_id'] ?>">
+                <input type="hidden" name="batch_id" value="<?= (int)$pending_confirm['batch_id'] ?>">
+                <input type="hidden" name="exam_date" value="<?= h($pending_confirm['exam_date']) ?>">
+                <input type="hidden" name="section" value="<?= h($pending_confirm['section']) ?>">
+                <input type="hidden" name="shift" value="<?= h($pending_confirm['shift']) ?>">
+                <button type="submit" class="btn btn-sm btn-warning fw-semibold" style="border-radius:8px;">
+                    <i class="fas fa-chair me-1"></i> Seat Anyway (override rules)
+                </button>
+            </form>
+            <a href="<?= APP_URL ?>/hall-management/view.php?id=<?= $hall_id ?>&preview=1&a_dept=<?= (int)$pending_confirm['dept_id'] ?>&a_program=<?= (int)$pending_confirm['program_id'] ?>&a_batch=<?= (int)$pending_confirm['batch_id'] ?>&a_date=<?= urlencode($pending_confirm['exam_date']) ?>&a_section=<?= urlencode($pending_confirm['section']) ?>&a_shift=<?= urlencode($pending_confirm['shift']) ?>"
+               class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">Cancel</a>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="row g-4">
     <div class="col-lg-4">
@@ -411,7 +472,7 @@ require_once __DIR__ . '/../includes/header.php';
             </form>
         </div>
         <div class="text-muted mb-2" style="font-size:.8rem;">
-            <i class="fas fa-hand-pointer me-1"></i>Or seat a single student manually with the seat picker in each row.
+            <i class="fas fa-hand-pointer me-1"></i>Or seat a single student manually with the seat picker in each row — manual seating is free-form: any seat can be chosen and rule conflicts (mixed/adjacent batches, double seating) only ask for confirmation.
         </div>
         <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
             <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
@@ -433,7 +494,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 : '<span class="badge bg-success">Will be seated</span>' ?>
                         </td>
                         <td>
-                            <?php if (!isset($busy_ids[(int)$stu['id']]) && $seat_opts !== ''): ?>
+                            <?php if ($seat_opts !== ''): ?>
                             <form method="post" class="d-flex gap-1 mb-0">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="assign_one">

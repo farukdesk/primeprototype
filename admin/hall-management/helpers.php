@@ -394,12 +394,15 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
 /**
  * Manually seat ONE student on a specific column/seat of a hall.
  *
- * Validates that the seat exists and is free, the student is active,
- * dept-accessible and not already seated elsewhere on that date/shift,
- * and keeps the one-batch-per-column rule of the auto-assigner.
- * Returns [bool ok, string message].
+ * Hard checks (never overridable): the seat exists and is free, the
+ * student is active, dept-accessible and not already seated in THIS hall
+ * on that date. Soft rule conflicts (mixed batches in a column, same
+ * batch in an adjacent column, already seated in another hall) are
+ * returned as warnings; passing $force = true seats the student anyway.
+ * Returns [bool ok, string message, string[] warnings] — a false result
+ * with non-empty warnings means user confirmation is required.
  */
-function hm_assign_single_student(int $hall_id, string $exam_date, int $student_id, int $col_no, int $seat_no, array $ctx): array
+function hm_assign_single_student(int $hall_id, string $exam_date, int $student_id, int $col_no, int $seat_no, array $ctx, bool $force = false): array
 {
     hm_ensure_assignments_table();
     $db = db();
@@ -410,36 +413,77 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
         if ((int)$col['col_no'] === $col_no) { $cap = (int)$col['seat_capacity']; break; }
     }
     if ($cap === null || $seat_no < 1 || $seat_no > $cap) {
-        return [false, 'That seat does not exist in this hall.'];
+        return [false, 'That seat does not exist in this hall.', []];
     }
 
     // Student must exist, be active and belong to an accessible department
-    $st = $db->prepare("SELECT id, student_id, full_name, dept_id, batch_id FROM students WHERE id = ? AND status = 'Active'");
+    $st = $db->prepare("SELECT s.id, s.student_id, s.full_name, s.dept_id, s.batch_id, b.name AS batch_name
+                          FROM students s LEFT JOIN student_batches b ON b.id = s.batch_id
+                         WHERE s.id = ? AND s.status = 'Active'");
     $st->execute([$student_id]);
     $stu = $st->fetch();
-    if (!$stu) return [false, 'Student not found or not active.'];
+    if (!$stu) return [false, 'Student not found or not active.', []];
     if (!can_access_dept((int)$stu['dept_id'])) {
-        return [false, 'You do not have permission for that student\'s department.'];
+        return [false, 'You do not have permission for that student\'s department.', []];
     }
 
-    // Seat must be free and the column must keep a single batch
-    $taken     = hm_assignments($hall_id, $exam_date);
+    // Seat must be free (a taken seat can never be overridden)
+    $taken = hm_assignments($hall_id, $exam_date);
     if (isset($taken[$col_no . ':' . $seat_no])) {
-        return [false, 'Seat C' . $col_no . '-S' . $seat_no . ' is already occupied.'];
+        return [false, 'Seat C' . $col_no . '-S' . $seat_no . ' is already occupied.', []];
     }
+
+    // ── Rule conflicts: manual seating MAY override them after a confirm ──
     $stu_batch = (int)($stu['batch_id'] ?? 0);
+    $stu_bname = (string)($stu['batch_name'] ?? '') !== '' ? (string)$stu['batch_name'] : 'No batch';
+    $warnings  = [];
+
+    // 1) Column should hold a single batch
     foreach ($taken as $key => $occ) {
         if ((int)explode(':', (string)$key)[0] !== $col_no) continue;
         if ((int)($occ['student_batch_id'] ?? 0) !== $stu_batch) {
-            return [false, 'Column ' . $col_no . ' already holds a different batch — each column seats a single batch.'];
+            $obn = (string)($occ['batch_name'] ?? '') !== '' ? (string)$occ['batch_name'] : 'No batch';
+            $warnings[] = 'Column ' . $col_no . ' already seats batch "' . $obn . '" — this student is from batch "'
+                        . $stu_bname . '", so the column would mix batches.';
         }
         break;
     }
 
-    // Student must not already be seated on this date (same shift logic as auto-assign)
-    $busy = array_flip(hm_busy_student_ids($exam_date, (string)($ctx['shift'] ?? '')));
-    if (isset($busy[$student_id])) {
-        return [false, h($stu['full_name']) . ' is already seated in a hall on this date.'];
+    // 2) Adjacent columns should hold a DIFFERENT batch (no same batch side by side)
+    foreach ([$col_no - 1, $col_no + 1] as $adj) {
+        if ($adj < 1) continue;
+        foreach ($taken as $key => $occ) {
+            if ((int)explode(':', (string)$key)[0] !== $adj) continue;
+            if ((int)($occ['student_batch_id'] ?? 0) === $stu_batch) {
+                $warnings[] = 'Adjacent Column ' . $adj . ' already seats batch "' . $stu_bname
+                            . '" — same-batch students would sit side by side.';
+            }
+            break;
+        }
+    }
+
+    // 3) Student should not already hold a seat on this date (same shift logic as auto-assign)
+    $shift = (string)($ctx['shift'] ?? '');
+    try {
+        $sql    = 'SELECT a.hall_id, a.col_no, a.seat_no, hl.room_number
+                     FROM hm_hall_assignments a JOIN hm_halls hl ON hl.id = a.hall_id
+                    WHERE a.exam_date = ? AND a.student_id = ?';
+        $params = [$exam_date, $student_id];
+        if ($shift !== '') { $sql .= " AND (a.shift = ? OR a.shift IS NULL OR a.shift = '')"; $params[] = $shift; }
+        $bq = $db->prepare($sql);
+        $bq->execute($params);
+        foreach ($bq->fetchAll() as $seated) {
+            if ((int)$seated['hall_id'] === $hall_id) {
+                return [false, h($stu['full_name']) . ' is already seated in this hall on this date (C'
+                             . (int)$seated['col_no'] . '-S' . (int)$seated['seat_no'] . ').', []];
+            }
+            $warnings[] = 'Already seated in Room ' . $seated['room_number'] . ' (C' . (int)$seated['col_no']
+                        . '-S' . (int)$seated['seat_no'] . ') on this date — the student would hold two seats.';
+        }
+    } catch (Throwable $e) {}
+
+    if ($warnings && !$force) {
+        return [false, '', $warnings];
     }
 
     try {
@@ -458,9 +502,11 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
             auth_user()['id'] ?? null,
         ]);
     } catch (Throwable $e) {
-        return [false, 'Could not assign the seat — it may have just been taken.'];
+        return [false, 'Could not assign the seat — it may have just been taken.', []];
     }
-    return [true, h($stu['full_name']) . ' (' . h($stu['student_id']) . ') seated at C' . $col_no . '-S' . $seat_no . '.'];
+    $msg = h($stu['full_name']) . ' (' . h($stu['student_id']) . ') seated at C' . $col_no . '-S' . $seat_no . '.';
+    if ($force && $warnings) $msg .= ' (rule override confirmed)';
+    return [true, $msg, []];
 }
 
 /**
