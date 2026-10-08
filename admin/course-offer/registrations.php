@@ -319,6 +319,31 @@ try {
 }
 $pending_total = count($pending_map);
 
+// ── Trace a student (?student=<pk>) — linked from the admit-card "Comes
+//    from" badges so staff land here and immediately see where (and
+//    whether) the student is registered in this offer, even when the
+//    student is not Active and therefore hidden from the lists below. ─────
+$trace_id      = (int)($_GET['student'] ?? 0);
+$trace_student = null;
+$trace_regs    = [];
+if ($trace_id > 0) {
+    $tst = db()->prepare('SELECT id, student_id, full_name, status FROM students WHERE id = ?');
+    $tst->execute([$trace_id]);
+    $trace_student = $tst->fetch() ?: null;
+    if ($trace_student) {
+        $tst = db()->prepare(
+            'SELECT cos.id AS osid, c.course_code, c.course_name
+               FROM co_registrations r
+               JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN course_curriculum c   ON c.id  = cos.curriculum_id
+              WHERE cos.offer_id = ? AND r.student_id = ?
+              ORDER BY c.course_code ASC'
+        );
+        $tst->execute([$offer_id, $trace_id]);
+        $trace_regs = $tst->fetchAll();
+    }
+}
+
 $page_title = 'Course Registrations';
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -334,6 +359,38 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php flash_show(); ?>
+
+<?php if ($trace_id > 0): ?>
+<?php if (!$trace_student): ?>
+<div class="alert alert-warning" style="border-radius:12px;">
+    <i class="fas fa-user-slash me-2"></i>Student <strong>#<?= $trace_id ?></strong> was not found — the record may have been deleted.
+</div>
+<?php else: ?>
+<div class="alert <?= $trace_regs ? 'alert-info' : 'alert-warning' ?>" style="border-radius:12px;">
+    <i class="fas fa-crosshairs me-2"></i>Tracing
+    <strong><?= h($trace_student['full_name']) ?></strong>
+    <span class="font-monospace">(<?= h($trace_student['student_id']) ?>)</span>
+    <?php if ($trace_student['status'] !== 'Active'): ?>
+    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle ms-1">Status: <?= h($trace_student['status']) ?></span>
+    <?php endif; ?>
+    —
+    <?php if ($trace_regs): ?>
+    registered in <strong><?= count($trace_regs) ?></strong> subject(s) of this offer:
+    <?php foreach ($trace_regs as $tr): ?>
+    <span class="badge bg-light text-dark border" style="font-family:monospace;"><?= h($tr['course_code'] ?: $tr['course_name']) ?></span>
+    <?php endforeach; ?>
+    <?php if ($trace_student['status'] === 'Active'): ?>
+    <div class="small mt-1">The student's rows are highlighted below.</div>
+    <?php else: ?>
+    <div class="small mt-1">Because the student's status is <strong><?= h($trace_student['status']) ?></strong> (not Active),
+        they are hidden from the per-subject lists below — only Active students are listed there.</div>
+    <?php endif; ?>
+    <?php else: ?>
+    has <strong>no registration</strong> in this offer.
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+<?php endif; ?>
 
 <!-- Offer summary -->
 <div class="card mb-4" style="border-radius:12px;">
@@ -571,6 +628,7 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <!-- Registrations per subject -->
+<?php $first_trace_row = true; ?>
 <?php foreach ($subjects as $s): $osid = (int)$s['id']; $regs = $reg_map[$osid] ?? []; ?>
 <div class="card mb-3" style="border-radius:12px;">
     <div class="card-header py-2 px-4 d-flex align-items-center gap-2">
@@ -606,8 +664,14 @@ require_once __DIR__ . '/../includes/header.php';
             </thead>
             <tbody>
             <?php foreach ($regs as $i => $r): ?>
-                <?php $other_batch = (int)($r['student_batch_id'] ?? 0) > 0 && (int)$r['student_batch_id'] !== $batch_id; ?>
-                <tr<?= $other_batch ? ' class="table-warning"' : '' ?>>
+                <?php
+                $other_batch = (int)($r['student_batch_id'] ?? 0) > 0 && (int)$r['student_batch_id'] !== $batch_id;
+                $is_trace    = $trace_id > 0 && (int)$r['student_pk'] === $trace_id;
+                $row_class   = $is_trace ? 'table-info' : ($other_batch ? 'table-warning' : '');
+                $row_id      = '';
+                if ($is_trace && $first_trace_row) { $row_id = ' id="trace-student"'; $first_trace_row = false; }
+                ?>
+                <tr<?= $row_class !== '' ? ' class="' . $row_class . '"' : '' ?><?= $row_id ?>>
                     <?php if (co_is_staff()): ?>
                     <td class="text-center">
                         <input type="checkbox" class="form-check-input reg-check" data-osid="<?= $osid ?>"
@@ -618,6 +682,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <td>
                         <div class="fw-medium">
                             <?= h($r['full_name']) ?>
+                            <?php if ($is_trace): ?>
+                            <i class="fas fa-crosshairs text-primary ms-1" title="Traced student"></i>
+                            <?php endif; ?>
                             <?php if ($other_batch): ?>
                             <i class="fas fa-exchange-alt text-warning ms-1" title="Enrolled from another batch"></i>
                             <?php endif; ?>
@@ -689,6 +756,10 @@ require_once __DIR__ . '/../includes/header.php';
 function toggleAllSubs(on) {
     document.querySelectorAll('.sub-check').forEach(function (c) { c.checked = on; });
 }
+(function () {
+    var row = document.getElementById('trace-student');
+    if (row) { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+})();
 <?php if (co_is_staff() && !empty($subjects)): ?>
 (function () {
     var API      = '<?= APP_URL ?>/course-offer/get-students.php';

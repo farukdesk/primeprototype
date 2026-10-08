@@ -176,8 +176,14 @@ function ac_card_exam_id(int $admit_card_id): int
  *      then shift only, then batch only, then the first item;
  *   3. a registered course with no routine item in this exam is omitted
  *      (it is not part of this exam).
+ *
+ * When $semester is given (the admit card's semester), only routine items
+ * of routines with that semester are considered — so a student enrolled in
+ * several semesters gets ONLY the courses of the card's semester, not the
+ * whole exam. If no routine of the exam carries that semester label the
+ * filter is skipped (fail open) so older data keeps working.
  */
-function ac_resolve_student_courses(int $exam_id, int $student_id): array
+function ac_resolve_student_courses(int $exam_id, int $student_id, string $semester = ''): array
 {
     require_once __DIR__ . '/../exam-routine/helpers.php';
 
@@ -202,7 +208,8 @@ function ac_resolve_student_courses(int $exam_id, int $student_id): array
         $it = db()->prepare(
             'SELECT i.offer_subject_id, i.course_code, i.course_title,
                     i.exam_date, i.start_time, i.end_time,
-                    o.batch_id AS item_batch_id, o.shift AS item_shift
+                    o.batch_id AS item_batch_id, o.shift AS item_shift,
+                    rt.semester AS routine_semester
                FROM exam_routine_items i
                JOIN exam_routines rt      ON rt.id  = i.routine_id
           LEFT JOIN co_offer_subjects cos ON cos.id = i.offer_subject_id
@@ -213,6 +220,31 @@ function ac_resolve_student_courses(int $exam_id, int $student_id): array
         $items = $it->fetchAll();
     } catch (Throwable $e) {
         return [];
+    }
+
+    // Keep only routine items of the card's semester — an exam spans many
+    // routines (one per offer / semester), and without this a student who
+    // is enrolled in several semesters would get ALL of them on one card.
+    // The filter only applies when the exam really has a routine with that
+    // semester label (fail open on label mismatches / legacy data).
+    $sem_key = $norm($semester);
+    if ($sem_key !== '') {
+        $has_sem = false;
+        try {
+            $ss = db()->prepare('SELECT DISTINCT semester FROM exam_routines WHERE exam_id = ?');
+            $ss->execute([$exam_id]);
+            foreach ($ss->fetchAll(PDO::FETCH_COLUMN) as $s) {
+                if ($norm((string)$s) === $sem_key) { $has_sem = true; break; }
+            }
+        } catch (Throwable $e) {
+            $has_sem = false;
+        }
+        if ($has_sem) {
+            $items = array_values(array_filter(
+                $items,
+                static fn($i) => $norm((string)($i['routine_semester'] ?? '')) === $sem_key
+            ));
+        }
     }
 
     $by_osid = [];
@@ -380,7 +412,12 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
     // only runs for cards that cannot be tied to an exam.
     $exam_id = ac_card_exam_id($admit_card_id);
     if ($exam_id > 0) {
-        $resolved = ac_resolve_student_courses($exam_id, $student_id);
+        $card_row = ac_get_card($admit_card_id);
+        $resolved = ac_resolve_student_courses(
+            $exam_id,
+            $student_id,
+            (string)($card_row['semester'] ?? '')
+        );
         if ($resolved) return $resolved;
     }
 
@@ -572,13 +609,14 @@ function ac_check_access(int $admit_card_id, int $student_id): array
     }
 
     // Exam-linked cards: only students actually enrolled (registered) in
-    // at least one course of the card's EXAM may access the card. The
-    // exam-wide check is used because a card links one routine while the
-    // student's courses may sit in other routines of the same exam.
+    // at least one course of the card's EXAM may access the card, scoped to
+    // the card's semester so an enrollment in another semester of the same
+    // exam does not grant access to (or print on) this card.
     $exam_id    = ac_card_exam_id($admit_card_id);
     $routine_id = ac_card_routine_id($admit_card_id);
     if ($exam_id > 0) {
-        if (!ac_resolve_student_courses($exam_id, $student_id)) {
+        $card_row = ac_get_card($admit_card_id);
+        if (!ac_resolve_student_courses($exam_id, $student_id, (string)($card_row['semester'] ?? ''))) {
             return [
                 'allowed' => false,
                 'due'     => 0.0,
