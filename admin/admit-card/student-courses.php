@@ -91,9 +91,9 @@ if ($osids) {
                         . (($offer['academic_intake'] ?? '') !== '' ? ' · ' . $offer['academic_intake'] : ''));
                     if ($lbl === '') { $lbl = 'Offer #' . (int)$offer['offer_id']; }
                 ?>
-                <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= (int)$offer['offer_id'] ?>"
+                <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= (int)$offer['offer_id'] ?>&student=<?= $student_id ?>"
                    class="badge bg-primary-subtle text-primary border text-decoration-none"
-                   title="Open this course offer's registrations">
+                   title="Open this course offer's registrations and locate this student">
                     <i class="fas fa-external-link-alt me-1"></i><?= h($lbl) ?>
                 </a>
                 <?php else: ?>
