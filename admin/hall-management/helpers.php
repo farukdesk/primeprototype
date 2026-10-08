@@ -533,15 +533,17 @@ function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
     if ($has_subject_col) {
         try {
             $st = $db->prepare(
-                "SELECT DISTINCT s.batch_id, cc.course_code, cc.course_title, cc.time_slot,
-                        cos.id AS offer_subject_id
+                "SELECT s.batch_id, cc.course_code, cc.course_title, cc.time_slot,
+                        cos.id AS offer_subject_id,
+                        COUNT(DISTINCT a.student_id) AS student_count
                    FROM hm_hall_assignments a
                    JOIN students s ON s.id = a.student_id
                    JOIN co_registrations r ON r.student_id = s.id
                    JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
                    JOIN ac_admit_card_courses cc ON cc.offer_subject_id = cos.id AND cc.exam_date = a.exam_date
                    JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id AND ac.is_active = 1
-                  WHERE a.hall_id = ? AND a.exam_date = ?"
+                  WHERE a.hall_id = ? AND a.exam_date = ?
+                  GROUP BY s.batch_id, cc.course_code, cc.course_title, cc.time_slot, cos.id"
             );
             $st->execute([$hall_id, $exam_date]);
             $rows = $st->fetchAll();
@@ -566,11 +568,20 @@ function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
             foreach ($rows as $r) {
                 $bk  = (int)($r['batch_id'] ?? 0);
                 $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
+                if (isset($out[$bk][$key])) {
+                    // Same course offered via multiple offer subjects — combine seated counts
+                    $out[$bk][$key]['student_count'] = max((int)$out[$bk][$key]['student_count'], (int)$r['student_count']);
+                    if ($out[$bk][$key]['teachers'] === '' && isset($teachers[(int)$r['offer_subject_id']])) {
+                        $out[$bk][$key]['teachers'] = $teachers[(int)$r['offer_subject_id']];
+                    }
+                    continue;
+                }
                 $out[$bk][$key] = [
-                    'course_code'  => (string)$r['course_code'],
-                    'course_title' => (string)$r['course_title'],
-                    'time_slot'    => (string)($r['time_slot'] ?? ''),
-                    'teachers'     => $teachers[(int)$r['offer_subject_id']] ?? '',
+                    'course_code'   => (string)$r['course_code'],
+                    'course_title'  => (string)$r['course_title'],
+                    'time_slot'     => (string)($r['time_slot'] ?? ''),
+                    'teachers'      => $teachers[(int)$r['offer_subject_id']] ?? '',
+                    'student_count' => (int)$r['student_count'],
                 ];
             }
         } catch (Throwable $e) {}
@@ -580,7 +591,8 @@ function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
     $legacy_cond = $has_subject_col ? 'cc.offer_subject_id IS NULL' : '1=1';
     try {
         $st = $db->prepare(
-            "SELECT DISTINCT s.batch_id, cc.course_code, cc.course_title, cc.time_slot
+            "SELECT s.batch_id, cc.course_code, cc.course_title, cc.time_slot,
+                    COUNT(DISTINCT a.student_id) AS student_count
                FROM hm_hall_assignments a
                JOIN students s ON s.id = a.student_id
                JOIN ac_admit_cards ac ON ac.is_active = 1
@@ -590,7 +602,8 @@ function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
                JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
                                             AND cc.exam_date = a.exam_date
                                             AND $legacy_cond
-              WHERE a.hall_id = ? AND a.exam_date = ?"
+              WHERE a.hall_id = ? AND a.exam_date = ?
+              GROUP BY s.batch_id, cc.course_code, cc.course_title, cc.time_slot"
         );
         $st->execute([$hall_id, $exam_date]);
         foreach ($st->fetchAll() as $r) {
@@ -598,10 +611,11 @@ function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
             $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
             if (isset($out[$bk][$key])) continue;
             $out[$bk][$key] = [
-                'course_code'  => (string)$r['course_code'],
-                'course_title' => (string)$r['course_title'],
-                'time_slot'    => (string)($r['time_slot'] ?? ''),
-                'teachers'     => '',
+                'course_code'   => (string)$r['course_code'],
+                'course_title'  => (string)$r['course_title'],
+                'time_slot'     => (string)($r['time_slot'] ?? ''),
+                'teachers'      => '',
+                'student_count' => (int)$r['student_count'],
             ];
         }
     } catch (Throwable $e) {}
