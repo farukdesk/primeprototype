@@ -10,6 +10,12 @@ $filter_date = trim((string)($_GET['exam_date'] ?? ''));
 if ($filter_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filter_date)) {
     $filter_date = '';
 }
+$date_given  = $filter_date !== '';
+$filter_time = trim((string)($_GET['exam_time'] ?? ''));
+if ($filter_time !== '' && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $filter_time)) {
+    $filter_time = '';
+}
+hm_ensure_schedule_columns();
 if ($filter_date === '') {
     // Default to the exam date with assignments nearest to today so the
     // Filled/Available counts reflect real data instead of showing 0.
@@ -34,6 +40,8 @@ $scope  = get_dept_scope();
 $where  = [];
 $params = [];
 if ($filter_dept > 0) { $where[] = 'h.dept_id = ?'; $params[] = $filter_dept; }
+if ($date_given)      { $where[] = 'h.exam_date = ?'; $params[] = $filter_date; }
+if ($filter_time !== '') { $where[] = 'h.exam_time = ?'; $params[] = $filter_time; }
 if ($scope !== null) {
     if (empty($scope)) {
         $where[] = '1 = 0';
@@ -53,7 +61,7 @@ try {
            JOIN dept_departments d ON d.id = h.dept_id
       LEFT JOIN users u            ON u.id = h.created_by
           $where_sql
-          ORDER BY d.name ASC, h.room_number ASC"
+          ORDER BY d.name ASC, h.room_number ASC, h.exam_date ASC, h.exam_time ASC"
     );
     $st->execute($params);
     $halls = $st->fetchAll();
@@ -100,7 +108,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-body p-3">
         <form method="GET" class="row g-2 align-items-end">
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <label class="form-label fw-medium mb-1">Department</label>
                 <select name="dept_id" class="form-select form-select-sm">
                     <option value="">All departments</option>
@@ -114,6 +122,10 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-3">
                 <label class="form-label fw-medium mb-1">Exam Date <span class="text-muted fw-normal">(for seat counts)</span></label>
                 <input type="date" name="exam_date" class="form-control form-control-sm" value="<?= h($filter_date) ?>">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1">Exam Time</label>
+                <input type="time" name="exam_time" class="form-control form-control-sm" value="<?= h($filter_time !== '' ? substr($filter_time, 0, 5) : '') ?>">
             </div>
             <div class="col-md-3 d-flex gap-2">
                 <button class="btn btn-sm btn-primary" style="border-radius:8px;"><i class="fas fa-filter me-1"></i> Filter</button>
@@ -141,6 +153,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th style="width:50px;">#</th>
                         <th>Room Number</th>
                         <th>Department</th>
+                        <th>Exam Date &amp; Time</th>
                         <th class="text-center">Columns</th>
                         <th class="text-center">Rows</th>
                         <th class="text-center">Total Seat Capacity</th>
@@ -161,6 +174,9 @@ require_once __DIR__ . '/../includes/header.php';
                             </a>
                         </td>
                         <td><?= h($hl['dept_name']) ?></td>
+                        <td style="font-size:.85rem;">
+                            <i class="far fa-calendar-alt me-1 text-muted"></i><?= h(hm_slot_label($hl['exam_date'] ?? null, $hl['exam_time'] ?? null)) ?>
+                        </td>
                         <td class="text-center"><?= (int)$hl['num_columns'] ?></td>
                         <td class="text-center"><?= (int)$hl['num_rows'] ?></td>
                         <?php

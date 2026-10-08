@@ -3,6 +3,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_access('hall-management', 'can_edit');
 require_once __DIR__ . '/helpers.php';
 
+hm_ensure_schedule_columns();
 $hall_id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $hall    = $hall_id > 0 ? hm_get_hall($hall_id) : null;
 if (!$hall) {
@@ -18,6 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $old = [
         'dept_id'     => (int)($_POST['dept_id'] ?? 0),
         'room_number' => trim($_POST['room_number'] ?? ''),
+        'exam_date'   => trim($_POST['exam_date'] ?? ''),
+        'exam_time'   => trim($_POST['exam_time'] ?? ''),
         'num_columns' => (int)($_POST['num_columns'] ?? 0),
         'num_rows'    => (int)($_POST['num_rows'] ?? 0),
         'notes'       => trim($_POST['notes'] ?? ''),
@@ -28,6 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $old = [
         'dept_id'     => (int)$hall['dept_id'],
         'room_number' => $hall['room_number'],
+        'exam_date'   => (string)($hall['exam_date'] ?? ''),
+        'exam_time'   => (string)($hall['exam_time'] ?? ''),
         'num_columns' => (int)$hall['num_columns'],
         'num_rows'    => (int)$hall['num_rows'],
         'notes'       => (string)($hall['notes'] ?? ''),
@@ -45,6 +50,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'You do not have permission for that department.';
     }
     if ($old['room_number'] === '') $errors[] = 'Room number is required.';
+    if ($old['exam_date'] === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $old['exam_date'])) {
+        $errors[] = 'Exam date is required.';
+    }
+    if ($old['exam_time'] === '' || !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $old['exam_time'])) {
+        $errors[] = 'Exam time is required.';
+    }
     if ($old['num_columns'] < 1 || $old['num_columns'] > 50) $errors[] = 'Number of columns must be between 1 and 50.';
     if ($old['num_rows'] < 1 || $old['num_rows'] > 500)      $errors[] = 'Number of rows must be between 1 and 500.';
 
@@ -54,12 +65,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($cap_err) $errors[] = $cap_err;
     }
 
-    if (!$errors && $old['room_number'] !== '') {
-        $st = db()->prepare('SELECT COUNT(*) FROM hm_halls WHERE dept_id = ? AND room_number = ? AND id <> ?');
-        $st->execute([$old['dept_id'], $old['room_number'], $hall_id]);
-        if ((int)$st->fetchColumn() > 0) {
-            $errors[] = 'A hall with this room number already exists for the selected department.';
-        }
+    if (!$errors && hm_room_slot_taken($old['room_number'], $old['exam_date'], $old['exam_time'], $hall_id)) {
+        $errors[] = 'Room ' . $old['room_number'] . ' is already booked on ' . $old['exam_date']
+                  . ' at ' . date('g:i A', strtotime($old['exam_time']))
+                  . '. The same room cannot be used twice on the same date and time — pick a different time or room.';
     }
 
     if (!$errors) {
@@ -67,13 +76,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             db()->beginTransaction();
             $st = db()->prepare(
                 'UPDATE hm_halls
-                    SET dept_id = ?, room_number = ?, num_columns = ?, num_rows = ?,
+                    SET dept_id = ?, room_number = ?, exam_date = ?, exam_time = ?, num_columns = ?, num_rows = ?,
                         total_capacity = ?, notes = ?, is_active = ?
                   WHERE id = ?'
             );
             $st->execute([
                 $old['dept_id'],
                 $old['room_number'],
+                $old['exam_date'],
+                $old['exam_time'],
                 $old['num_columns'],
                 $old['num_rows'],
                 array_sum($caps),
@@ -143,6 +154,17 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label fw-medium">Room Number <span class="text-danger">*</span></label>
                         <input type="text" name="room_number" class="form-control" maxlength="100" required
                                value="<?= h($old['room_number']) ?>">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-7">
+                            <label class="form-label fw-medium">Exam Date <span class="text-danger">*</span></label>
+                            <input type="date" name="exam_date" class="form-control" required value="<?= h($old['exam_date']) ?>">
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label fw-medium">Exam Time <span class="text-danger">*</span></label>
+                            <input type="time" name="exam_time" class="form-control" required value="<?= h($old['exam_time'] !== '' ? substr($old['exam_time'], 0, 5) : '') ?>">
+                        </div>
+                        <div class="form-text">A room can't be booked twice for the same date and time — the same date with a different time is okay.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-medium">Notes</label>
