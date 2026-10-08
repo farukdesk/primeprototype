@@ -90,8 +90,6 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
         .signoff-box { text-align: center; }
         .sig-line { border-top: 1px solid #999; margin-bottom: 5px; margin-top: 36px; }
 
-        .footer { margin-top: 12px; border-top: 1px solid #ccc; padding-top: 4px; font-size: 10px; color: #666; display: flex; justify-content: space-between; }
-
         @media print {
             @page { size: A4 portrait; margin: 10mm; }
             .no-print { display: none !important; }
@@ -161,10 +159,12 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
             <thead>
                 <tr>
                     <th style="width:36px;">#</th>
-                    <th style="width:120px;">Student ID</th>
+                    <th style="width:110px;">Student ID</th>
                     <th>Name</th>
-                    <th style="width:70px;">Seat</th>
-                    <th style="width:180px;">Signature</th>
+                    <th style="width:60px;">Seat</th>
+                    <th style="width:90px;">Script No.</th>
+                    <th style="width:140px;">Signature</th>
+                    <th style="width:110px;">Remarks</th>
                 </tr>
             </thead>
             <tbody>
@@ -174,7 +174,9 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
                     <td class="c"><?= h($stu['student_code']) ?></td>
                     <td><?= h($stu['full_name']) ?></td>
                     <td class="c">C<?= (int)$stu['col_no'] ?>-S<?= (int)$stu['seat_no'] ?></td>
+                    <td></td>
                     <td class="sig"></td>
+                    <td></td>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -189,11 +191,6 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
                 <div class="sig-line"></div>
                 Invigilator 2
             </div>
-        </div>
-
-        <div class="footer">
-            <span>Room <?= h($hall['room_number']) ?> — <?= h($grp['name']) ?></span>
-            <span>Printed on <?= h(date('d M Y, h:i A')) ?></span>
         </div>
     </div>
     <?php endforeach; ?>
