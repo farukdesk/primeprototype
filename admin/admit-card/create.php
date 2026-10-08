@@ -585,21 +585,6 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 
-    <?php if ($dup_cards): ?>
-    <div class="alert alert-danger small">
-        <strong><?= count($dup_cards) ?> ACTIVE admit card(s) with this exam name already exist.</strong>
-        Their saved exam dates/times are pre-filled in the course rows below.
-        Student PDFs merge the courses of every active card with the same exam name, so generating
-        again now would mix the old dates/times into the new cards. Deactivate or delete these first:
-        <ul class="mb-0 ps-3">
-            <?php foreach ($dup_cards as $c): ?>
-            <li><a href="<?= APP_URL ?>/admit-card/view.php?id=<?= (int)$c['id'] ?>">Card #<?= (int)$c['id'] ?></a>
-                — <?= h($c['exam_name']) ?> (<?= h($c['semester']) ?>)</li>
-            <?php endforeach; ?>
-        </ul>
-    </div>
-    <?php endif; ?>
-
     <?php foreach ($batches as $bi => $b): ?>
     <div class="card mb-4" style="border-radius:12px;" data-batch="<?= $bi ?>" data-batch-name="<?= h(acg_code_key($b['batch_name'])) ?>">
         <div class="card-header py-3 px-4 d-flex flex-wrap align-items-center gap-2">
