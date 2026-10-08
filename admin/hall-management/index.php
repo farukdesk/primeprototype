@@ -175,7 +175,11 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?= h($hl['dept_name']) ?></td>
                         <td style="font-size:.85rem;">
-                            <i class="far fa-calendar-alt me-1 text-muted"></i><?= h(hm_slot_label($hl['exam_date'] ?? null, $hl['exam_time'] ?? null)) ?>
+                            <?php if (!empty($hl['exam_date'])): ?>
+                            <i class="far fa-calendar-alt me-1 text-muted"></i><?= h(hm_slot_label($hl['exam_date'], $hl['exam_time'] ?? null)) ?>
+                            <?php else: ?>
+                            <span class="text-muted fst-italic">Auto — set after seat assignment</span>
+                            <?php endif; ?>
                         </td>
                         <td class="text-center"><?= (int)$hl['num_columns'] ?></td>
                         <td class="text-center"><?= (int)$hl['num_rows'] ?></td>

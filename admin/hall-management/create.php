@@ -30,11 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'You do not have permission for that department.';
     }
     if ($old['room_number'] === '') $errors[] = 'Room number is required.';
-    if ($old['exam_date'] === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $old['exam_date'])) {
-        $errors[] = 'Exam date is required.';
+    if ($old['exam_date'] !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $old['exam_date'])) {
+        $errors[] = 'Exam date is invalid.';
     }
-    if ($old['exam_time'] === '' || !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $old['exam_time'])) {
-        $errors[] = 'Exam time is required.';
+    if ($old['exam_time'] !== '' && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $old['exam_time'])) {
+        $errors[] = 'Exam time is invalid.';
     }
     if ($old['num_columns'] < 1 || $old['num_columns'] > 50) $errors[] = 'Number of columns must be between 1 and 50.';
     if ($old['num_rows'] < 1 || $old['num_rows'] > 500)      $errors[] = 'Number of rows must be between 1 and 500.';
@@ -45,7 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($cap_err) $errors[] = $cap_err;
     }
 
-    if (!$errors && hm_room_slot_taken($old['room_number'], $old['exam_date'], $old['exam_time'])) {
+    if (!$errors && $old['exam_date'] !== '' && $old['exam_time'] !== ''
+            && hm_room_slot_taken($old['room_number'], $old['exam_date'], $old['exam_time'])) {
         $errors[] = 'Room ' . $old['room_number'] . ' is already booked on ' . $old['exam_date']
                   . ' at ' . date('g:i A', strtotime($old['exam_time']))
                   . '. The same room cannot be used twice on the same date and time — pick a different time or room.';
@@ -62,8 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $st->execute([
                 $old['dept_id'],
                 $old['room_number'],
-                $old['exam_date'],
-                $old['exam_time'],
+                $old['exam_date'] !== '' ? $old['exam_date'] : null,
+                $old['exam_time'] !== '' ? $old['exam_time'] : null,
                 $old['num_columns'],
                 $old['num_rows'],
                 array_sum($caps),
@@ -133,14 +134,14 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-7">
-                            <label class="form-label fw-medium">Exam Date <span class="text-danger">*</span></label>
-                            <input type="date" name="exam_date" class="form-control" required value="<?= h($old['exam_date']) ?>">
+                            <label class="form-label fw-medium">Exam Date <span class="text-muted fw-normal">(optional)</span></label>
+                            <input type="date" name="exam_date" class="form-control" value="<?= h($old['exam_date']) ?>">
                         </div>
                         <div class="col-5">
-                            <label class="form-label fw-medium">Exam Time <span class="text-danger">*</span></label>
-                            <input type="time" name="exam_time" class="form-control" required value="<?= h($old['exam_time'] !== '' ? substr($old['exam_time'], 0, 5) : '') ?>">
+                            <label class="form-label fw-medium">Exam Time <span class="text-muted fw-normal">(optional)</span></label>
+                            <input type="time" name="exam_time" class="form-control" value="<?= h($old['exam_time'] !== '' ? substr($old['exam_time'], 0, 5) : '') ?>">
                         </div>
-                        <div class="form-text">A room can't be booked twice for the same date and time — the same date with a different time is okay.</div>
+                        <div class="form-text">Leave blank — the exam date &amp; time are set automatically once seats are assigned (date from the seat assignment, time from the students' admit-card schedule).</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-medium">Notes</label>
