@@ -10,6 +10,23 @@ $filter_date = trim((string)($_GET['exam_date'] ?? ''));
 if ($filter_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filter_date)) {
     $filter_date = '';
 }
+if ($filter_date === '') {
+    // Default to the exam date with assignments nearest to today so the
+    // Filled/Available counts reflect real data instead of showing 0.
+    try {
+        hm_ensure_assignments_table();
+        $st = db()->prepare(
+            'SELECT exam_date FROM hm_hall_assignments
+              GROUP BY exam_date
+              ORDER BY ABS(DATEDIFF(exam_date, CURDATE())) ASC, exam_date DESC
+              LIMIT 1'
+        );
+        $st->execute();
+        $filter_date = (string)($st->fetchColumn() ?: '');
+    } catch (Throwable $e) {
+        $filter_date = '';
+    }
+}
 if ($filter_date === '') $filter_date = date('Y-m-d');
 $departments = hm_departments();
 
