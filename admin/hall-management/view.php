@@ -14,6 +14,88 @@ $page_title = 'Hall – ' . $hall['room_number'];
 $columns    = hm_hall_columns($hall_id);
 $can_edit   = is_super_admin() || can_access('hall-management', 'can_edit');
 
+// ── Assignment filters (students come from generated admit cards) ──────
+$f_dept    = (int)($_GET['a_dept'] ?? 0);
+$f_program = (int)($_GET['a_program'] ?? 0);
+$f_batch   = (int)($_GET['a_batch'] ?? 0);
+$f_date    = trim($_GET['a_date'] ?? '');
+$f_section = trim($_GET['a_section'] ?? '');
+$f_shift   = trim($_GET['a_shift'] ?? '');
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_date)) $f_date = '';
+if ($f_dept > 0 && !can_access_dept($f_dept)) $f_dept = 0;
+
+// ── POST actions: assign / unassign / clear ────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
+    csrf_check();
+    $action = (string)($_POST['action'] ?? '');
+    $ret    = APP_URL . '/hall-management/view.php?id=' . $hall_id;
+    hm_ensure_assignments_table();
+
+    if ($action === 'assign') {
+        $p_dept    = (int)($_POST['dept_id'] ?? 0);
+        $p_program = (int)($_POST['program_id'] ?? 0);
+        $p_batch   = (int)($_POST['batch_id'] ?? 0);
+        $p_date    = trim($_POST['exam_date'] ?? '');
+        $p_section = trim($_POST['section'] ?? '');
+        $p_shift   = trim($_POST['shift'] ?? '');
+        if ($p_dept <= 0 || $p_program <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
+            flash_set('error', 'Department, Program and Exam Date are required.');
+        } elseif (!can_access_dept($p_dept)) {
+            flash_set('error', 'You do not have permission for that department.');
+        } else {
+            $students = hm_find_exam_students($p_dept, $p_program, $p_batch, $p_date, $p_section, $p_shift);
+            if (!$students) {
+                flash_set('error', 'No admit-card students found for the selected Department / Program / Batch / Exam Date / Section / Shift.');
+            } else {
+                [$assigned, $skipped, $left] = hm_assign_students($hall_id, $p_date, $students, [
+                    'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
+                    'section' => $p_section, 'shift' => $p_shift,
+                ]);
+                $msg = $assigned . ' student(s) assigned to seats.';
+                if ($skipped > 0) $msg .= ' ' . $skipped . ' already seated elsewhere were skipped.';
+                if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — hall is full.';
+                flash_set($assigned > 0 ? 'success' : 'error', $msg);
+            }
+            $ret .= '&a_date=' . urlencode($p_date);
+        }
+        redirect($ret);
+    }
+
+    if ($action === 'unassign') {
+        $aid = (int)($_POST['assignment_id'] ?? 0);
+        $st  = db()->prepare('DELETE FROM hm_hall_assignments WHERE id = ? AND hall_id = ?');
+        $st->execute([$aid, $hall_id]);
+        flash_set('success', $st->rowCount() ? 'Seat assignment removed.' : 'Assignment not found.');
+        redirect($ret . ($f_date !== '' ? '&a_date=' . urlencode($f_date) : ''));
+    }
+
+    if ($action === 'clear_date') {
+        $p_date = trim($_POST['exam_date'] ?? '');
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
+            $st = db()->prepare('DELETE FROM hm_hall_assignments WHERE hall_id = ? AND exam_date = ?');
+            $st->execute([$hall_id, $p_date]);
+            flash_set('success', $st->rowCount() . ' assignment(s) cleared for ' . $p_date . '.');
+        }
+        redirect($ret);
+    }
+}
+
+// Dropdown data + current view state
+$asg_depts    = hm_departments();
+$asg_programs = hm_programs();
+$asg_batches  = hm_batches();
+$asg_shifts   = hm_shift_options();
+$asg_sections = hm_section_options();
+$asg_dates    = hm_hall_assignment_dates($hall_id);
+if ($f_date === '' && $asg_dates) $f_date = (string)$asg_dates[0];
+$assignments  = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
+
+// Preview of matching students (before assigning)
+$preview = null;
+if (isset($_GET['preview']) && $f_dept > 0 && $f_program > 0 && $f_date !== '') {
+    $preview = hm_find_exam_students($f_dept, $f_program, $f_batch, $f_date, $f_section, $f_shift);
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
@@ -59,8 +141,18 @@ require_once __DIR__ . '/../includes/header.php';
 
     <div class="col-lg-8">
         <div class="card" style="border-radius:12px;">
-            <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
-                <i class="fas fa-th me-2 text-primary"></i>Seat Layout
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center flex-wrap gap-2" style="border-radius:12px 12px 0 0;">
+                <span><i class="fas fa-th me-2 text-primary"></i>Seat Layout<?= $f_date !== '' ? ' — ' . h(date('d M Y', strtotime($f_date))) : '' ?></span>
+                <form method="get" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="id" value="<?= $hall_id ?>">
+                    <?php if ($asg_dates): ?>
+                    <select name="a_date" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                        <?php foreach ($asg_dates as $d): ?>
+                        <option value="<?= h($d) ?>" <?= $d === $f_date ? 'selected' : '' ?>><?= h(date('d M Y', strtotime($d))) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php endif; ?>
+                </form>
             </div>
             <div class="card-body">
                 <?php if (empty($columns)): ?>
@@ -77,21 +169,218 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="text-muted" style="font-size:.7rem;"><?= (int)$col['seat_capacity'] ?> seats</div>
                         </div>
                         <div class="d-flex flex-column gap-1 align-items-center">
-                            <?php for ($s = 1; $s <= (int)$col['seat_capacity']; $s++): ?>
+                            <?php for ($s = 1; $s <= (int)$col['seat_capacity']; $s++):
+                                $occ = $assignments[(int)$col['col_no'] . ':' . $s] ?? null; ?>
+                            <?php if ($occ): ?>
+                            <div title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')') ?>"
+                                 style="min-width:92px;height:26px;border-radius:6px;background:#dcfce7;border:1px solid #86efac;
+                                        display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#166534;padding:0 4px;white-space:nowrap;">
+                                <?= h($occ['student_code']) ?>
+                            </div>
+                            <?php else: ?>
                             <div title="Column <?= (int)$col['col_no'] ?>, Seat <?= $s ?>"
                                  style="width:34px;height:26px;border-radius:6px;background:#eef2ff;border:1px solid #c7d2fe;
                                         display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#4338ca;">
                                 <?= $s ?>
                             </div>
+                            <?php endif; ?>
                             <?php endfor; ?>
                         </div>
                     </div>
                     <?php endforeach; ?>
                 </div>
+                <?php if ($assignments): ?>
+                <div class="text-center mt-3 text-muted" style="font-size:.8rem;">
+                    <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#dcfce7;border:1px solid #86efac;border-radius:3px;"></span> Assigned (<?= count($assignments) ?>)</span>
+                    <span><span style="display:inline-block;width:12px;height:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:3px;"></span> Free (<?= max(0, (int)$hall['total_capacity'] - count($assignments)) ?>)</span>
+                </div>
+                <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
     </div>
 </div>
+
+<?php if ($can_edit): ?>
+<div class="card mt-4" style="border-radius:12px;">
+    <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
+        <i class="fas fa-user-plus me-2 text-primary"></i>Assign Students
+        <span class="text-muted fw-normal" style="font-size:.8rem;">— students come from generated admit cards</span>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <input type="hidden" name="id" value="<?= $hall_id ?>">
+            <input type="hidden" name="preview" value="1">
+            <div class="col-md-3">
+                <label class="form-label" style="font-size:.8rem;">Department <span class="text-danger">*</span></label>
+                <select name="a_dept" class="form-select form-select-sm" required>
+                    <option value="">Select Department</option>
+                    <?php foreach ($asg_depts as $d): ?>
+                    <option value="<?= (int)$d['id'] ?>" <?= $f_dept === (int)$d['id'] ? 'selected' : '' ?>><?= h($d['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" style="font-size:.8rem;">Program <span class="text-danger">*</span></label>
+                <select name="a_program" class="form-select form-select-sm" required>
+                    <option value="">Select Program</option>
+                    <?php foreach ($asg_programs as $p): ?>
+                    <option value="<?= (int)$p['id'] ?>" <?= $f_program === (int)$p['id'] ? 'selected' : '' ?>><?= h($p['program_name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" style="font-size:.8rem;">Batch</label>
+                <select name="a_batch" class="form-select form-select-sm">
+                    <option value="">All Batches</option>
+                    <?php foreach ($asg_batches as $b): ?>
+                    <option value="<?= (int)$b['id'] ?>" <?= $f_batch === (int)$b['id'] ? 'selected' : '' ?>><?= h($b['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" style="font-size:.8rem;">Exam Date <span class="text-danger">*</span></label>
+                <input type="date" name="a_date" class="form-control form-control-sm" value="<?= h($f_date) ?>" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" style="font-size:.8rem;">Section</label>
+                <?php if ($asg_sections): ?>
+                <select name="a_section" class="form-select form-select-sm">
+                    <option value="">All Sections</option>
+                    <?php foreach ($asg_sections as $sec): ?>
+                    <option value="<?= h($sec) ?>" <?= $f_section === $sec ? 'selected' : '' ?>><?= h($sec) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php else: ?>
+                <input type="text" name="a_section" class="form-control form-control-sm" value="<?= h($f_section) ?>" placeholder="e.g. A">
+                <?php endif; ?>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" style="font-size:.8rem;">Shift</label>
+                <select name="a_shift" class="form-select form-select-sm">
+                    <option value="">All Shifts</option>
+                    <?php foreach ($asg_shifts as $sh): ?>
+                    <option value="<?= h($sh) ?>" <?= $f_shift === $sh ? 'selected' : '' ?>><?= h($sh) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-outline-primary w-100" style="border-radius:8px;">
+                    <i class="fas fa-search me-1"></i> Find Students
+                </button>
+            </div>
+        </form>
+
+        <?php if ($preview !== null): ?>
+        <hr>
+        <?php if (empty($preview)): ?>
+        <div class="alert alert-warning mb-0" style="font-size:.9rem;">
+            No admit-card students found for the selected filters.
+        </div>
+        <?php else:
+            $busy_ids  = array_flip(hm_busy_student_ids($f_date, $f_shift));
+            $free_cnt  = max(0, (int)$hall['total_capacity'] - count($assignments));
+            $new_cnt   = 0;
+            foreach ($preview as $stu) { if (!isset($busy_ids[(int)$stu['id']])) $new_cnt++; }
+        ?>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <div style="font-size:.9rem;">
+                <span class="badge bg-primary"><?= count($preview) ?> student(s) found</span>
+                <span class="badge bg-success"><?= $new_cnt ?> to seat</span>
+                <span class="badge bg-secondary"><?= count($preview) - $new_cnt ?> already seated</span>
+                <span class="badge <?= $free_cnt >= $new_cnt ? 'bg-info' : 'bg-danger' ?>"><?= $free_cnt ?> free seat(s) in this hall</span>
+            </div>
+            <form method="post" class="mb-0">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="assign">
+                <input type="hidden" name="dept_id" value="<?= $f_dept ?>">
+                <input type="hidden" name="program_id" value="<?= $f_program ?>">
+                <input type="hidden" name="batch_id" value="<?= $f_batch ?>">
+                <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
+                <input type="hidden" name="section" value="<?= h($f_section) ?>">
+                <input type="hidden" name="shift" value="<?= h($f_shift) ?>">
+                <button type="submit" class="btn btn-sm btn-success" style="border-radius:8px;"
+                        onclick="return confirm('Assign <?= $new_cnt ?> student(s) to the free seats of this hall?');">
+                    <i class="fas fa-chair me-1"></i> Assign to Seats
+                </button>
+            </form>
+        </div>
+        <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
+            <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                <thead class="table-light" style="position:sticky;top:0;">
+                    <tr><th>#</th><th>Student ID</th><th>Name</th><th>Batch</th><th>Shift</th><th>Section</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($preview as $i => $stu): ?>
+                    <tr>
+                        <td><?= $i + 1 ?></td>
+                        <td class="fw-semibold"><?= h($stu['student_id']) ?></td>
+                        <td><?= h($stu['full_name']) ?></td>
+                        <td><?= h($stu['batch_name'] ?? '') ?></td>
+                        <td><?= h($stu['shift'] ?? '') ?></td>
+                        <td><?= h($stu['section'] ?? '') ?></td>
+                        <td>
+                            <?= isset($busy_ids[(int)$stu['id']])
+                                ? '<span class="badge bg-secondary">Already seated</span>'
+                                : '<span class="badge bg-success">Will be seated</span>' ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
+    </div>
+</div>
+
+<?php if ($f_date !== '' && $assignments): ?>
+<div class="card mt-4" style="border-radius:12px;">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center" style="border-radius:12px 12px 0 0;">
+        <span><i class="fas fa-users me-2 text-primary"></i>Assigned Students — <?= h(date('d M Y', strtotime($f_date))) ?> (<?= count($assignments) ?>)</span>
+        <form method="post" class="mb-0">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="clear_date">
+            <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
+            <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:8px;"
+                    onclick="return confirm('Remove ALL seat assignments of this hall for <?= h($f_date) ?>?');">
+                <i class="fas fa-trash me-1"></i> Clear All
+            </button>
+        </form>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                <thead class="table-light">
+                    <tr><th class="ps-3">Seat</th><th>Student ID</th><th>Name</th><th>Section</th><th>Shift</th><th class="text-end pe-3">Action</th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($assignments as $a): ?>
+                    <tr>
+                        <td class="ps-3 fw-semibold">C<?= (int)$a['col_no'] ?>-S<?= (int)$a['seat_no'] ?></td>
+                        <td><?= h($a['student_code']) ?></td>
+                        <td><?= h($a['full_name']) ?></td>
+                        <td><?= h($a['section'] ?? '') ?></td>
+                        <td><?= h($a['shift'] ?? '') ?></td>
+                        <td class="text-end pe-3">
+                            <form method="post" class="d-inline mb-0">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="unassign">
+                                <input type="hidden" name="assignment_id" value="<?= (int)$a['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger py-0" style="border-radius:6px;font-size:.75rem;"
+                                        onclick="return confirm('Remove this seat assignment?');">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
