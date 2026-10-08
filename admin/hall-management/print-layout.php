@@ -1,6 +1,6 @@
 <?php
 /**
- * Printable A4 seat layout of a hall for one exam date.
+ * Printable A4 landscape seat layout of a hall for one exam date.
  * Header: university logo + name, Room Number, exam date; FRONT / BOARD
  * banner above the seat grid, batch-coloured seats, legend and the exam
  * schedule (course / teacher / time slot per batch) below.
@@ -83,7 +83,7 @@ foreach ($assignments as $a) {
         .footer { margin-top: 14px; border-top: 1px solid #ccc; padding-top: 4px; font-size: 10px; color: #666; display: flex; justify-content: space-between; }
 
         @media print {
-            @page { size: A4 portrait; margin: 10mm; }
+            @page { size: A4 landscape; margin: 10mm; }
             .no-print { display: none !important; }
             .page { max-width: 100%; padding: 0; }
             body, .seat, .front-board span, .col-batch span, .legend .sw, .schedule-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -163,11 +163,16 @@ foreach ($assignments as $a) {
     </div>
 
     <?php
-    // Exam schedule of the seated batches (course, teacher, time slot)
+    // Exam schedule of the seated batches (course, teacher, time slot, students)
+    $batch_counts = [];
+    foreach ($assignments as $a) {
+        $bk = (int)($a['student_batch_id'] ?? 0);
+        $batch_counts[$bk] = ($batch_counts[$bk] ?? 0) + 1;
+    }
     $schedule_rows = [];
     foreach ($batch_colors as $bk => $clr) {
         foreach (($batch_courses[$bk] ?? []) as $crs) {
-            $schedule_rows[] = ['batch' => $batch_names[$bk] ?? 'No batch', 'crs' => $crs];
+            $schedule_rows[] = ['batch' => $batch_names[$bk] ?? 'No batch', 'students' => $batch_counts[$bk] ?? 0, 'crs' => $crs];
         }
     }
     ?>
@@ -181,6 +186,7 @@ foreach ($assignments as $a) {
                     <th style="width:110px;">Course Code</th>
                     <th>Course Title</th>
                     <th>Course Teacher(s)</th>
+                    <th style="width:80px;">Students</th>
                     <th style="width:150px;">Time</th>
                 </tr>
             </thead>
@@ -191,6 +197,7 @@ foreach ($assignments as $a) {
                     <td class="c"><?= $crs['course_code'] !== '' ? h($crs['course_code']) : '—' ?></td>
                     <td><?= $crs['course_title'] !== '' ? h($crs['course_title']) : '—' ?></td>
                     <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '—' ?></td>
+                    <td class="c"><?= (int)$row['students'] ?></td>
                     <td class="c"><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '—' ?></td>
                 </tr>
                 <?php endforeach; ?>
