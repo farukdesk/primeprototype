@@ -339,7 +339,8 @@ if (is_portal_student()) {
                   || strpos($current_path, '/final-result-publish/') !== false
                   || strpos($current_path, '/student-verification/') !== false
                   || strpos($current_path, '/cert-verifiers/') !== false
-                  || $is_exam_invigilation_active || $is_admit_card_active;
+                  || $is_exam_invigilation_active || $is_admit_card_active
+                  || strpos($current_path, '/hall-management/') !== false;
     ?>
 
     <!-- ── Student Portal: show ONLY My Profile and My Finances for student users ── -->
@@ -936,7 +937,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Controller of Examinations ── -->
-    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('exam-routine') || can_access('admit-card')): ?>
+    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('exam-routine') || can_access('admit-card') || can_access('hall-management')): ?>
     <button class="nav-group-toggle <?= $is_coe_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-coe"
             aria-expanded="<?= $is_coe_active ? 'true' : 'false' ?>">
@@ -1096,6 +1097,14 @@ if (is_portal_student()) {
                 </a>
             </li>
             <?php endif; ?>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('hall-management')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/hall-management/index.php"
+                   class="<?= strpos($current_path, '/hall-management/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-door-open"></i> Hall Management
+                </a>
+            </li>
             <?php endif; ?>
         </ul>
     </div>

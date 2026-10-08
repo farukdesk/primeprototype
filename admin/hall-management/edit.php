@@ -1,0 +1,244 @@
+<?php
+require_once __DIR__ . '/../includes/auth.php';
+require_access('hall-management', 'can_edit');
+require_once __DIR__ . '/helpers.php';
+
+$hall_id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
+$hall    = $hall_id > 0 ? hm_get_hall($hall_id) : null;
+if (!$hall) {
+    flash_set('error', 'Hall not found or you do not have permission to access it.');
+    redirect(APP_URL . '/hall-management/index.php');
+}
+
+$page_title  = 'Edit Hall – ' . $hall['room_number'];
+$departments = hm_departments();
+
+$errors = [];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $old = [
+        'dept_id'     => (int)($_POST['dept_id'] ?? 0),
+        'room_number' => trim($_POST['room_number'] ?? ''),
+        'num_columns' => (int)($_POST['num_columns'] ?? 0),
+        'num_rows'    => (int)($_POST['num_rows'] ?? 0),
+        'notes'       => trim($_POST['notes'] ?? ''),
+        'is_active'   => isset($_POST['is_active']) ? 1 : 0,
+    ];
+    $old_caps = array_values(array_map('intval', (array)($_POST['col_capacity'] ?? [])));
+} else {
+    $old = [
+        'dept_id'     => (int)$hall['dept_id'],
+        'room_number' => $hall['room_number'],
+        'num_columns' => (int)$hall['num_columns'],
+        'num_rows'    => (int)$hall['num_rows'],
+        'notes'       => (string)($hall['notes'] ?? ''),
+        'is_active'   => (int)$hall['is_active'],
+    ];
+    $old_caps = array_map(static fn($c) => (int)$c['seat_capacity'], hm_hall_columns($hall_id));
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_check();
+
+    if ($old['dept_id'] <= 0) {
+        $errors[] = 'Please select a department.';
+    } elseif (!can_access_dept($old['dept_id'])) {
+        $errors[] = 'You do not have permission for that department.';
+    }
+    if ($old['room_number'] === '') $errors[] = 'Room number is required.';
+    if ($old['num_columns'] < 1 || $old['num_columns'] > 50) $errors[] = 'Number of columns must be between 1 and 50.';
+    if ($old['num_rows'] < 1 || $old['num_rows'] > 500)      $errors[] = 'Number of rows must be between 1 and 500.';
+
+    $caps = [];
+    if (!$errors) {
+        [$caps, $cap_err] = hm_parse_columns($old_caps, $old['num_columns']);
+        if ($cap_err) $errors[] = $cap_err;
+    }
+
+    if (!$errors && $old['room_number'] !== '') {
+        $st = db()->prepare('SELECT COUNT(*) FROM hm_halls WHERE dept_id = ? AND room_number = ? AND id <> ?');
+        $st->execute([$old['dept_id'], $old['room_number'], $hall_id]);
+        if ((int)$st->fetchColumn() > 0) {
+            $errors[] = 'A hall with this room number already exists for the selected department.';
+        }
+    }
+
+    if (!$errors) {
+        try {
+            db()->beginTransaction();
+            $st = db()->prepare(
+                'UPDATE hm_halls
+                    SET dept_id = ?, room_number = ?, num_columns = ?, num_rows = ?,
+                        total_capacity = ?, notes = ?, is_active = ?
+                  WHERE id = ?'
+            );
+            $st->execute([
+                $old['dept_id'],
+                $old['room_number'],
+                $old['num_columns'],
+                $old['num_rows'],
+                array_sum($caps),
+                $old['notes'] !== '' ? $old['notes'] : null,
+                $old['is_active'],
+                $hall_id,
+            ]);
+            hm_save_columns($hall_id, $caps);
+            db()->commit();
+            flash_set('success', 'Hall "' . $old['room_number'] . '" updated.');
+            redirect(APP_URL . '/hall-management/view.php?id=' . $hall_id);
+        } catch (Throwable $e) {
+            if (db()->inTransaction()) db()->rollBack();
+            $errors[] = 'Could not update the hall.';
+        }
+    }
+}
+
+require_once __DIR__ . '/../includes/header.php';
+?>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/index.php">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="<?= APP_URL ?>/hall-management/index.php">Hall Management</a></li>
+            <li class="breadcrumb-item active">Edit – <?= h($hall['room_number']) ?></li>
+        </ol>
+    </nav>
+    <a href="<?= APP_URL ?>/hall-management/view.php?id=<?= $hall_id ?>" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">
+        <i class="fas fa-eye me-1"></i> View Layout
+    </a>
+</div>
+
+<?php flash_show(); ?>
+
+<?php if ($errors): ?>
+<div class="alert alert-danger" style="border-radius:12px;">
+    <ul class="mb-0">
+        <?php foreach ($errors as $e): ?><li><?= h($e) ?></li><?php endforeach; ?>
+    </ul>
+</div>
+<?php endif; ?>
+
+<form method="POST" id="hallForm">
+    <?= csrf_field() ?>
+    <input type="hidden" name="id" value="<?= $hall_id ?>">
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card" style="border-radius:12px;">
+                <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
+                    <i class="fas fa-door-open me-2 text-primary"></i>Hall Details
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Department <span class="text-danger">*</span></label>
+                        <select name="dept_id" class="form-select" required>
+                            <option value="">Select department…</option>
+                            <?php foreach ($departments as $d): ?>
+                            <option value="<?= $d['id'] ?>" <?= $old['dept_id'] === (int)$d['id'] ? 'selected' : '' ?>>
+                                <?= h($d['name']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Room Number <span class="text-danger">*</span></label>
+                        <input type="text" name="room_number" class="form-control" maxlength="100" required
+                               value="<?= h($old['room_number']) ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Notes</label>
+                        <textarea name="notes" class="form-control" rows="2" maxlength="500"><?= h($old['notes']) ?></textarea>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="is_active" id="isActive"
+                               <?= $old['is_active'] ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="isActive">Active</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card" style="border-radius:12px;">
+                <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
+                    <i class="fas fa-th me-2 text-primary"></i>Seat Layout Generator
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium mb-1">How many columns? <span class="text-danger">*</span></label>
+                            <input type="number" name="num_columns" id="numColumns" class="form-control"
+                                   min="1" max="50" required value="<?= $old['num_columns'] ?: '' ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium mb-1">How many rows? <span class="text-danger">*</span></label>
+                            <input type="number" name="num_rows" id="numRows" class="form-control"
+                                   min="1" max="500" required value="<?= $old['num_rows'] ?: '' ?>">
+                        </div>
+                        <div class="col-md-4">
+                            <button type="button" id="generateCols" class="btn btn-outline-primary w-100" style="border-radius:8px;">
+                                <i class="fas fa-magic me-1"></i> Regenerate Columns
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-text mb-3">
+                        Change the column / row counts and click <strong>Regenerate Columns</strong> to rebuild the
+                        per-column seat capacities (pre-filled with the row count).
+                    </div>
+                    <div id="columnsWrap" class="row g-2"></div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="fw-semibold">Total Seat Capacity:
+                            <span class="badge bg-primary" id="totalCapacity" style="font-size:.95rem;">0 seats</span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="<?= APP_URL ?>/hall-management/index.php" class="btn btn-outline-secondary" style="border-radius:8px;">Cancel</a>
+                            <button type="submit" class="btn btn-primary" style="border-radius:8px;">
+                                <i class="fas fa-save me-1"></i> Update Hall
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<script>
+(function () {
+    const numColumns = document.getElementById('numColumns');
+    const numRows    = document.getElementById('numRows');
+    const wrap       = document.getElementById('columnsWrap');
+    const totalEl    = document.getElementById('totalCapacity');
+    const initial    = <?= json_encode($old_caps) ?>;
+
+    function updateTotal() {
+        let total = 0;
+        wrap.querySelectorAll('input[name="col_capacity[]"]').forEach(i => total += (parseInt(i.value, 10) || 0));
+        totalEl.textContent = total + ' seats';
+    }
+
+    function buildColumns(caps) {
+        const n = parseInt(numColumns.value, 10) || 0;
+        const r = parseInt(numRows.value, 10) || 0;
+        wrap.innerHTML = '';
+        if (n < 1) { updateTotal(); return; }
+        for (let i = 0; i < n; i++) {
+            const col = document.createElement('div');
+            col.className = 'col-md-3 col-sm-4 col-6';
+            const cap = (caps && caps[i]) ? caps[i] : (r > 0 ? r : '');
+            col.innerHTML =
+                '<label class="form-label mb-1" style="font-size:.8rem;">Column ' + (i + 1) + ' seats</label>' +
+                '<input type="number" name="col_capacity[]" class="form-control form-control-sm" min="1" max="500" required value="' + cap + '">';
+            wrap.appendChild(col);
+        }
+        updateTotal();
+    }
+
+    document.getElementById('generateCols').addEventListener('click', () => buildColumns(null));
+    wrap.addEventListener('input', updateTotal);
+
+    buildColumns(initial.length > 0 ? initial : null);
+})();
+</script>
+
+<?php require_once __DIR__ . '/../includes/footer.php'; ?>
