@@ -285,9 +285,10 @@ function hm_busy_student_ids(string $exam_date, string $shift): array
 
 /**
  * Auto-assign students to seats column by column (front to back), keeping
- * ONE batch per column and alternating batches between adjacent columns
- * (so two neighbouring columns never hold the same batch while another
- * batch still has students waiting).
+ * ONE batch per column and alternating batches between adjacent columns:
+ * two neighbouring columns never hold the same batch. If only the
+ * neighbouring column's batch remains, the column is left empty (the gap
+ * lets the batch be seated again in the column after it).
  * Returns [assigned_count, skipped_already_seated, left_over].
  */
 function hm_assign_students(int $hall_id, string $exam_date, array $students, array $ctx): array
@@ -349,12 +350,19 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
                 if (!$list || $bk === $prev_batch) continue;
                 if (count($list) > $best) { $best = count($list); $pick = $bk; }
             }
-            if ($pick === null) {                 // only the neighbour's batch remains
-                foreach ($groups as $bk => $list) {
-                    if ($list) { $pick = $bk; break; }
+            if ($pick === null) {
+                // Only the neighbouring column's batch remains — leave this
+                // column empty so adjacent columns never share a batch. The
+                // empty column acts as a separator, so the next column may
+                // seat that batch again.
+                $has_left = false;
+                foreach ($groups as $list) {
+                    if ($list) { $has_left = true; break; }
                 }
+                if (!$has_left) break;            // no students left at all
+                $prev_batch = null;               // empty column breaks adjacency
+                continue;
             }
-            if ($pick === null) break;            // no students left at all
         }
 
         foreach ($info['free'] as $s) {
