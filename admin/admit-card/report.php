@@ -8,6 +8,9 @@
  *     with the number of courses offered per batch)
  *   • number of batch courses offered in the exam
  *   • number of admit card batches created
+ *   • how many admit cards SHOULD be created (students registered in the
+ *     semester's active course offers), how many were created and how many
+ *     are left (with the list of students still without a card)
  *   • number of eligible students (due as of today ≤ ৳500 or override)
  *   • number of NOT eligible students + the list of those students
  *
@@ -59,9 +62,12 @@ foreach ($exams as $e) {
 
 // ── Build the report ─────────────────────────────────────────────────────
 // $report[dept_id] = [
-//   'dept_name', 'batches' => [batch_id => ['name','courses','cards']],
+//   'dept_name', 'batches' => [batch_id => ['name','courses','cards','expected','covered']],
 //   'courses', 'cards', 'students' => [sid => row], 'eligible', 'blocked',
-//   'not_eligible' => [rows]
+//   'not_eligible' => [rows],
+//   'expected' => [sid => true]  students registered in this semester's offers
+//                                (how many cards SHOULD be created),
+//   'missing'  => [rows]         expected students without a card yet
 // ]
 $report = [];
 
@@ -85,6 +91,7 @@ if ($exam) {
     $cards = $st->fetchAll();
 
     $card_dept = [];   // card id → dept id
+    $card_bkey = [];   // card id → batch key inside the dept
     foreach ($cards as $row) {
         $did = (int)$row['dept_id'];
         if (!isset($report[$did])) {
@@ -97,6 +104,8 @@ if ($exam) {
                 'eligible'     => 0,
                 'blocked'      => 0,
                 'not_eligible' => [],
+                'expected'     => [],
+                'missing'      => [],
             ];
         }
         $bname = (string)($row['batch_label'] ?? '');
@@ -104,9 +113,11 @@ if ($exam) {
         $bkey  = $row['batch_id'] !== null ? 'b' . (int)$row['batch_id'] : 'l' . $bname;
         if (!isset($report[$did]['batches'][$bkey])) {
             $report[$did]['batches'][$bkey] = [
-                'name'    => $bname !== '' ? $bname : '—',
-                'courses' => 0,
-                'cards'   => 0,
+                'name'     => $bname !== '' ? $bname : '—',
+                'courses'  => 0,
+                'cards'    => 0,
+                'expected' => [],
+                'covered'  => [],
             ];
         }
         $report[$did]['batches'][$bkey]['courses'] += (int)$row['course_count'];
@@ -114,6 +125,7 @@ if ($exam) {
         $report[$did]['courses'] += (int)$row['course_count'];
         $report[$did]['cards']++;
         $card_dept[(int)$row['id']] = $did;
+        $card_bkey[(int)$row['id']] = $bkey;
     }
 
     // 2) Students covered by each card — resolved exactly like the card
@@ -121,8 +133,10 @@ if ($exam) {
     //    dept/program/batch fallback for manual cards).
     $sid_depts = [];    // internal student id → [dept id => true]
     foreach ($card_dept as $cid => $did) {
+        $bkey = $card_bkey[$cid];
         foreach (ac_card_student_ids($cid) as $sid) {
             $sid_depts[$sid][$did] = true;
+            $report[$did]['batches'][$bkey]['covered'][$sid] = true;
         }
     }
     if ($sid_depts) {
@@ -141,6 +155,86 @@ if ($exam) {
             }
         }
     }
+
+    // 2b) Students who SHOULD get an admit card for this exam: active
+    //     students registered in the active course offers of the exam's
+    //     semester, grouped by the offer's department and batch.
+    try {
+        $sql = "SELECT DISTINCT o.dept_id, d.name AS dept_name,
+                       o.batch_id, b.name AS batch_name, r.student_id AS sid
+                  FROM co_offers o
+                  JOIN dept_departments d  ON d.id = o.dept_id
+             LEFT JOIN student_batches b   ON b.id = o.batch_id
+                  JOIN co_offer_subjects cos ON cos.offer_id = o.id
+                  JOIN co_registrations r  ON r.offer_subject_id = cos.id
+                  JOIN students s          ON s.id = r.student_id AND s.status = 'Active'
+                 WHERE o.status = 'active' AND o.semester = ?"
+             . ($exam_scope_params ? ' AND o.dept_id IN (' . implode(',', array_fill(0, count($exam_scope_params), '?')) . ')' : '');
+        $st = $db->prepare($sql);
+        $st->execute(array_merge([$exam['semester']], $exam_scope_params));
+        foreach ($st->fetchAll() as $row) {
+            $did = (int)$row['dept_id'];
+            if (!isset($report[$did])) {
+                $report[$did] = [
+                    'dept_name'    => (string)$row['dept_name'],
+                    'batches'      => [],
+                    'courses'      => 0,
+                    'cards'        => 0,
+                    'students'     => [],
+                    'eligible'     => 0,
+                    'blocked'      => 0,
+                    'not_eligible' => [],
+                    'expected'     => [],
+                    'missing'      => [],
+                ];
+            }
+            $bname = (string)($row['batch_name'] ?? '');
+            $bkey  = $row['batch_id'] !== null ? 'b' . (int)$row['batch_id'] : 'l' . $bname;
+            if (!isset($report[$did]['batches'][$bkey])) {
+                $report[$did]['batches'][$bkey] = [
+                    'name'     => $bname !== '' ? $bname : '—',
+                    'courses'  => 0,
+                    'cards'    => 0,
+                    'expected' => [],
+                    'covered'  => [],
+                ];
+            }
+            $sid = (int)$row['sid'];
+            $report[$did]['expected'][$sid] = true;
+            $report[$did]['batches'][$bkey]['expected'][$sid] = true;
+        }
+    } catch (Throwable $e) {}
+
+    // 2c) Expected students still without a card (should be created, left).
+    $missing_sids = [];
+    foreach ($report as $did => &$dep) {
+        foreach (array_keys($dep['expected']) as $sid) {
+            if (!isset($dep['students'][$sid])) $missing_sids[$sid] = true;
+        }
+    }
+    unset($dep);
+    $missing_rows = [];
+    if ($missing_sids) {
+        $ids = array_keys($missing_sids);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $st  = $db->prepare(
+            'SELECT s.id AS sid, s.student_id, s.full_name, sb.name AS batch_name
+               FROM students s
+          LEFT JOIN student_batches sb ON sb.id = s.batch_id
+              WHERE s.id IN (' . $ph . ')'
+        );
+        $st->execute($ids);
+        foreach ($st->fetchAll() as $row) $missing_rows[(int)$row['sid']] = $row;
+    }
+    foreach ($report as $did => &$dep) {
+        foreach (array_keys($dep['expected']) as $sid) {
+            if (!isset($dep['students'][$sid]) && isset($missing_rows[$sid])) {
+                $dep['missing'][] = $missing_rows[$sid];
+            }
+        }
+        usort($dep['missing'], static fn($a, $b) => strcmp((string)$a['full_name'], (string)$b['full_name']));
+    }
+    unset($dep);
 
     // 3) Override holders on this exam's cards: always eligible.
     $overrides = [];
@@ -175,7 +269,7 @@ if ($exam) {
 }
 
 // Totals
-$tot = ['batches' => 0, 'courses' => 0, 'cards' => 0, 'students' => 0, 'eligible' => 0, 'blocked' => 0];
+$tot = ['batches' => 0, 'courses' => 0, 'cards' => 0, 'students' => 0, 'eligible' => 0, 'blocked' => 0, 'expected' => 0, 'left' => 0];
 foreach ($report as $dep) {
     $tot['batches']  += count($dep['batches']);
     $tot['courses']  += $dep['courses'];
@@ -183,6 +277,8 @@ foreach ($report as $dep) {
     $tot['students'] += count($dep['students']);
     $tot['eligible'] += $dep['eligible'];
     $tot['blocked']  += $dep['blocked'];
+    $tot['expected'] += count($dep['expected']);
+    $tot['left']     += count($dep['missing']);
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -255,6 +351,15 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-dark-subtle text-dark-emphasis border border-dark-subtle px-3 py-2">
             <i class="fas fa-id-card me-1"></i><?= (int)$tot['cards'] ?> admit card batch(es) created
         </span>
+        <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle px-3 py-2">
+            <i class="fas fa-users me-1"></i><?= (int)$tot['expected'] ?> card(s) should be created
+        </span>
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2">
+            <i class="fas fa-id-badge me-1"></i><?= (int)$tot['students'] ?> card(s) created
+        </span>
+        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2">
+            <i class="fas fa-hourglass-half me-1"></i><?= (int)$tot['left'] ?> left
+        </span>
         <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle px-3 py-2">
             <i class="fas fa-circle-check me-1"></i><?= (int)$tot['eligible'] ?> eligible student(s)
         </span>
@@ -275,8 +380,10 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Department</th>
                         <th>Batches</th>
                         <th class="text-center">Courses Offered</th>
-                        <th class="text-center">Admit Cards Created</th>
-                        <th class="text-center">Students</th>
+                        <th class="text-center">Card Batches</th>
+                        <th class="text-center">Cards Should Be Created</th>
+                        <th class="text-center">Cards Created</th>
+                        <th class="text-center">Left</th>
                         <th class="text-center">Eligible</th>
                         <th class="text-center">Not Eligible</th>
                     </tr>
@@ -290,7 +397,8 @@ require_once __DIR__ . '/../includes/header.php';
                             <span class="small">
                                 <?= h(implode(', ', array_map(
                                     static fn($b) => $b['name'] . ' (' . $b['courses'] . ' course' . ($b['courses'] === 1 ? '' : 's')
-                                        . ', ' . $b['cards'] . ' card' . ($b['cards'] === 1 ? '' : 's') . ')',
+                                        . ', ' . $b['cards'] . ' card batch' . ($b['cards'] === 1 ? '' : 'es')
+                                        . ', ' . count($b['covered']) . '/' . count($b['expected']) . ' students)',
                                     $dep['batches']
                                 ))) ?>
                             </span>
@@ -303,7 +411,21 @@ require_once __DIR__ . '/../includes/header.php';
                                 <span class="badge bg-warning-subtle text-warning-emphasis border" title="No admit cards generated for this exam yet">0</span>
                             <?php endif; ?>
                         </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary-subtle text-primary-emphasis border"><?= count($dep['expected']) ?></span>
+                        </td>
                         <td class="text-center"><?= count($dep['students']) ?></td>
+                        <td class="text-center">
+                            <?php if (count($dep['missing']) > 0): ?>
+                                <button class="btn btn-sm btn-outline-warning d-print-none" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#left-<?= (int)$did ?>">
+                                    <i class="fas fa-hourglass-half me-1"></i><?= count($dep['missing']) ?> — view list
+                                </button>
+                                <span class="d-none d-print-inline badge bg-warning-subtle text-warning-emphasis border"><?= count($dep['missing']) ?></span>
+                            <?php else: ?>
+                                <span class="badge bg-success-subtle text-success-emphasis border">0</span>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-center">
                             <span class="badge bg-success-subtle text-success-emphasis border"><?= (int)$dep['eligible'] ?></span>
                         </td>
@@ -319,9 +441,41 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </td>
                     </tr>
+                    <?php if (count($dep['missing']) > 0): ?>
+                    <tr class="collapse" id="left-<?= (int)$did ?>">
+                        <td colspan="9" class="bg-light p-3">
+                            <div class="fw-semibold small mb-2 text-warning-emphasis">
+                                <i class="fas fa-hourglass-half me-1"></i>Students still without an admit card — <?= h($dep['dept_name']) ?>
+                                (registered in this semester's course offers but not covered by any generated card)
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered bg-white mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:50px;">#</th>
+                                            <th>Student ID</th>
+                                            <th>Name</th>
+                                            <th>Batch</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    <?php foreach ($dep['missing'] as $i => $s): ?>
+                                        <tr>
+                                            <td><?= $i + 1 ?></td>
+                                            <td><?= h($s['student_id']) ?></td>
+                                            <td><?= h($s['full_name']) ?></td>
+                                            <td><?= h($s['batch_name'] ?? '—') ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endif; ?>
                     <?php if ($dep['blocked'] > 0): ?>
                     <tr class="collapse" id="ne-<?= (int)$did ?>">
-                        <td colspan="7" class="bg-light p-3">
+                        <td colspan="9" class="bg-light p-3">
                             <div class="fw-semibold small mb-2 text-danger">
                                 <i class="fas fa-user-xmark me-1"></i>Not eligible students — <?= h($dep['dept_name']) ?>
                                 (due as of today exceeds ৳<?= number_format(AC_DUE_THRESHOLD) ?>)
@@ -361,7 +515,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= (int)$tot['batches'] ?> batch(es)</td>
                         <td class="text-center"><?= (int)$tot['courses'] ?></td>
                         <td class="text-center"><?= (int)$tot['cards'] ?></td>
+                        <td class="text-center"><?= (int)$tot['expected'] ?></td>
                         <td class="text-center"><?= (int)$tot['students'] ?></td>
+                        <td class="text-center"><?= (int)$tot['left'] ?></td>
                         <td class="text-center"><?= (int)$tot['eligible'] ?></td>
                         <td class="text-center"><?= (int)$tot['blocked'] ?></td>
                     </tr>
@@ -374,6 +530,8 @@ require_once __DIR__ . '/../includes/header.php';
         <i class="fas fa-circle-info me-1"></i>
         Students are counted through their course-offer registrations on this exam's admit cards —
         the schedule set on the Generate page.
+        "Cards Should Be Created" counts the active students registered in this semester's active course offers;
+        "Cards Created" counts students already covered by generated admit cards and "Left" is the difference.
         "Eligible" means the student's due as of today is within ৳<?= number_format(AC_DUE_THRESHOLD) ?> or an admin override exists —
         the same rule used for admit card downloads.
     </p>
