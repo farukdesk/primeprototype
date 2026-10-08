@@ -74,11 +74,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $batch_name = (string)$bst->fetchColumn();
                 $batch_lbl  = $batch_name !== '' ? $batch_name : ('#' . $bid);
 
-                // Students of this batch within the card's scope: for a
-                // routine-linked card only students registered in the routine's
-                // courses; otherwise the card's dept + program.
+                // Students of this batch within the card's scope: for a card
+                // with offer-linked course rows only students registered in
+                // those courses; for a routine-linked card only students
+                // registered in the routine's courses; otherwise the card's
+                // dept + program.
+                $ov_has_subject_rows = false;
+                try {
+                    $ovchk = $db->prepare('SELECT 1 FROM ac_admit_card_courses WHERE admit_card_id = ? AND offer_subject_id IS NOT NULL LIMIT 1');
+                    $ovchk->execute([$id]);
+                    $ov_has_subject_rows = (bool)$ovchk->fetchColumn();
+                } catch (Throwable $e) {
+                    // offer_subject_id column unavailable — fall back below
+                }
                 $ov_routine_id = (int)($card['routine_id'] ?? 0);
-                if ($ov_routine_id > 0) {
+                if ($ov_has_subject_rows) {
+                    $sst = $db->prepare(
+                        "SELECT DISTINCT s.id
+                           FROM students s
+                           JOIN co_registrations reg ON reg.student_id = s.id
+                           JOIN ac_admit_card_courses cc ON cc.offer_subject_id = reg.offer_subject_id AND cc.admit_card_id = ?
+                          WHERE s.batch_id = ? AND s.status NOT IN ('Withdrawn','Expelled')"
+                    );
+                    $sst->execute([$id, $bid]);
+                } elseif ($ov_routine_id > 0) {
                     $sst = $db->prepare(
                         "SELECT DISTINCT s.id
                            FROM students s
@@ -144,8 +163,35 @@ if ($card['batch_id']) {
     $batch_params = [$card['batch_id']];
 }
 
+// Does this card have course rows linked to course-offer subjects? If so the
+// eligible students are exactly the registered students of those subjects —
+// the same rule ac_card_student_ids() uses for the Total badge on the index.
+$card_has_subject_rows = false;
+try {
+    $chk = $db->prepare('SELECT 1 FROM ac_admit_card_courses WHERE admit_card_id = ? AND offer_subject_id IS NOT NULL LIMIT 1');
+    $chk->execute([$id]);
+    $card_has_subject_rows = (bool)$chk->fetchColumn();
+} catch (Throwable $e) {
+    // offer_subject_id column unavailable — fall back to routine / dept+program
+}
+
 $routine_id = (int)($card['routine_id'] ?? 0);
-if ($routine_id > 0) {
+if ($card_has_subject_rows) {
+    // Offer-linked card: only students registered in the card's own course
+    // rows are eligible (not the whole batch).
+    $students_stmt = $db->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.status, s.photo,
+                p.id AS pkg_id
+         FROM students s
+         JOIN co_registrations reg ON reg.student_id = s.id
+         JOIN ac_admit_card_courses cc ON cc.offer_subject_id = reg.offer_subject_id AND cc.admit_card_id = ?
+         LEFT JOIN sfp_packages p ON p.student_id = s.id
+         WHERE s.status = 'Active'
+         GROUP BY s.id
+         ORDER BY s.full_name ASC"
+    );
+    $students_stmt->execute([$id]);
+} elseif ($routine_id > 0) {
     // Routine-linked card: only students enrolled (registered) in the
     // routine's courses are eligible.
     $students_stmt = $db->prepare(
