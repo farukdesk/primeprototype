@@ -391,6 +391,125 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
     return [$assigned, $skipped, $left];
 }
 
+/**
+ * Exam courses (code, title, teacher(s), time slot) of the students seated
+ * in a hall on a date, grouped by the students' batch_id.
+ *
+ * Subject-linked admit-card course rows resolve through the students'
+ * course registrations (teachers from co_offer_subject_teachers); legacy
+ * card rows without subject links fall back to cards matching the
+ * student's dept / program / batch (no teacher information available).
+ *
+ * Returns: batch_id => list of ['course_code','course_title','time_slot','teachers'].
+ */
+function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
+{
+    hm_ensure_assignments_table();
+    $db  = db();
+    $out = [];   // batch_id => dedupe-key => row
+
+    $has_subject_col = false;
+    try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+
+    // ── Subject-linked cards: via the seated students' registrations ───
+    if ($has_subject_col) {
+        try {
+            $st = $db->prepare(
+                "SELECT DISTINCT s.batch_id, cc.course_code, cc.course_title, cc.time_slot,
+                        cos.id AS offer_subject_id
+                   FROM hm_hall_assignments a
+                   JOIN students s ON s.id = a.student_id
+                   JOIN co_registrations r ON r.student_id = s.id
+                   JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+                   JOIN ac_admit_card_courses cc ON cc.offer_subject_id = cos.id AND cc.exam_date = a.exam_date
+                   JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id AND ac.is_active = 1
+                  WHERE a.hall_id = ? AND a.exam_date = ?"
+            );
+            $st->execute([$hall_id, $exam_date]);
+            $rows = $st->fetchAll();
+
+            // Teacher names per offer subject
+            $teachers = [];
+            $osids    = array_values(array_unique(array_map(static fn($r) => (int)$r['offer_subject_id'], $rows)));
+            if ($osids) {
+                $ph = implode(',', array_fill(0, count($osids), '?'));
+                $ts = $db->prepare(
+                    "SELECT t.offer_subject_id,
+                            GROUP_CONCAT(f.name ORDER BY t.sort_order ASC, f.name ASC SEPARATOR ', ') AS teacher_names
+                       FROM co_offer_subject_teachers t
+                       JOIN dept_faculty f ON f.id = t.faculty_id
+                      WHERE t.offer_subject_id IN ($ph)
+                      GROUP BY t.offer_subject_id"
+                );
+                $ts->execute($osids);
+                foreach ($ts->fetchAll() as $t) $teachers[(int)$t['offer_subject_id']] = (string)$t['teacher_names'];
+            }
+
+            foreach ($rows as $r) {
+                $bk  = (int)($r['batch_id'] ?? 0);
+                $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
+                $out[$bk][$key] = [
+                    'course_code'  => (string)$r['course_code'],
+                    'course_title' => (string)$r['course_title'],
+                    'time_slot'    => (string)($r['time_slot'] ?? ''),
+                    'teachers'     => $teachers[(int)$r['offer_subject_id']] ?? '',
+                ];
+            }
+        } catch (Throwable $e) {}
+    }
+
+    // ── Legacy / manual cards (no subject links) ────────────────────────
+    $legacy_cond = $has_subject_col ? 'cc.offer_subject_id IS NULL' : '1=1';
+    try {
+        $st = $db->prepare(
+            "SELECT DISTINCT s.batch_id, cc.course_code, cc.course_title, cc.time_slot
+               FROM hm_hall_assignments a
+               JOIN students s ON s.id = a.student_id
+               JOIN ac_admit_cards ac ON ac.is_active = 1
+                                     AND ac.dept_id = s.dept_id
+                                     AND ac.program_id = s.program_id
+                                     AND (ac.batch_id IS NULL OR ac.batch_id = s.batch_id)
+               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+                                            AND cc.exam_date = a.exam_date
+                                            AND $legacy_cond
+              WHERE a.hall_id = ? AND a.exam_date = ?"
+        );
+        $st->execute([$hall_id, $exam_date]);
+        foreach ($st->fetchAll() as $r) {
+            $bk  = (int)($r['batch_id'] ?? 0);
+            $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
+            if (isset($out[$bk][$key])) continue;
+            $out[$bk][$key] = [
+                'course_code'  => (string)$r['course_code'],
+                'course_title' => (string)$r['course_title'],
+                'time_slot'    => (string)($r['time_slot'] ?? ''),
+                'teachers'     => '',
+            ];
+        }
+    } catch (Throwable $e) {}
+
+    foreach ($out as $bk => $rows) $out[$bk] = array_values($rows);
+    return $out;
+}
+
+/**
+ * Colour palette used to distinguish batches in the seat layout.
+ * Each entry: ['bg' => ..., 'border' => ..., 'text' => ...].
+ */
+function hm_batch_palette(): array
+{
+    return [
+        ['bg' => '#dcfce7', 'border' => '#86efac', 'text' => '#166534'], // green
+        ['bg' => '#dbeafe', 'border' => '#93c5fd', 'text' => '#1e40af'], // blue
+        ['bg' => '#fef9c3', 'border' => '#fde047', 'text' => '#854d0e'], // yellow
+        ['bg' => '#fce7f3', 'border' => '#f9a8d4', 'text' => '#9d174d'], // pink
+        ['bg' => '#ffedd5', 'border' => '#fdba74', 'text' => '#9a3412'], // orange
+        ['bg' => '#ede9fe', 'border' => '#c4b5fd', 'text' => '#5b21b6'], // violet
+        ['bg' => '#ccfbf1', 'border' => '#5eead4', 'text' => '#115e59'], // teal
+        ['bg' => '#fee2e2', 'border' => '#fca5a5', 'text' => '#991b1b'], // red
+    ];
+}
+
 /** Exam dates that already have assignments in this hall. */
 function hm_hall_assignment_dates(int $hall_id): array
 {

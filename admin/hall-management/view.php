@@ -90,6 +90,19 @@ $asg_dates    = hm_hall_assignment_dates($hall_id);
 if ($f_date === '' && $asg_dates) $f_date = (string)$asg_dates[0];
 $assignments  = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
 
+// Batch colours for the seat layout + per-batch exam course details
+$batch_palette = hm_batch_palette();
+$batch_colors  = [];   // batch_id => palette entry
+$batch_names   = [];   // batch_id => batch name
+foreach ($assignments as $a) {
+    $bk = (int)($a['student_batch_id'] ?? 0);
+    if (!isset($batch_colors[$bk])) {
+        $batch_colors[$bk] = $batch_palette[count($batch_colors) % count($batch_palette)];
+        $batch_names[$bk]  = $a['batch_name'] !== null && $a['batch_name'] !== '' ? (string)$a['batch_name'] : 'No batch';
+    }
+}
+$batch_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_batch($hall_id, $f_date) : [];
+
 // Preview of matching students (before assigning)
 $preview = null;
 if (isset($_GET['preview']) && $f_dept > 0 && $f_program > 0 && $f_date !== '') {
@@ -163,27 +176,34 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="d-flex gap-3 justify-content-center flex-wrap" style="overflow-x:auto;">
                     <?php foreach ($columns as $col):
-                        $col_batch = '';
+                        $col_batch    = '';
+                        $col_batch_id = null;
                         for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
                             $o = $assignments[(int)$col['col_no'] . ':' . $s] ?? null;
-                            if ($o && !empty($o['batch_name'])) { $col_batch = $o['batch_name']; break; }
+                            if ($o) { $col_batch = (string)($o['batch_name'] ?? ''); $col_batch_id = (int)($o['student_batch_id'] ?? 0); break; }
                         }
+                        $col_clr = $col_batch_id !== null ? ($batch_colors[$col_batch_id] ?? null) : null;
                     ?>
                     <div class="text-center">
                         <div class="fw-semibold mb-2" style="font-size:.8rem;color:#475569;">
                             Column <?= (int)$col['col_no'] ?>
                             <div class="text-muted" style="font-size:.7rem;"><?= (int)$col['seat_capacity'] ?> seats</div>
-                            <?php if ($col_batch !== ''): ?>
-                            <div style="font-size:.65rem;color:#166534;"><?= h($col_batch) ?></div>
+                            <?php if ($col_clr !== null): ?>
+                            <div style="font-size:.65rem;margin-top:2px;">
+                                <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:<?= h($col_clr['bg']) ?>;border:1px solid <?= h($col_clr['border']) ?>;color:<?= h($col_clr['text']) ?>;">
+                                    <?= h($col_batch !== '' ? $col_batch : 'No batch') ?>
+                                </span>
+                            </div>
                             <?php endif; ?>
                         </div>
                         <div class="d-flex flex-column gap-1 align-items-center">
                             <?php for ($s = 1; $s <= (int)$col['seat_capacity']; $s++):
                                 $occ = $assignments[(int)$col['col_no'] . ':' . $s] ?? null; ?>
-                            <?php if ($occ): ?>
+                            <?php if ($occ):
+                                $clr = $batch_colors[(int)($occ['student_batch_id'] ?? 0)] ?? $batch_palette[0]; ?>
                             <div title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')' . (!empty($occ['batch_name']) ? ' — ' . $occ['batch_name'] : '')) ?>"
-                                 style="min-width:92px;height:26px;border-radius:6px;background:#dcfce7;border:1px solid #86efac;
-                                        display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#166534;padding:0 4px;white-space:nowrap;">
+                                 style="min-width:92px;height:26px;border-radius:6px;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;
+                                        display:flex;align-items:center;justify-content:center;font-size:.6rem;color:<?= h($clr['text']) ?>;padding:0 4px;white-space:nowrap;">
                                 <?= h($occ['student_code']) ?>
                             </div>
                             <?php else: ?>
@@ -200,13 +220,54 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <?php if ($assignments): ?>
                 <div class="text-center mt-3 text-muted" style="font-size:.8rem;">
-                    <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#dcfce7;border:1px solid #86efac;border-radius:3px;"></span> Assigned (<?= count($assignments) ?>)</span>
-                    <span><span style="display:inline-block;width:12px;height:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:3px;"></span> Free (<?= max(0, (int)$hall['total_capacity'] - count($assignments)) ?>)</span>
+                    <?php foreach ($batch_colors as $bk => $clr): ?>
+                    <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;border-radius:3px;"></span> <?= h($batch_names[$bk]) ?></span>
+                    <?php endforeach; ?>
+                    <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:3px;"></span> Free (<?= max(0, (int)$hall['total_capacity'] - count($assignments)) ?>)</span>
+                    <span>Assigned: <?= count($assignments) ?></span>
                 </div>
                 <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if ($assignments && $batch_courses): ?>
+        <div class="card mt-4" style="border-radius:12px;">
+            <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
+                <i class="fas fa-book-open me-2 text-primary"></i>Exam Schedule — <?= h(date('d M Y', strtotime($f_date))) ?>
+                <span class="text-muted fw-normal" style="font-size:.8rem;">— which exam each batch sits in this hall</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                        <thead class="table-light">
+                            <tr><th class="ps-3">Batch</th><th>Course Code</th><th>Course Title</th><th>Course Teacher</th><th class="pe-3">Time Slot</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($batch_colors as $bk => $clr):
+                                $courses = $batch_courses[$bk] ?? [];
+                                if (!$courses) $courses = [['course_code' => '—', 'course_title' => 'No admit-card exam found for this date', 'teachers' => '', 'time_slot' => '']];
+                                foreach ($courses as $ci => $crs): ?>
+                            <tr>
+                                <?php if ($ci === 0): ?>
+                                <td class="ps-3" rowspan="<?= count($courses) ?>">
+                                    <span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:.75rem;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;color:<?= h($clr['text']) ?>;">
+                                        <?= h($batch_names[$bk]) ?>
+                                    </span>
+                                </td>
+                                <?php endif; ?>
+                                <td class="fw-semibold"><?= h($crs['course_code']) ?></td>
+                                <td><?= h($crs['course_title']) ?></td>
+                                <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '<span class="text-muted">—</span>' ?></td>
+                                <td class="pe-3"><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '<span class="text-muted">—</span>' ?></td>
+                            </tr>
+                            <?php endforeach; endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
