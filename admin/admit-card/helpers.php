@@ -320,9 +320,17 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
 
     // Within the semester, keep only routine items of the card's own
     // academic intakes — "Fall 2026" spans offers of several study years,
-    // and a retake registration in another year's offer must not print on
-    // a card that does not offer that course. Fail open (like the semester
-    // filter) when none of the remaining routines carries such a label.
+    // and a same-code item of another year's offer must never piggyback
+    // onto this card via the code fallback. Items the student is EXACTLY
+    // registered in (by offer subject) are exempt: a student may genuinely
+    // take a course with another batch (a retake / carry course), and that
+    // registration must still print on their card. Fail open (like the
+    // semester filter) when none of the remaining routines carries a label.
+    $reg_osids = [];
+    foreach ($regs as $r) {
+        $o = (int)($r['offer_subject_id'] ?? 0);
+        if ($o > 0) $reg_osids[$o] = true;
+    }
     $intake_keys    = array_values(array_unique(array_filter(array_map($norm, $intakes))));
     $intake_applied = false;
     if ($intake_keys) {
@@ -338,6 +346,7 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
             $items = array_values(array_filter(
                 $items,
                 static fn($i) => in_array($item_intake($i), $intake_keys, true)
+                    || isset($reg_osids[(int)($i['offer_subject_id'] ?? 0)])
             ));
         }
     }
@@ -364,27 +373,46 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
 
         $item = $by_osid[(int)$r['offer_subject_id']] ?? null;
         if (!$item && !empty($by_code[$ck])) {
-            // The code-level fallback only bridges offers WITHIN the card's
-            // scope (another section / shift / batch of the same semester
-            // and intake). A registration whose own offer belongs to a
-            // different semester or study-year intake sits that exam on
-            // ANOTHER card — without this gate, e.g. a "3rd Year 3rd
-            // Semester" EEE 4103 registration would piggyback on a
-            // same-code routine item and print on a "4th Year 3rd
-            // Semester" card. Blank labels fail open (legacy offers).
-            if ($sem_applied) {
-                $rs = $norm((string)($r['reg_semester'] ?? ''));
-                if ($rs !== '' && $rs !== $sem_key) continue;
+            // Code-level fallback. Course codes are reused across study
+            // years (e.g. "EEE-4103" is VLSI Circuits in one curriculum and
+            // Power System II in another), so a same-code routine item is
+            // only trusted when it is really the SAME course. The course
+            // NAME decides that: when both sides carry a name, identical
+            // names mean the same actual course — a genuine registration
+            // (e.g. a retake taken with another batch) bridges to it even
+            // if the offers' semester / intake labels differ — while
+            // different names mean a code collision and are never bridged.
+            // Only when a name is missing do the semester / intake label
+            // gates decide (blank labels fail open — legacy data).
+            $reg_name = $norm((string)($r['course_name'] ?? ''));
+            $same     = [];
+            $unknown  = [];
+            foreach ($by_code[$ck] as $cand) {
+                $cn = $norm((string)($cand['course_title'] ?? ''));
+                if ($reg_name !== '' && $cn !== '') {
+                    if ($cn === $reg_name) $same[] = $cand;
+                } else {
+                    $unknown[] = $cand;
+                }
             }
-            if ($intake_applied) {
-                $ri = $norm((string)($r['reg_intake'] ?? ''));
-                if ($ri !== '' && !in_array($ri, $intake_keys, true)) continue;
+            $pool = $same;
+            if (!$pool && $unknown) {
+                $ok = true;
+                if ($sem_applied) {
+                    $rs = $norm((string)($r['reg_semester'] ?? ''));
+                    if ($rs !== '' && $rs !== $sem_key) $ok = false;
+                }
+                if ($ok && $intake_applied) {
+                    $ri = $norm((string)($r['reg_intake'] ?? ''));
+                    if ($ri !== '' && !in_array($ri, $intake_keys, true)) $ok = false;
+                }
+                if ($ok) $pool = $unknown;
             }
             // Several offers (sections / shifts / batches) may carry this
             // course with different dates — prefer shift + batch matches.
             $best = null;
             $best_score = -1;
-            foreach ($by_code[$ck] as $cand) {
+            foreach ($pool as $cand) {
                 $score = 0;
                 $cs = $norm((string)($cand['item_shift'] ?? ''));
                 if ($cs !== '' && $cs === $norm((string)($r['shift'] ?? ''))) $score += 2;
@@ -570,7 +598,8 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
     $codeKey = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
     try {
         $st = db()->prepare(
-            'SELECT r.offer_subject_id, c.course_code, o.semester AS reg_semester
+            'SELECT r.offer_subject_id, c.course_code, c.course_name,
+                    o.semester AS reg_semester
                FROM co_registrations r
                JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
                JOIN co_offers o           ON o.id  = cos.offer_id
@@ -578,12 +607,14 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
               WHERE r.student_id = ?'
         );
         $st->execute([$student_id]);
-        $reg     = [];
-        $reg_sem = [];
+        $reg      = [];
+        $reg_sem  = [];
+        $reg_name = [];
         foreach ($st->fetchAll() as $r) {
-            $osid           = (int)$r['offer_subject_id'];
-            $reg[$osid]     = $codeKey((string)$r['course_code']);
-            $reg_sem[$osid] = $norm((string)($r['reg_semester'] ?? ''));
+            $osid            = (int)$r['offer_subject_id'];
+            $reg[$osid]      = $codeKey((string)$r['course_code']);
+            $reg_sem[$osid]  = $norm((string)($r['reg_semester'] ?? ''));
+            $reg_name[$osid] = $norm((string)($r['course_name'] ?? ''));
         }
     } catch (Throwable $e) {
         return $courses;
@@ -646,19 +677,30 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
     // row (e.g. the routine was built from another section's offer). Take
     // the first card row with the same course code AND a compatible shift
     // (same shift as the offer the student registered in, or unknown).
-    // The registration's own offer must also belong to the CARD's semester:
-    // course codes are reused across study years (e.g. "EEE-4103" is VLSI
-    // Circuits in one year and Power System II in another), so a Summer
-    // registration must not pull a same-code row onto a Fall card. Blank
-    // labels fail open (legacy offers / cards).
+    // Course codes are reused across study years (e.g. "EEE-4103" is VLSI
+    // Circuits in one curriculum and Power System II in another), so a
+    // same-code row is only trusted when it is really the SAME course.
+    // The course NAME decides that: when both sides carry a name,
+    // identical names mean the same actual course — a genuine
+    // registration (e.g. a retake taken with another batch, whose offer
+    // may carry a different semester label) still bridges to it — while
+    // different names mean a code collision and are never bridged. Only
+    // when a name is missing does the semester label gate decide (blank
+    // labels fail open — legacy offers / cards).
     $card_sem = $norm((string)($card['semester'] ?? ''));
     foreach ($reg as $osid => $ck) {
         if ($ck === '' || isset($covered_codes[$ck])) continue;
-        $rs = $reg_sem[$osid] ?? '';
-        if ($card_sem !== '' && $rs !== '' && $rs !== $card_sem) continue;
+        $rn   = $reg_name[$osid] ?? '';
+        $rs   = $reg_sem[$osid] ?? '';
         $want = $shift_of[$osid] ?? '';
         foreach ($all as $c) {
             if ($codeKey($c['course_code'] ?? '') !== $ck) continue;
+            $cn = $norm((string)($c['course_title'] ?? ''));
+            if ($rn !== '' && $cn !== '') {
+                if ($cn !== $rn) continue; // same code, different course
+            } elseif ($card_sem !== '' && $rs !== '' && $rs !== $card_sem) {
+                continue; // identity unknown — semester label gate
+            }
             $row_shift = $shift_of[(int)($c['offer_subject_id'] ?? 0)] ?? '';
             if ($want !== '' && $row_shift !== '' && $row_shift !== $want) continue;
             $covered_codes[$ck] = true;
