@@ -6,6 +6,11 @@ require_once __DIR__ . '/helpers.php';
 $page_title = 'Hall Management';
 
 $filter_dept = (int)($_GET['dept_id'] ?? 0);
+$filter_date = trim((string)($_GET['exam_date'] ?? ''));
+if ($filter_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $filter_date)) {
+    $filter_date = '';
+}
+if ($filter_date === '') $filter_date = date('Y-m-d');
 $departments = hm_departments();
 
 $scope  = get_dept_scope();
@@ -37,6 +42,19 @@ try {
     $halls = $st->fetchAll();
 } catch (Throwable $e) {
     flash_set('error', 'Hall Management tables are missing. Please run admin/hall-management-schema.sql.');
+}
+
+// Seats filled per hall on the selected exam date
+$filled = [];
+try {
+    hm_ensure_assignments_table();
+    $st = db()->prepare(
+        'SELECT hall_id, COUNT(*) AS cnt FROM hm_hall_assignments WHERE exam_date = ? GROUP BY hall_id'
+    );
+    $st->execute([$filter_date]);
+    foreach ($st->fetchAll() as $r) $filled[(int)$r['hall_id']] = (int)$r['cnt'];
+} catch (Throwable $e) {
+    $filled = [];
 }
 
 $can_create = is_super_admin() || can_access('hall-management', 'can_create');
@@ -76,6 +94,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium mb-1">Exam Date <span class="text-muted fw-normal">(for seat counts)</span></label>
+                <input type="date" name="exam_date" class="form-control form-control-sm" value="<?= h($filter_date) ?>">
+            </div>
             <div class="col-md-3 d-flex gap-2">
                 <button class="btn btn-sm btn-primary" style="border-radius:8px;"><i class="fas fa-filter me-1"></i> Filter</button>
                 <a href="<?= APP_URL ?>/hall-management/index.php" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">Reset</a>
@@ -105,6 +127,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-center">Columns</th>
                         <th class="text-center">Rows</th>
                         <th class="text-center">Total Seat Capacity</th>
+                        <th class="text-center">Filled</th>
+                        <th class="text-center">Available</th>
                         <th class="text-center">Status</th>
                         <th>Created By</th>
                         <th class="text-end" style="width:160px;">Actions</th>
@@ -122,7 +146,18 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= h($hl['dept_name']) ?></td>
                         <td class="text-center"><?= (int)$hl['num_columns'] ?></td>
                         <td class="text-center"><?= (int)$hl['num_rows'] ?></td>
-                        <td class="text-center"><span class="badge bg-primary"><?= (int)$hl['total_capacity'] ?> seats</span></td>
+                        <?php
+                            $cap   = (int)$hl['total_capacity'];
+                            $fill  = $filled[(int)$hl['id']] ?? 0;
+                            $avail = max(0, $cap - $fill);
+                        ?>
+                        <td class="text-center"><span class="badge bg-primary"><?= $cap ?> seats</span></td>
+                        <td class="text-center">
+                            <span class="badge <?= $fill > 0 ? 'bg-warning text-dark' : 'bg-light text-muted border' ?>"><?= $fill ?> filled</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge <?= $avail > 0 ? 'bg-success' : 'bg-danger' ?>"><?= $avail ?> available</span>
+                        </td>
                         <td class="text-center">
                             <?php if ((int)$hl['is_active'] === 1): ?>
                             <span class="badge bg-success">Active</span>
