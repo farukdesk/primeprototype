@@ -57,6 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
                 if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — no suitable seats left (each column holds a single batch).';
                 flash_set($assigned > 0 ? 'success' : 'error', $msg);
             }
+            hm_sync_hall_schedule($hall_id);
             $ret .= '&a_date=' . urlencode($p_date);
         }
         redirect($ret);
@@ -98,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
             }
         }
         if (!isset($pending_confirm)) {
+            hm_sync_hall_schedule($hall_id);
             // Keep the student preview open so more students can be seated
             $ret .= '&preview=1&a_dept=' . $p_dept . '&a_program=' . $p_program . '&a_batch=' . $p_batch
                   . '&a_date=' . urlencode($p_date) . '&a_section=' . urlencode($p_section) . '&a_shift=' . urlencode($p_shift);
@@ -109,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         $aid = (int)($_POST['assignment_id'] ?? 0);
         $st  = db()->prepare('DELETE FROM hm_hall_assignments WHERE id = ? AND hall_id = ?');
         $st->execute([$aid, $hall_id]);
+        hm_sync_hall_schedule($hall_id);
         flash_set('success', $st->rowCount() ? 'Seat assignment removed.' : 'Assignment not found.');
         redirect($ret . ($f_date !== '' ? '&a_date=' . urlencode($f_date) : ''));
     }
@@ -118,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
             $st = db()->prepare('DELETE FROM hm_hall_assignments WHERE hall_id = ? AND exam_date = ?');
             $st->execute([$hall_id, $p_date]);
+            hm_sync_hall_schedule($hall_id);
             flash_set('success', $st->rowCount() . ' assignment(s) cleared for ' . $p_date . '.');
         }
         redirect($ret);

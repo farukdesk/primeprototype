@@ -697,6 +697,63 @@ function hm_batch_palette(): array
     ];
 }
 
+/**
+ * Derive the exam time for a hall on a date from the seated students'
+ * admit-card course time slots (e.g. "1:00 PM - 3:00 PM" → "13:00:00").
+ * The earliest start time wins; returns NULL when no slot can be parsed.
+ */
+function hm_derive_exam_time(int $hall_id, string $exam_date): ?string
+{
+    $times = [];
+    foreach (hm_exam_courses_by_batch($hall_id, $exam_date) as $rows) {
+        foreach ($rows as $r) {
+            $slot = trim((string)($r['time_slot'] ?? ''));
+            if ($slot === '') continue;
+            $parts = preg_split('/\s*(?:-|–|—|\bto\b)\s*/iu', $slot);
+            $start = trim((string)($parts[0] ?? ''));
+            $ts    = $start !== '' ? strtotime($start) : false;
+            if ($ts !== false) $times[] = date('H:i:s', $ts);
+        }
+    }
+    if (!$times) return null;
+    sort($times);
+    return $times[0];
+}
+
+/**
+ * Keep hm_halls.exam_date / exam_time in sync with the hall's seat
+ * assignments: the schedule follows the assignment date nearest to today
+ * and the earliest admit-card time slot of the seated students. Called
+ * after every assign / unassign action so the index list updates
+ * automatically once seats are assigned.
+ */
+function hm_sync_hall_schedule(int $hall_id): void
+{
+    hm_ensure_schedule_columns();
+    hm_ensure_assignments_table();
+    try {
+        $st = db()->prepare(
+            'SELECT exam_date FROM hm_hall_assignments
+              WHERE hall_id = ?
+              GROUP BY exam_date
+              ORDER BY ABS(DATEDIFF(exam_date, CURDATE())) ASC, exam_date DESC
+              LIMIT 1'
+        );
+        $st->execute([$hall_id]);
+        $date = (string)($st->fetchColumn() ?: '');
+        if ($date === '') {
+            db()->prepare('UPDATE hm_halls SET exam_date = NULL, exam_time = NULL WHERE id = ?')
+                ->execute([$hall_id]);
+            return;
+        }
+        $time = hm_derive_exam_time($hall_id, $date);
+        db()->prepare('UPDATE hm_halls SET exam_date = ?, exam_time = ? WHERE id = ?')
+            ->execute([$date, $time, $hall_id]);
+    } catch (Throwable $e) {
+        // uq_hm_room_slot conflict or missing tables — keep the previous schedule
+    }
+}
+
 /** Exam dates that already have assignments in this hall. */
 function hm_hall_assignment_dates(int $hall_id): array
 {
