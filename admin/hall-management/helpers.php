@@ -284,11 +284,14 @@ function hm_busy_student_ids(string $exam_date, string $shift): array
 }
 
 /**
- * Auto-assign students to seats column by column (front to back), keeping
- * ONE batch per column and alternating batches between adjacent columns:
- * two neighbouring columns never hold the same batch. If only the
- * neighbouring column's batch remains, the column is left empty (the gap
- * lets the batch be seated again in the column after it).
+ * Auto-assign students to seats column by column (front to back), using
+ * the maximum seat capacity: a column may hold several batches in
+ * contiguous runs (when one batch runs out the next batch continues in
+ * the same column). The only hard rule is that two horizontally adjacent
+ * seats (same seat number in neighbouring columns) never hold the same
+ * batch. A seat is left empty only when every remaining student belongs
+ * to the batch seated directly beside it. Re-running the assignment also
+ * fills the leftover empty seats of partially filled columns.
  * Returns [assigned_count, skipped_already_seated, left_over].
  */
 function hm_assign_students(int $hall_id, string $exam_date, array $students, array $ctx): array
@@ -307,21 +310,23 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
         $groups[$bk][] = $stu;
     }
 
-    // Free seats + batch already seated in each column (columns stay single-batch)
-    $cols = [];      // col_no => ['free' => [seat_no, …], 'batch' => int|null]
+    // Free seats per column + batch of every occupied seat, so the rule
+    // "horizontally adjacent seats never hold the same batch" also honours
+    // students that are already seated.
+    $cols       = [];   // col_no => [free seat_no, …]
+    $seat_batch = [];   // col_no => seat_no => batch_id
     foreach (hm_hall_columns($hall_id) as $col) {
         $c    = (int)$col['col_no'];
         $free = [];
-        $cb   = null;
         for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
             $occ = $taken[$c . ':' . $s] ?? null;
             if ($occ === null) {
                 $free[] = $s;
-            } elseif ($cb === null) {
-                $cb = (int)($occ['student_batch_id'] ?? $occ['batch_id'] ?? 0);
+            } else {
+                $seat_batch[$c][$s] = (int)($occ['student_batch_id'] ?? $occ['batch_id'] ?? 0);
             }
         }
-        $cols[$c] = ['free' => $free, 'batch' => $cb];
+        $cols[$c] = $free;
     }
 
     $ins = db()->prepare(
@@ -331,42 +336,29 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
          VALUES (?,?,?,?,?,?,?,?,?,?,?)'
     );
 
-    $assigned   = 0;
-    $prev_batch = null; // batch of the previous (occupied) column
-    foreach ($cols as $c => $info) {
-        if (!$info['free']) {                 // column already full
-            if ($info['batch'] !== null) $prev_batch = $info['batch'];
-            continue;
-        }
+    $assigned = 0;
+    $prev_col = null; // physically adjacent previous column
+    foreach ($cols as $c => $free) {
+        foreach ($free as $s) {
+            $left  = $prev_col !== null ? ($seat_batch[$prev_col][$s] ?? null) : null;
+            $above = $seat_batch[$c][$s - 1] ?? null;
 
-        // Pick the batch for this column
-        if ($info['batch'] !== null) {
-            $pick = $info['batch'];           // partially filled: keep its batch
-            if (empty($groups[$pick])) { $prev_batch = $pick; continue; }
-        } else {
+            // Continue the batch seated directly above while it has students
+            // and does not clash with the seat to the left (keeps each batch
+            // in contiguous runs); otherwise start the largest remaining
+            // batch that differs from the left neighbour.
             $pick = null;
-            $best = -1;
-            foreach ($groups as $bk => $list) {   // largest batch different from neighbour
-                if (!$list || $bk === $prev_batch) continue;
-                if (count($list) > $best) { $best = count($list); $pick = $bk; }
-            }
-            if ($pick === null) {
-                // Only the neighbouring column's batch remains — leave this
-                // column empty so adjacent columns never share a batch. The
-                // empty column acts as a separator, so the next column may
-                // seat that batch again.
-                $has_left = false;
-                foreach ($groups as $list) {
-                    if ($list) { $has_left = true; break; }
+            if ($above !== null && !empty($groups[$above]) && $above !== $left) {
+                $pick = $above;
+            } else {
+                $best = -1;
+                foreach ($groups as $bk => $list) {
+                    if (!$list || $bk === $left) continue;
+                    if (count($list) > $best) { $best = count($list); $pick = $bk; }
                 }
-                if (!$has_left) break;            // no students left at all
-                $prev_batch = null;               // empty column breaks adjacency
-                continue;
             }
-        }
+            if ($pick === null) continue; // only the left neighbour's batch remains — seat stays empty
 
-        foreach ($info['free'] as $s) {
-            if (empty($groups[$pick])) break;     // batch exhausted — leave rest of column empty
             $stu = array_shift($groups[$pick]);
             try {
                 $ins->execute([
@@ -379,11 +371,12 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
                     auth_user()['id'] ?? null,
                 ]);
                 $assigned++;
+                $seat_batch[$c][$s] = $pick;
             } catch (Throwable $e) {
                 $skipped++; // duplicate seat/student race — ignore
             }
         }
-        $prev_batch = $pick;
+        $prev_col = $c;
     }
 
     $left = 0;
