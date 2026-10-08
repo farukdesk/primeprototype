@@ -4,7 +4,9 @@
  * One sheet per batch seated in the hall: logo on the left; university,
  * department, program and sheet title centered; Room Number / Batch /
  * Section / Shift info; No. of Students with hand-written Present /
- * Absent fields; Invigilator 1 & 2 sign-off lines.
+ * Absent fields; Invigilator 1 & 2 sign-off lines. Sheets with more
+ * than 24 students are split across pages, each page repeating the
+ * header, info section and invigilator sign-off with "Page X of Y".
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('hall-management');
@@ -54,6 +56,9 @@ unset($g);
 // Program names used by the seated students.
 $program_names = [];
 foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['program_name'];
+
+// Max students per printed page; extra students flow to additional pages.
+const HM_ATT_STUDENTS_PER_PAGE = 24;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -89,6 +94,8 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
         .signoff { margin-top: 42px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 160px; font-size: 12px; }
         .signoff-box { text-align: center; }
         .sig-line { border-top: 1px solid #999; margin-bottom: 5px; margin-top: 36px; }
+
+        .page-no { text-align: right; font-size: 11px; color: #333; margin-bottom: 2px; }
 
         @media print {
             @page { size: A4 portrait; margin: 10mm; }
@@ -127,8 +134,12 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
         $course_names  = array_values(array_unique($course_names));
         $teacher_names = array_values(array_unique($teacher_names));
         $time_slots    = array_values(array_unique($time_slots));
+        $pages       = array_chunk($grp['students'], HM_ATT_STUDENTS_PER_PAGE, true);
+        $total_pages = count($pages);
     ?>
+    <?php foreach ($pages as $page_idx => $page_students): ?>
     <div class="sheet">
+        <div class="page-no">Page <?= $page_idx + 1 ?> of <?= $total_pages ?></div>
         <div class="header">
             <img src="<?= APP_URL ?>/../assets/img/logo/logo-black.png" alt="Prime University Logo" class="header-logo" onerror="this.style.display='none'">
             <div class="header-text">
@@ -168,7 +179,7 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($grp['students'] as $i => $stu): ?>
+                <?php foreach ($page_students as $i => $stu): ?>
                 <tr>
                     <td class="c"><?= $i + 1 ?></td>
                     <td class="c"><?= h($stu['student_code']) ?></td>
@@ -193,6 +204,7 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
             </div>
         </div>
     </div>
+    <?php endforeach; ?>
     <?php endforeach; ?>
     <?php endif; ?>
 </div>
