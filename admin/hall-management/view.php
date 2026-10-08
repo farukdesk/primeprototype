@@ -51,9 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
                     'section' => $p_section, 'shift' => $p_shift,
                 ]);
-                $msg = $assigned . ' student(s) assigned to seats.';
+                $msg = $assigned . ' student(s) assigned to seats (one batch per column, different batches in adjacent columns).';
                 if ($skipped > 0) $msg .= ' ' . $skipped . ' already seated elsewhere were skipped.';
-                if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — hall is full.';
+                if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — no suitable seats left (each column holds a single batch).';
                 flash_set($assigned > 0 ? 'success' : 'error', $msg);
             }
             $ret .= '&a_date=' . urlencode($p_date);
@@ -162,17 +162,26 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="badge bg-dark px-4 py-2" style="font-size:.8rem;"><i class="fas fa-chalkboard me-1"></i> FRONT / BOARD</span>
                 </div>
                 <div class="d-flex gap-3 justify-content-center flex-wrap" style="overflow-x:auto;">
-                    <?php foreach ($columns as $col): ?>
+                    <?php foreach ($columns as $col):
+                        $col_batch = '';
+                        for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
+                            $o = $assignments[(int)$col['col_no'] . ':' . $s] ?? null;
+                            if ($o && !empty($o['batch_name'])) { $col_batch = $o['batch_name']; break; }
+                        }
+                    ?>
                     <div class="text-center">
                         <div class="fw-semibold mb-2" style="font-size:.8rem;color:#475569;">
                             Column <?= (int)$col['col_no'] ?>
                             <div class="text-muted" style="font-size:.7rem;"><?= (int)$col['seat_capacity'] ?> seats</div>
+                            <?php if ($col_batch !== ''): ?>
+                            <div style="font-size:.65rem;color:#166534;"><?= h($col_batch) ?></div>
+                            <?php endif; ?>
                         </div>
                         <div class="d-flex flex-column gap-1 align-items-center">
                             <?php for ($s = 1; $s <= (int)$col['seat_capacity']; $s++):
                                 $occ = $assignments[(int)$col['col_no'] . ':' . $s] ?? null; ?>
                             <?php if ($occ): ?>
-                            <div title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')') ?>"
+                            <div title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')' . (!empty($occ['batch_name']) ? ' — ' . $occ['batch_name'] : '')) ?>"
                                  style="min-width:92px;height:26px;border-radius:6px;background:#dcfce7;border:1px solid #86efac;
                                         display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#166534;padding:0 4px;white-space:nowrap;">
                                 <?= h($occ['student_code']) ?>
@@ -352,7 +361,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                 <thead class="table-light">
-                    <tr><th class="ps-3">Seat</th><th>Student ID</th><th>Name</th><th>Section</th><th>Shift</th><th class="text-end pe-3">Action</th></tr>
+                    <tr><th class="ps-3">Seat</th><th>Student ID</th><th>Name</th><th>Batch</th><th>Section</th><th>Shift</th><th class="text-end pe-3">Action</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($assignments as $a): ?>
@@ -360,6 +369,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="ps-3 fw-semibold">C<?= (int)$a['col_no'] ?>-S<?= (int)$a['seat_no'] ?></td>
                         <td><?= h($a['student_code']) ?></td>
                         <td><?= h($a['full_name']) ?></td>
+                        <td><?= h($a['batch_name'] ?? '') ?></td>
                         <td><?= h($a['section'] ?? '') ?></td>
                         <td><?= h($a['shift'] ?? '') ?></td>
                         <td class="text-end pe-3">

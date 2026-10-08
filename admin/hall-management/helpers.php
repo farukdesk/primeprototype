@@ -189,7 +189,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
 
     // ── Subject-linked cards: students via their registrations ─────────
     if ($has_subject_col) {
-        $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
+        $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name, s.batch_id,
                        b.name AS batch_name, o.shift, cc.section
                   FROM ac_admit_cards ac
                   JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
@@ -212,7 +212,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
         ? 'NOT EXISTS (SELECT 1 FROM ac_admit_card_courses cx
                         WHERE cx.admit_card_id = ac.id AND cx.offer_subject_id IS NOT NULL)'
         : '1=1';
-    $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
+    $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name, s.batch_id,
                    b.name AS batch_name, s.shift, s.section
               FROM ac_admit_cards ac
               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
@@ -247,9 +247,11 @@ function hm_assignments(int $hall_id, string $exam_date): array
     hm_ensure_assignments_table();
     try {
         $st = db()->prepare(
-            'SELECT a.*, s.student_id AS student_code, s.full_name
+            'SELECT a.*, s.student_id AS student_code, s.full_name,
+                    s.batch_id AS student_batch_id, b.name AS batch_name
                FROM hm_hall_assignments a
                JOIN students s ON s.id = a.student_id
+               LEFT JOIN student_batches b ON b.id = s.batch_id
               WHERE a.hall_id = ? AND a.exam_date = ?
               ORDER BY a.col_no ASC, a.seat_no ASC'
         );
@@ -282,8 +284,11 @@ function hm_busy_student_ids(string $exam_date, string $shift): array
 }
 
 /**
- * Auto-assign students to the first free seats (column by column, front
- * to back). Returns [assigned_count, skipped_already_seated, left_over].
+ * Auto-assign students to seats column by column (front to back), keeping
+ * ONE batch per column and alternating batches between adjacent columns
+ * (so two neighbouring columns never hold the same batch while another
+ * batch still has students waiting).
+ * Returns [assigned_count, skipped_already_seated, left_over].
  */
 function hm_assign_students(int $hall_id, string $exam_date, array $students, array $ctx): array
 {
@@ -291,13 +296,31 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
     $taken = hm_assignments($hall_id, $exam_date);
     $busy  = array_flip(hm_busy_student_ids($exam_date, (string)($ctx['shift'] ?? '')));
 
-    // Free seats in order
-    $free = [];
+    // Group the waiting students by their batch
+    $groups  = [];   // batch key => list of student rows
+    $skipped = 0;
+    foreach ($students as $stu) {
+        $sid = (int)$stu['id'];
+        if (isset($busy[$sid])) { $skipped++; continue; }
+        $bk = (int)($stu['batch_id'] ?? 0);
+        $groups[$bk][] = $stu;
+    }
+
+    // Free seats + batch already seated in each column (columns stay single-batch)
+    $cols = [];      // col_no => ['free' => [seat_no, …], 'batch' => int|null]
     foreach (hm_hall_columns($hall_id) as $col) {
-        $c = (int)$col['col_no'];
+        $c    = (int)$col['col_no'];
+        $free = [];
+        $cb   = null;
         for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
-            if (!isset($taken[$c . ':' . $s])) $free[] = [$c, $s];
+            $occ = $taken[$c . ':' . $s] ?? null;
+            if ($occ === null) {
+                $free[] = $s;
+            } elseif ($cb === null) {
+                $cb = (int)($occ['student_batch_id'] ?? $occ['batch_id'] ?? 0);
+            }
         }
+        $cols[$c] = ['free' => $free, 'batch' => $cb];
     }
 
     $ins = db()->prepare(
@@ -307,27 +330,56 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
          VALUES (?,?,?,?,?,?,?,?,?,?,?)'
     );
 
-    $assigned = 0; $skipped = 0; $left = 0;
-    foreach ($students as $stu) {
-        $sid = (int)$stu['id'];
-        if (isset($busy[$sid])) { $skipped++; continue; }
-        if (!$free) { $left++; continue; }
-        [$c, $s] = array_shift($free);
-        try {
-            $ins->execute([
-                $hall_id, $exam_date, $sid, $c, $s,
-                ($ctx['dept_id'] ?? null) ?: null,
-                ($ctx['program_id'] ?? null) ?: null,
-                ($ctx['batch_id'] ?? null) ?: null,
-                ($ctx['section'] ?? '') !== '' ? $ctx['section'] : null,
-                ($ctx['shift'] ?? '') !== '' ? $ctx['shift'] : null,
-                auth_user()['id'] ?? null,
-            ]);
-            $assigned++;
-        } catch (Throwable $e) {
-            $skipped++; // duplicate seat/student race — ignore
+    $assigned   = 0;
+    $prev_batch = null; // batch of the previous (occupied) column
+    foreach ($cols as $c => $info) {
+        if (!$info['free']) {                 // column already full
+            if ($info['batch'] !== null) $prev_batch = $info['batch'];
+            continue;
         }
+
+        // Pick the batch for this column
+        if ($info['batch'] !== null) {
+            $pick = $info['batch'];           // partially filled: keep its batch
+            if (empty($groups[$pick])) { $prev_batch = $pick; continue; }
+        } else {
+            $pick = null;
+            $best = -1;
+            foreach ($groups as $bk => $list) {   // largest batch different from neighbour
+                if (!$list || $bk === $prev_batch) continue;
+                if (count($list) > $best) { $best = count($list); $pick = $bk; }
+            }
+            if ($pick === null) {                 // only the neighbour's batch remains
+                foreach ($groups as $bk => $list) {
+                    if ($list) { $pick = $bk; break; }
+                }
+            }
+            if ($pick === null) break;            // no students left at all
+        }
+
+        foreach ($info['free'] as $s) {
+            if (empty($groups[$pick])) break;     // batch exhausted — leave rest of column empty
+            $stu = array_shift($groups[$pick]);
+            try {
+                $ins->execute([
+                    $hall_id, $exam_date, (int)$stu['id'], $c, $s,
+                    ($ctx['dept_id'] ?? null) ?: null,
+                    ($ctx['program_id'] ?? null) ?: null,
+                    ((int)($stu['batch_id'] ?? 0)) ?: (($ctx['batch_id'] ?? null) ?: null),
+                    ($ctx['section'] ?? '') !== '' ? $ctx['section'] : null,
+                    ($ctx['shift'] ?? '') !== '' ? $ctx['shift'] : null,
+                    auth_user()['id'] ?? null,
+                ]);
+                $assigned++;
+            } catch (Throwable $e) {
+                $skipped++; // duplicate seat/student race — ignore
+            }
+        }
+        $prev_batch = $pick;
     }
+
+    $left = 0;
+    foreach ($groups as $list) $left += count($list);
     return [$assigned, $skipped, $left];
 }
 
