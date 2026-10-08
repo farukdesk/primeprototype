@@ -164,6 +164,50 @@ function ac_card_exam_id(int $admit_card_id): int
 }
 
 /**
+ * Academic-intake labels of the offers behind a card: the offers its course
+ * rows point at (via co_offer_subjects) plus its linked routine's intake.
+ * One semester label ("Fall 2026") covers offers of SEVERAL study years
+ * ("4th Year 3rd Semester", "3rd Year 3rd Semester", …), so the intake is
+ * the only field that tells the card's own offers apart from the rest of
+ * the exam. Returns [] when nothing is linked (older / manual cards).
+ *
+ * @return string[]
+ */
+function ac_card_intakes(int $admit_card_id): array
+{
+    $intakes = [];
+    try {
+        $st = db()->prepare(
+            'SELECT DISTINCT o.academic_intake
+               FROM ac_admit_card_courses cc
+               JOIN co_offer_subjects cos ON cos.id = cc.offer_subject_id
+               JOIN co_offers o           ON o.id  = cos.offer_id
+              WHERE cc.admit_card_id = ?'
+        );
+        $st->execute([$admit_card_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $v) {
+            if (trim((string)$v) !== '') $intakes[] = (string)$v;
+        }
+    } catch (Throwable $e) {
+        // offer linkage unavailable — fall through to the routine's intake
+    }
+
+    $rid = ac_card_routine_id($admit_card_id);
+    if ($rid > 0) {
+        try {
+            $st = db()->prepare('SELECT academic_intake FROM exam_routines WHERE id = ?');
+            $st->execute([$rid]);
+            $v = (string)$st->fetchColumn();
+            if (trim($v) !== '') $intakes[] = $v;
+        } catch (Throwable $e) {
+            // column missing on older deployments
+        }
+    }
+
+    return array_values(array_unique($intakes));
+}
+
+/**
  * Student-centric course resolution for an exam.
  *
  * WHAT the student sits comes from the course-offer registrations (the
@@ -182,8 +226,17 @@ function ac_card_exam_id(int $admit_card_id): int
  * several semesters gets ONLY the courses of the card's semester, not the
  * whole exam. If no routine of the exam carries that semester label the
  * filter is skipped (fail open) so older data keeps working.
+ *
+ * When $intakes is given (the card's academic intakes — ac_card_intakes()),
+ * routine items are further limited to routines of those intakes. One
+ * semester label spans offers of several study years (a "Fall 2026" exam
+ * has both "4th Year 3rd Semester" and "3rd Year 3rd Semester" routines),
+ * so without this a retake registration in another year's offer would print
+ * on this card even though the card does not offer that course. Like the
+ * semester, the filter fails open when none of the exam's routines carries
+ * one of those intake labels.
  */
-function ac_resolve_student_courses(int $exam_id, int $student_id, string $semester = ''): array
+function ac_resolve_student_courses(int $exam_id, int $student_id, string $semester = '', array $intakes = []): array
 {
     require_once __DIR__ . '/../exam-routine/helpers.php';
 
@@ -209,7 +262,8 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
             'SELECT i.offer_subject_id, i.course_code, i.course_title,
                     i.exam_date, i.start_time, i.end_time,
                     o.batch_id AS item_batch_id, o.shift AS item_shift,
-                    rt.semester AS routine_semester
+                    rt.semester AS routine_semester,
+                    rt.academic_intake AS routine_intake
                FROM exam_routine_items i
                JOIN exam_routines rt      ON rt.id  = i.routine_id
           LEFT JOIN co_offer_subjects cos ON cos.id = i.offer_subject_id
@@ -243,6 +297,28 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
             $items = array_values(array_filter(
                 $items,
                 static fn($i) => $norm((string)($i['routine_semester'] ?? '')) === $sem_key
+            ));
+        }
+    }
+
+    // Within the semester, keep only routine items of the card's own
+    // academic intakes — "Fall 2026" spans offers of several study years,
+    // and a retake registration in another year's offer must not print on
+    // a card that does not offer that course. Fail open (like the semester
+    // filter) when none of the remaining routines carries such a label.
+    $intake_keys = array_values(array_unique(array_filter(array_map($norm, $intakes))));
+    if ($intake_keys) {
+        $has_intake = false;
+        foreach ($items as $i) {
+            if (in_array($norm((string)($i['routine_intake'] ?? '')), $intake_keys, true)) {
+                $has_intake = true;
+                break;
+            }
+        }
+        if ($has_intake) {
+            $items = array_values(array_filter(
+                $items,
+                static fn($i) => in_array($norm((string)($i['routine_intake'] ?? '')), $intake_keys, true)
             ));
         }
     }
@@ -416,7 +492,8 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
         $resolved = ac_resolve_student_courses(
             $exam_id,
             $student_id,
-            (string)($card_row['semester'] ?? '')
+            (string)($card_row['semester'] ?? ''),
+            ac_card_intakes($admit_card_id)
         );
         if ($resolved) return $resolved;
     }
@@ -616,7 +693,7 @@ function ac_check_access(int $admit_card_id, int $student_id): array
     $routine_id = ac_card_routine_id($admit_card_id);
     if ($exam_id > 0) {
         $card_row = ac_get_card($admit_card_id);
-        if (!ac_resolve_student_courses($exam_id, $student_id, (string)($card_row['semester'] ?? ''))) {
+        if (!ac_resolve_student_courses($exam_id, $student_id, (string)($card_row['semester'] ?? ''), ac_card_intakes($admit_card_id))) {
             return [
                 'allowed' => false,
                 'due'     => 0.0,
