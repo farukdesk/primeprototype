@@ -123,21 +123,21 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
             .header, .att-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .att-table tr, .signoff { page-break-inside: avoid; }
             /* Compress vertical space so 24 students + the invigilator
-               sign-off always fit on a single printed A4 page. */
-            body { font-size: 11px; }
+               sign-off always fit on a single printed A4 page at 12px. */
+            body { font-size: 12px; }
             .header { min-height: 52px; padding-bottom: 5px; margin-bottom: 6px; }
             .header-text { line-height: 1.35; }
             .header-text h2 { font-size: 19px; }
             .header-text p  { font-size: 12px; }
             .header-text .sheet-title { font-size: 12px; margin-top: 2px; }
             .header-logo { width: 110px; }
-            .info-grid { gap: 1px 24px; margin-bottom: 6px; font-size: 11px; line-height: 1.45; }
-            .blank-field { height: 13px; }
-            .att-table { font-size: 11px; }
+            .info-grid { gap: 1px 24px; margin-bottom: 6px; font-size: 12px; line-height: 1.45; }
+            .blank-field { height: 14px; }
+            .att-table { font-size: 12px; }
             .att-table th, .att-table td { padding: 2px 6px; }
             .att-table .sig { height: 21px; }
-            .signoff { margin-top: 16px; font-size: 11px; }
-            .sig-line { margin-top: 22px; margin-bottom: 3px; }
+            .signoff { margin-top: 14px; font-size: 12px; }
+            .sig-line { margin-top: 20px; margin-bottom: 3px; }
             .page-no { font-size: 10px; }
         }
     </style>
