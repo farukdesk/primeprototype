@@ -326,6 +326,7 @@ $pending_total = count($pending_map);
 $trace_id      = (int)($_GET['student'] ?? 0);
 $trace_student = null;
 $trace_regs    = [];
+$trace_other   = []; // same-course registrations of the student in OTHER offers
 if ($trace_id > 0) {
     $tst = db()->prepare('SELECT id, student_id, full_name, status FROM students WHERE id = ?');
     $tst->execute([$trace_id]);
@@ -341,6 +342,30 @@ if ($trace_id > 0) {
         );
         $tst->execute([$offer_id, $trace_id]);
         $trace_regs = $tst->fetchAll();
+
+        // Not registered here? Don't leave staff at a dead end — show where
+        // the student IS registered for the courses this offer carries, so
+        // the trail from the admit card can be followed to the right offer.
+        if (!$trace_regs) {
+            $tst = db()->prepare(
+                'SELECT DISTINCT o.id AS offer_id, o.semester, o.academic_intake,
+                        c.course_code, c.course_name
+                   FROM co_registrations r
+                   JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+                   JOIN co_offers o           ON o.id  = cos.offer_id
+                   JOIN course_curriculum c   ON c.id  = cos.curriculum_id
+                  WHERE r.student_id = ?
+                    AND c.course_code IN (
+                        SELECT c2.course_code
+                          FROM co_offer_subjects cos2
+                          JOIN course_curriculum c2 ON c2.id = cos2.curriculum_id
+                         WHERE cos2.offer_id = ?
+                    )
+                  ORDER BY c.course_code ASC'
+            );
+            $tst->execute([$trace_id, $offer_id]);
+            $trace_other = $tst->fetchAll();
+        }
     }
 }
 
@@ -387,6 +412,23 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endif; ?>
     <?php else: ?>
     has <strong>no registration</strong> in this offer.
+    <?php if ($trace_other): ?>
+    <div class="small mt-1">
+        They are registered for this offer's course(s) through <strong>other offer(s)</strong>:
+        <?php foreach ($trace_other as $to):
+            $lbl = trim((string)($to['semester'] ?? '')
+                . ((($to['academic_intake'] ?? '') !== '') ? ' · ' . $to['academic_intake'] : ''));
+            if ($lbl === '') { $lbl = 'Offer #' . (int)$to['offer_id']; }
+        ?>
+        <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= (int)$to['offer_id'] ?>&student=<?= $trace_id ?>"
+           class="badge bg-light text-dark border text-decoration-none"
+           title="Open that offer's registrations and trace this student there">
+            <span style="font-family:monospace;"><?= h($to['course_code'] ?: $to['course_name']) ?></span>
+            — <?= h($lbl) ?> <i class="fas fa-external-link-alt ms-1"></i>
+        </a>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 </div>
 <?php endif; ?>
