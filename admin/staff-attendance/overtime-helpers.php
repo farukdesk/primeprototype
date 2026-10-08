@@ -30,7 +30,7 @@ const ATT_OT_WEEKEND_WORK_MIN = 480;  // eight worked hours before weekend OT
 const ATT_OT_DEFAULT_DESIGNATIONS = [
     'Book Sorter', 'Driver', 'Plumber', 'MLSS Operator', 'Office Assistant',
     'Lab Assistant', 'Cataloguer', 'Receptionist', 'AC Technician',
-    'Store Keeper', 'Lift Operator',
+    'Store Keeper', 'Lift Operator', 'Security Guard',
 ];
 
 /** Normalise a designation name for case/space-insensitive matching. */
@@ -90,21 +90,21 @@ function att_ot_save_config(array $cfg): void
 /**
  * Overtime minutes for a single day.
  *
- * Uses the same breakdown shown in the calendar. Weekend days use eight
- * worked hours instead of the configured start time and weekday grace window.
+ * Uses the same breakdown shown in the calendar. Security Guards use twelve
+ * worked hours as their threshold on all days; other weekend days use eight.
  */
-function att_ot_day_minutes(?array $record, array $cfg, bool $uncapped, bool $weekend = false): int
+function att_ot_day_minutes(?array $record, array $cfg, bool $uncapped, bool $weekend = false, bool $twelve_hour_shift = false): int
 {
-    return att_ot_day_breakdown($record, $cfg, $uncapped, $weekend)['ot_minutes'];
+    return att_ot_day_breakdown($record, $cfg, $uncapped, $weekend, $twelve_hour_shift)['ot_minutes'];
 }
 
 /** Calculation details for every day, including incomplete and zero-OT days. */
-function att_ot_day_breakdown(?array $record, array $cfg, bool $uncapped, bool $weekend = false): array
+function att_ot_day_breakdown(?array $record, array $cfg, bool $uncapped, bool $weekend = false, bool $twelve_hour_shift = false): array
 {
     $in    = att_time_to_minutes($record['in_time'] ?? null);
     $out   = att_time_to_minutes($record['out_time'] ?? null);
-    $start = $weekend
-        ? ($in !== null ? $in + ATT_OT_WEEKEND_WORK_MIN : null)
+    $start = ($weekend || $twelve_hour_shift)
+        ? ($in !== null ? $in + ($twelve_hour_shift ? 720 : ATT_OT_WEEKEND_WORK_MIN) : null)
         : max((int)att_time_to_minutes($cfg['start_time']), $in ?? 0);
     $day = [
         'in_time'        => att_display_time($record['in_time'] ?? null),
@@ -124,11 +124,13 @@ function att_ot_day_breakdown(?array $record, array $cfg, bool $uncapped, bool $
         $day['reason'] = 'Clock-out must be later than clock-in; no overtime.';
         return $day;
     }
-    if ($weekend && $out <= $start) {
-        $day['reason'] = 'Eight worked hours not exceeded; no overtime.';
+    if (($weekend || $twelve_hour_shift) && $out <= $start) {
+        $day['reason'] = $twelve_hour_shift
+            ? 'Twelve worked hours not exceeded; no overtime.'
+            : 'Eight worked hours not exceeded; no overtime.';
         return $day;
     }
-    if (!$weekend && $out <= (int)att_time_to_minutes($cfg['start_time']) + (int)$cfg['threshold_minutes']) {
+    if (!$weekend && !$twelve_hour_shift && $out <= (int)att_time_to_minutes($cfg['start_time']) + (int)$cfg['threshold_minutes']) {
         $day['reason'] = 'Clock-out is within the weekday no-overtime window.';
         return $day;
     }
@@ -138,7 +140,9 @@ function att_ot_day_breakdown(?array $record, array $cfg, bool $uncapped, bool $
         $ot = min($ot, (int)$cfg['cap_minutes']);
     }
     $day['ot_minutes'] = $ot;
-    $day['reason'] = $weekend ? 'Time beyond eight worked hours.' : 'Time after the weekday OT start (or later clock-in).';
+    $day['reason'] = $twelve_hour_shift
+        ? 'Time beyond twelve worked hours.'
+        : ($weekend ? 'Time beyond eight worked hours.' : 'Time after the weekday OT start (or later clock-in).');
     if ($ot < $day['raw_minutes']) $day['reason'] .= ' Daily cap applied.';
     return $day;
 }
@@ -202,7 +206,7 @@ function att_ot_report(string $from, string $to, array $cfg, string $desig_filte
         $total = 0;
         foreach ($dates as $d) {
             $mins = att_ot_day_minutes($records[$uid . '|' . $d] ?? null, $cfg, (bool)$d_cfg['uncapped'],
-                att_ot_is_weekend($uid, $d, $sched));
+                att_ot_is_weekend($uid, $d, $sched), $s['ot_key'] === 'security guard');
             if ($mins > 0) {
                 $days[$d] = $mins;
                 $total   += $mins;

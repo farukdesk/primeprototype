@@ -93,7 +93,7 @@ if ($calendar_user !== null) {
     for ($d = strtotime($from); $d <= strtotime($to); $d = strtotime('+1 day', $d)) {
         $date = date('Y-m-d', $d);
         $calendar_days[$date] = att_ot_day_breakdown($records[$uid . '|' . $date] ?? null, $cfg, $uncapped,
-            att_ot_is_weekend($uid, $date, $sched));
+            att_ot_is_weekend($uid, $date, $sched), $calendar_user['ot_key'] === 'security guard');
     }
 }
 
@@ -110,7 +110,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h1 class="h3 mb-0"><i class="fas fa-business-time me-2 text-primary"></i>Staff Overtime</h1>
-        <p class="text-muted mb-0 small">Weekday overtime after <?= h(date('g:i A', strtotime($cfg['start_time']))) ?>; weekend overtime after eight worked hours, for eligible designations.</p>
+        <p class="text-muted mb-0 small">Security Guards earn overtime only after 12 worked hours; other eligible staff follow the weekday/weekend overtime rules below.</p>
     </div>
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb mb-0">
@@ -128,12 +128,12 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="card-body py-3">
         <h6 class="fw-semibold mb-2"><i class="fas fa-scale-balanced me-2 text-primary"></i>Overtime Rules</h6>
         <ul class="small mb-0 ps-3">
-            <li>On working days, overtime counts <strong>after <?= h(date('g:i A', strtotime($cfg['start_time']))) ?></strong>, or clock-in if later.</li>
-            <li>On working days, leaving within the first <strong><?= (int)$cfg['threshold_minutes'] ?> minutes</strong> (by <?= h(date('g:i A', strtotime($cfg['start_time']) + $cfg['threshold_minutes'] * 60)) ?>) earns <strong>no overtime</strong>.</li>
-            <li>Leaving later counts overtime from the start time (or later clock-in), <strong>not</strong> from the end of the grace window.</li>
-            <li>On weekends (the staff member’s effective weekly-off day or a manually marked weekend), overtime starts <strong>eight hours after clock-in</strong>. Exactly eight hours earns no overtime; every minute beyond eight hours counts, without the weekday grace window.</li>
+            <li>On working days, overtime counts after <strong><?= h(date('g:i A', strtotime($cfg['start_time']))) ?></strong> or later clock-in; Security Guards earn overtime only after <strong>12 worked hours</strong>.</li>
+            <li>For other designations on working days, leaving within the first <strong><?= (int)$cfg['threshold_minutes'] ?> minutes</strong> (by <?= h(date('g:i A', strtotime($cfg['start_time']) + $cfg['threshold_minutes'] * 60)) ?>) earns <strong>no overtime</strong>.</li>
+            <li>For other designations, leaving later counts overtime from the start time (or later clock-in), <strong>not</strong> from the end of the grace window.</li>
+            <li>On weekends (the staff member’s effective weekly-off day or a manually marked weekend), overtime starts <strong>eight hours after clock-in</strong>, except Security Guards, whose threshold is <strong>12 worked hours</strong>. Exactly the threshold earns no overtime; every minute beyond counts.</li>
             <li>Daily maximum on both day types: <strong><?= (int)$cfg['cap_minutes'] > 0 ? h(att_format_hours((int)$cfg['cap_minutes'])) : 'No cap' ?></strong> — except designations marked <em>actual hours</em> (e.g. Driver). A maximum of 0 means no cap.</li>
-            <li>Worked hours are the recorded clock-in to clock-out interval. Missing or invalid clock times earn no overtime. Holidays on working days retain the weekday rule.</li>
+            <li>Worked hours are the recorded clock-in to clock-out interval. Missing or invalid clock times earn no overtime. Holidays on working days follow the applicable weekday rule.</li>
         </ul>
     </div>
 </div>
