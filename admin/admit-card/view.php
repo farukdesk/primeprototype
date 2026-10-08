@@ -196,6 +196,28 @@ if ($students) {
     }
 }
 
+// Enrolled subjects per course offer for each listed student — shown as a
+// clickable note under the student's name so staff can jump to the offer.
+$student_offers = [];
+if ($students) {
+    $sids = array_map('intval', array_column($students, 'id'));
+    $ph   = implode(',', array_fill(0, count($sids), '?'));
+    $eo   = $db->prepare(
+        "SELECT reg.student_id, o.id AS offer_id, o.semester, o.academic_intake,
+                COUNT(DISTINCT reg.offer_subject_id) AS subj_count
+           FROM co_registrations reg
+           JOIN co_offer_subjects os ON os.id = reg.offer_subject_id
+           JOIN co_offers o ON o.id = os.offer_id
+          WHERE reg.student_id IN ($ph)
+          GROUP BY reg.student_id, o.id
+          ORDER BY o.id DESC"
+    );
+    $eo->execute($sids);
+    foreach ($eo->fetchAll() as $row) {
+        $student_offers[(int)$row['student_id']][] = $row;
+    }
+}
+
 // Existing overrides
 $ov_stmt = $db->prepare(
     'SELECT ov.*, s.full_name AS student_name, s.student_id AS student_sid, u.full_name AS allowed_by_name
@@ -446,6 +468,23 @@ require_once __DIR__ . '/../includes/header.php';
                             <td class="px-3">
                                 <div class="fw-semibold"><?= h($s['full_name']) ?></div>
                                 <small class="text-muted"><?= h($s['student_id']) ?></small>
+                                <?php $enr = $student_offers[(int)$s['id']] ?? []; ?>
+                                <?php if ($enr): ?>
+                                <div class="mt-1 d-flex flex-wrap gap-1">
+                                    <?php foreach ($enr as $en):
+                                        $lbl = trim(($en['semester'] ?? '') . ($en['academic_intake'] ? ' · ' . $en['academic_intake'] : ''));
+                                        if ($lbl === '') { $lbl = 'Offer #' . (int)$en['offer_id']; }
+                                    ?>
+                                    <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= (int)$en['offer_id'] ?>"
+                                       class="badge bg-primary-subtle text-primary border text-decoration-none"
+                                       title="View this course offer's registrations">
+                                        <i class="fas fa-book-open me-1"></i><?= (int)$en['subj_count'] ?> subject<?= (int)$en['subj_count'] === 1 ? '' : 's' ?> — <?= h($lbl) ?>
+                                    </a>
+                                    <?php endforeach; ?>
+                                </div>
+                                <?php else: ?>
+                                <div class="mt-1"><span class="badge bg-secondary-subtle text-secondary border">No subjects enrolled</span></div>
+                                <?php endif; ?>
                             </td>
                             <td><span class="badge bg-info-subtle text-info border"><?= h($s['status']) ?></span></td>
                             <td>
