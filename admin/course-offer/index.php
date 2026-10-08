@@ -18,8 +18,20 @@ $f_semester       = trim($_GET['semester']         ?? '');
 $f_academic_intake = trim($_GET['academic_intake'] ?? '');
 $f_status         = $_GET['status'] ?? '';
 $f_search         = trim($_GET['search']           ?? '');
+$f_student_q      = trim($_GET['student_q']        ?? '');
 $per_page         = 50;
 $cur_page         = max(1, (int)($_GET['page'] ?? 1));
+
+// ── Student ID search mode ────────────────────────────────────────────────────
+// When a student ID is searched, show that student's enrolled courses instead
+// of the offer listing.
+$student_mode   = $f_student_q !== '';
+$found_students = [];
+$enroll_map     = [];
+if ($student_mode) {
+    $found_students = co_find_students_by_id($f_student_q);
+    $enroll_map     = co_student_enrolled_courses(array_column($found_students, 'id'));
+}
 
 $filters = [
     'dept_id'         => $f_dept_id,
@@ -31,7 +43,7 @@ $filters = [
     'search'          => $f_search,
 ];
 
-$result   = co_get_offers_filtered($filters, $cur_page, $per_page);
+$result   = $student_mode ? ['rows' => [], 'total' => 0] : co_get_offers_filtered($filters, $cur_page, $per_page);
 $offers   = $result['rows'];
 $total    = $result['total'];
 $pages    = (int)ceil($total / $per_page);
@@ -138,6 +150,33 @@ a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #1
 
 <?php flash_show(); ?>
 
+<!-- ── Student ID search ──────────────────────────────────────────────────── -->
+<div class="card co-card mb-4">
+    <div class="card-body py-3 px-4">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-12 col-md-5">
+                <label class="form-label small fw-medium mb-1 text-muted">
+                    <i class="fas fa-id-card me-1"></i>Find a student's enrolled courses
+                </label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="fas fa-user-graduate text-muted"></i></span>
+                    <input type="text" name="student_q" class="form-control border-start-0"
+                           value="<?= h($f_student_q) ?>" placeholder="Student ID…">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </div>
+            </div>
+            <?php if ($student_mode): ?>
+            <div class="col-12 col-md-auto">
+                <a href="<?= APP_URL ?>/course-offer/index.php" class="btn btn-light btn-sm">
+                    <i class="fas fa-times me-1"></i>Back to course offers
+                </a>
+            </div>
+            <?php endif; ?>
+        </form>
+    </div>
+</div>
+
+<?php if (!$student_mode): ?>
 <!-- ── Filters ────────────────────────────────────────────────────────────── -->
 <div class="card co-card mb-4">
     <div class="card-body py-3 px-4">
@@ -225,9 +264,113 @@ a.co-chip-enrolled:hover { background: #cffafe; border-color: #67e8f9; color: #1
         </form>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- ── Results ────────────────────────────────────────────────────────────── -->
-<?php if (empty($offers)): ?>
+<?php if ($student_mode): ?>
+
+<?php if (empty($found_students)): ?>
+<div class="card co-card">
+    <div class="card-body text-center py-5 text-muted">
+        <i class="fas fa-user-slash fa-3x mb-3 opacity-25"></i>
+        <p class="mb-0">No student found matching ID &ldquo;<strong><?= h($f_student_q) ?></strong>&rdquo;.</p>
+    </div>
+</div>
+<?php else: ?>
+
+<?php foreach ($found_students as $stu):
+      $courses = $enroll_map[(int)$stu['id']] ?? []; ?>
+<div class="card co-card co-batch-card mb-4">
+    <div class="card-header co-batch-head py-2 px-4 d-flex flex-wrap align-items-center gap-2">
+        <span class="co-batch-icon d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary">
+            <i class="fas fa-user-graduate"></i>
+        </span>
+        <span class="fw-bold" style="font-size:1rem;"><?= h($stu['full_name']) ?></span>
+        <span class="co-code"><?= h($stu['student_id']) ?></span>
+        <?php if (!empty($stu['dept_name'])): ?>
+        <span class="co-chip"><i class="fas fa-building"></i><?= h($stu['dept_name']) ?></span>
+        <?php endif; ?>
+        <?php if (!empty($stu['batch_name'])): ?>
+        <span class="co-chip"><i class="fas fa-users"></i><?= h($stu['batch_name']) ?></span>
+        <?php endif; ?>
+        <span class="co-chip co-chip-status-<?= $stu['status'] === 'Active' ? 'active' : 'inactive' ?>">
+            <span class="co-status-dot <?= $stu['status'] === 'Active' ? 'bg-success' : 'bg-secondary' ?>"></span>
+            <?= h($stu['status']) ?>
+        </span>
+        <span class="co-chip ms-auto">
+            <?= count($courses) ?> enrolled course<?= count($courses) != 1 ? 's' : '' ?>
+        </span>
+    </div>
+    <?php if (empty($courses)): ?>
+    <div class="card-body text-center py-4 text-muted">
+        <i class="fas fa-book-open fa-2x mb-2 opacity-25 d-block"></i>
+        No enrolled courses found for this student.
+    </div>
+    <?php else: ?>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr class="small text-muted">
+                    <th class="ps-4" style="width:2.5rem;">#</th>
+                    <th>Course</th>
+                    <th>Credit</th>
+                    <th>Semester</th>
+                    <th>Intake</th>
+                    <th>Dept / Program</th>
+                    <th>Batch</th>
+                    <th>Offer</th>
+                    <th class="pe-4">Registered</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php $i = 1; foreach ($courses as $c): ?>
+                <tr>
+                    <td class="ps-4 text-muted small"><?= $i++ ?></td>
+                    <td>
+                        <?php if (!empty($c['course_code'])): ?>
+                        <span class="co-code me-1"><?= h($c['course_code']) ?></span>
+                        <?php endif; ?>
+                        <span class="fw-medium"><?= h($c['course_name']) ?></span>
+                    </td>
+                    <td class="small"><?= $c['credit'] !== null && $c['credit'] !== '' ? h($c['credit']) : '—' ?></td>
+                    <td>
+                        <?php if (!empty($c['semester'])): ?>
+                        <span class="co-chip co-chip-semester"><i class="fas fa-calendar-alt"></i><?= h($c['semester']) ?></span>
+                        <?php else: ?><span class="text-muted">—</span><?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($c['academic_intake'])): ?>
+                        <span class="co-chip co-chip-intake"><i class="fas fa-graduation-cap"></i><?= h($c['academic_intake']) ?></span>
+                        <?php else: ?><span class="text-muted">—</span><?php endif; ?>
+                    </td>
+                    <td class="small">
+                        <?= h($c['dept_name']) ?>
+                        <span class="text-muted">· <?= h($c['program_name']) ?></span>
+                    </td>
+                    <td class="small"><?= h($c['batch_name']) ?></td>
+                    <td>
+                        <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= (int)$c['offer_id'] ?>"
+                           class="co-chip co-chip-enrolled" title="Open this course offer's registrations">
+                            <i class="fas fa-user-check"></i>#<?= (int)$c['offer_id'] ?>
+                            <?php if (!empty($c['section'])): ?>· Sec <?= h($c['section']) ?><?php endif; ?>
+                            <?php if (!empty($c['shift'])): ?>· <?= h($c['shift']) ?><?php endif; ?>
+                        </a>
+                    </td>
+                    <td class="pe-4 small text-muted">
+                        <?= !empty($c['registered_at']) ? h(date('d M Y', strtotime($c['registered_at']))) : '—' ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
+</div>
+<?php endforeach; ?>
+
+<?php endif; ?>
+
+<?php elseif (empty($offers)): ?>
 <div class="card co-card">
     <div class="card-body text-center py-5 text-muted">
         <i class="fas fa-book-open fa-3x mb-3 opacity-25"></i>
