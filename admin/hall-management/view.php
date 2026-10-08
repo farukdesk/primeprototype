@@ -51,9 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
                     'section' => $p_section, 'shift' => $p_shift,
                 ]);
-                $msg = $assigned . ' student(s) assigned to seats (one batch per column, different batches in adjacent columns).';
+                $msg = $assigned . ' student(s) assigned to seats (maximum capacity used; side-by-side seats never share a batch).';
                 if ($skipped > 0) $msg .= ' ' . $skipped . ' already seated elsewhere were skipped.';
-                if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — no suitable seats left (each column holds a single batch).';
+                if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — the only free seats sit directly beside the same batch.';
                 flash_set($assigned > 0 ? 'success' : 'error', $msg);
             }
             $ret .= '&a_date=' . urlencode($p_date);
