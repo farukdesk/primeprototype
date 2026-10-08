@@ -235,9 +235,12 @@ function ac_card_intakes(int $admit_card_id): array
  * on this card even though the card does not offer that course. Like the
  * semester, the filter fails open when none of the exam's routines carries
  * one of those intake labels. Both labels also fall back to the item's
- * OFFER when the routine row was saved without them, and the course-code
+ * OFFER when the routine row was saved without them. The course-code
  * fallback (2.) is denied to registrations whose own offer belongs to a
- * different semester / intake than the card.
+ * different SEMESTER than the card (a course already passed in a past
+ * semester must not reappear just because another batch is offered it
+ * now), and — when the course identity cannot be confirmed by name — to
+ * registrations of a different intake as well.
  */
 function ac_resolve_student_courses(int $exam_id, int $student_id, string $semester = '', array $intakes = []): array
 {
@@ -378,12 +381,21 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
             // Power System II in another), so a same-code routine item is
             // only trusted when it is really the SAME course. The course
             // NAME decides that: when both sides carry a name, identical
-            // names mean the same actual course — a genuine registration
-            // (e.g. a retake taken with another batch) bridges to it even
-            // if the offers' semester / intake labels differ — while
-            // different names mean a code collision and are never bridged.
-            // Only when a name is missing do the semester / intake label
-            // gates decide (blank labels fail open — legacy data).
+            // names mean the same actual course, while different names mean
+            // a code collision and are never bridged. Even for the same
+            // course, the REGISTRATION must belong to the card's semester:
+            // a genuine retake taken with another batch sits on a NEW
+            // registration in a same-semester offer (so it still bridges
+            // despite the different batch / intake), whereas an old
+            // registration of a PAST semester (a course already passed)
+            // must not piggyback onto another batch's routine item just
+            // because that batch is offered the course this semester.
+            // Blank labels fail open — legacy data.
+            $sem_ok = true;
+            if ($sem_applied) {
+                $rs = $norm((string)($r['reg_semester'] ?? ''));
+                if ($rs !== '' && $rs !== $sem_key) $sem_ok = false;
+            }
             $reg_name = $norm((string)($r['course_name'] ?? ''));
             $same     = [];
             $unknown  = [];
@@ -395,14 +407,10 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
                     $unknown[] = $cand;
                 }
             }
-            $pool = $same;
-            if (!$pool && $unknown) {
+            $pool = $sem_ok ? $same : [];
+            if (!$pool && $unknown && $sem_ok) {
                 $ok = true;
-                if ($sem_applied) {
-                    $rs = $norm((string)($r['reg_semester'] ?? ''));
-                    if ($rs !== '' && $rs !== $sem_key) $ok = false;
-                }
-                if ($ok && $intake_applied) {
+                if ($intake_applied) {
                     $ri = $norm((string)($r['reg_intake'] ?? ''));
                     if ($ri !== '' && !in_array($ri, $intake_keys, true)) $ok = false;
                 }
@@ -681,25 +689,26 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
     // Circuits in one curriculum and Power System II in another), so a
     // same-code row is only trusted when it is really the SAME course.
     // The course NAME decides that: when both sides carry a name,
-    // identical names mean the same actual course — a genuine
-    // registration (e.g. a retake taken with another batch, whose offer
-    // may carry a different semester label) still bridges to it — while
-    // different names mean a code collision and are never bridged. Only
-    // when a name is missing does the semester label gate decide (blank
-    // labels fail open — legacy offers / cards).
+    // identical names mean the same actual course while different names
+    // mean a code collision and are never bridged. Even for the same
+    // course the REGISTRATION must belong to the card's semester: a
+    // genuine retake sits on a NEW registration in a same-semester offer
+    // of another batch (which still bridges), whereas an old registration
+    // of a PAST semester — a course already passed — must not piggyback
+    // onto another batch's card row. Blank labels fail open — legacy
+    // offers / cards.
     $card_sem = $norm((string)($card['semester'] ?? ''));
     foreach ($reg as $osid => $ck) {
         if ($ck === '' || isset($covered_codes[$ck])) continue;
         $rn   = $reg_name[$osid] ?? '';
         $rs   = $reg_sem[$osid] ?? '';
+        if ($card_sem !== '' && $rs !== '' && $rs !== $card_sem) continue;
         $want = $shift_of[$osid] ?? '';
         foreach ($all as $c) {
             if ($codeKey($c['course_code'] ?? '') !== $ck) continue;
             $cn = $norm((string)($c['course_title'] ?? ''));
-            if ($rn !== '' && $cn !== '') {
-                if ($cn !== $rn) continue; // same code, different course
-            } elseif ($card_sem !== '' && $rs !== '' && $rs !== $card_sem) {
-                continue; // identity unknown — semester label gate
+            if ($rn !== '' && $cn !== '' && $cn !== $rn) {
+                continue; // same code, different course
             }
             $row_shift = $shift_of[(int)($c['offer_subject_id'] ?? 0)] ?? '';
             if ($want !== '' && $row_shift !== '' && $row_shift !== $want) continue;
