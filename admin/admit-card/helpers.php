@@ -570,16 +570,20 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
     $codeKey = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
     try {
         $st = db()->prepare(
-            'SELECT r.offer_subject_id, c.course_code
+            'SELECT r.offer_subject_id, c.course_code, o.semester AS reg_semester
                FROM co_registrations r
                JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN co_offers o           ON o.id  = cos.offer_id
                JOIN course_curriculum c   ON c.id  = cos.curriculum_id
               WHERE r.student_id = ?'
         );
         $st->execute([$student_id]);
-        $reg = [];
+        $reg     = [];
+        $reg_sem = [];
         foreach ($st->fetchAll() as $r) {
-            $reg[(int)$r['offer_subject_id']] = $codeKey((string)$r['course_code']);
+            $osid           = (int)$r['offer_subject_id'];
+            $reg[$osid]     = $codeKey((string)$r['course_code']);
+            $reg_sem[$osid] = $norm((string)($r['reg_semester'] ?? ''));
         }
     } catch (Throwable $e) {
         return $courses;
@@ -642,8 +646,16 @@ function ac_get_merged_courses_for_student(int $admit_card_id, int $student_id):
     // row (e.g. the routine was built from another section's offer). Take
     // the first card row with the same course code AND a compatible shift
     // (same shift as the offer the student registered in, or unknown).
+    // The registration's own offer must also belong to the CARD's semester:
+    // course codes are reused across study years (e.g. "EEE-4103" is VLSI
+    // Circuits in one year and Power System II in another), so a Summer
+    // registration must not pull a same-code row onto a Fall card. Blank
+    // labels fail open (legacy offers / cards).
+    $card_sem = $norm((string)($card['semester'] ?? ''));
     foreach ($reg as $osid => $ck) {
         if ($ck === '' || isset($covered_codes[$ck])) continue;
+        $rs = $reg_sem[$osid] ?? '';
+        if ($card_sem !== '' && $rs !== '' && $rs !== $card_sem) continue;
         $want = $shift_of[$osid] ?? '';
         foreach ($all as $c) {
             if ($codeKey($c['course_code'] ?? '') !== $ck) continue;
