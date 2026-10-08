@@ -242,16 +242,28 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card" style="border-radius:12px;">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center flex-wrap gap-2" style="border-radius:12px 12px 0 0;">
                 <span><i class="fas fa-th me-2 text-primary"></i>Seat Layout<?= $f_date !== '' ? ' — ' . h(date('d M Y', strtotime($f_date))) : '' ?></span>
-                <form method="get" class="d-flex align-items-center gap-2">
-                    <input type="hidden" name="id" value="<?= $hall_id ?>">
-                    <?php if ($asg_dates): ?>
-                    <select name="a_date" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-                        <?php foreach ($asg_dates as $d): ?>
-                        <option value="<?= h($d) ?>" <?= $d === $f_date ? 'selected' : '' ?>><?= h(date('d M Y', strtotime($d))) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <form method="get" class="d-flex align-items-center gap-2 mb-0">
+                        <input type="hidden" name="id" value="<?= $hall_id ?>">
+                        <?php if ($asg_dates): ?>
+                        <select name="a_date" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+                            <?php foreach ($asg_dates as $d): ?>
+                            <option value="<?= h($d) ?>" <?= $d === $f_date ? 'selected' : '' ?>><?= h(date('d M Y', strtotime($d))) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php endif; ?>
+                    </form>
+                    <a href="<?= APP_URL ?>/hall-management/print-layout.php?id=<?= $hall_id ?><?= $f_date !== '' ? '&date=' . urlencode($f_date) : '' ?>"
+                       target="_blank" class="btn btn-sm btn-outline-primary" style="border-radius:8px;" title="Printable A4 seat plan">
+                        <i class="fas fa-print me-1"></i> Print Seat Plan
+                    </a>
+                    <?php if ($assignments): ?>
+                    <a href="<?= APP_URL ?>/hall-management/print-attendance.php?id=<?= $hall_id ?><?= $f_date !== '' ? '&date=' . urlencode($f_date) : '' ?>"
+                       target="_blank" class="btn btn-sm btn-outline-success" style="border-radius:8px;" title="Printable student attendance sheet">
+                        <i class="fas fa-clipboard-list me-1"></i> Attendance Sheet
+                    </a>
                     <?php endif; ?>
-                </form>
+                </div>
             </div>
             <div class="card-body">
                 <?php if (empty($columns)): ?>
