@@ -234,7 +234,10 @@ function ac_card_intakes(int $admit_card_id): array
  * so without this a retake registration in another year's offer would print
  * on this card even though the card does not offer that course. Like the
  * semester, the filter fails open when none of the exam's routines carries
- * one of those intake labels.
+ * one of those intake labels. Both labels also fall back to the item's
+ * OFFER when the routine row was saved without them, and the course-code
+ * fallback (2.) is denied to registrations whose own offer belongs to a
+ * different semester / intake than the card.
  */
 function ac_resolve_student_courses(int $exam_id, int $student_id, string $semester = '', array $intakes = []): array
 {
@@ -246,6 +249,7 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
         // The student's registrations with their offer context.
         $st = db()->prepare(
             'SELECT r.offer_subject_id, o.batch_id, o.shift, o.section,
+                    o.semester AS reg_semester, o.academic_intake AS reg_intake,
                     c.course_code, c.course_name
                FROM co_registrations r
                JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
@@ -262,6 +266,8 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
             'SELECT i.offer_subject_id, i.course_code, i.course_title,
                     i.exam_date, i.start_time, i.end_time,
                     o.batch_id AS item_batch_id, o.shift AS item_shift,
+                    o.semester AS item_offer_semester,
+                    o.academic_intake AS item_offer_intake,
                     rt.semester AS routine_semester,
                     rt.academic_intake AS routine_intake
                FROM exam_routine_items i
@@ -276,27 +282,38 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
         return [];
     }
 
+    // Effective semester / intake of a routine item: the routine's own label,
+    // falling back to the label of the course offer the item points at —
+    // older routines were saved before these columns were populated, and the
+    // offer label is just as authoritative (routines are built per offer).
+    $item_sem = static function ($i) use ($norm) {
+        $v = (string)($i['routine_semester'] ?? '');
+        if (trim($v) === '') $v = (string)($i['item_offer_semester'] ?? '');
+        return $norm($v);
+    };
+    $item_intake = static function ($i) use ($norm) {
+        $v = (string)($i['routine_intake'] ?? '');
+        if (trim($v) === '') $v = (string)($i['item_offer_intake'] ?? '');
+        return $norm($v);
+    };
+
     // Keep only routine items of the card's semester — an exam spans many
     // routines (one per offer / semester), and without this a student who
     // is enrolled in several semesters would get ALL of them on one card.
     // The filter only applies when the exam really has a routine with that
     // semester label (fail open on label mismatches / legacy data).
-    $sem_key = $norm($semester);
+    $sem_key     = $norm($semester);
+    $sem_applied = false;
     if ($sem_key !== '') {
         $has_sem = false;
-        try {
-            $ss = db()->prepare('SELECT DISTINCT semester FROM exam_routines WHERE exam_id = ?');
-            $ss->execute([$exam_id]);
-            foreach ($ss->fetchAll(PDO::FETCH_COLUMN) as $s) {
-                if ($norm((string)$s) === $sem_key) { $has_sem = true; break; }
-            }
-        } catch (Throwable $e) {
-            $has_sem = false;
+        foreach ($items as $i) {
+            if ($item_sem($i) === $sem_key) { $has_sem = true; break; }
         }
         if ($has_sem) {
+            $sem_applied = true;
             $items = array_values(array_filter(
                 $items,
-                static fn($i) => $norm((string)($i['routine_semester'] ?? '')) === $sem_key
+                static fn($i) => $item_sem($i) === $sem_key
             ));
         }
     }
@@ -306,19 +323,21 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
     // and a retake registration in another year's offer must not print on
     // a card that does not offer that course. Fail open (like the semester
     // filter) when none of the remaining routines carries such a label.
-    $intake_keys = array_values(array_unique(array_filter(array_map($norm, $intakes))));
+    $intake_keys    = array_values(array_unique(array_filter(array_map($norm, $intakes))));
+    $intake_applied = false;
     if ($intake_keys) {
         $has_intake = false;
         foreach ($items as $i) {
-            if (in_array($norm((string)($i['routine_intake'] ?? '')), $intake_keys, true)) {
+            if (in_array($item_intake($i), $intake_keys, true)) {
                 $has_intake = true;
                 break;
             }
         }
         if ($has_intake) {
+            $intake_applied = true;
             $items = array_values(array_filter(
                 $items,
-                static fn($i) => in_array($norm((string)($i['routine_intake'] ?? '')), $intake_keys, true)
+                static fn($i) => in_array($item_intake($i), $intake_keys, true)
             ));
         }
     }
@@ -345,6 +364,22 @@ function ac_resolve_student_courses(int $exam_id, int $student_id, string $semes
 
         $item = $by_osid[(int)$r['offer_subject_id']] ?? null;
         if (!$item && !empty($by_code[$ck])) {
+            // The code-level fallback only bridges offers WITHIN the card's
+            // scope (another section / shift / batch of the same semester
+            // and intake). A registration whose own offer belongs to a
+            // different semester or study-year intake sits that exam on
+            // ANOTHER card — without this gate, e.g. a "3rd Year 3rd
+            // Semester" EEE 4103 registration would piggyback on a
+            // same-code routine item and print on a "4th Year 3rd
+            // Semester" card. Blank labels fail open (legacy offers).
+            if ($sem_applied) {
+                $rs = $norm((string)($r['reg_semester'] ?? ''));
+                if ($rs !== '' && $rs !== $sem_key) continue;
+            }
+            if ($intake_applied) {
+                $ri = $norm((string)($r['reg_intake'] ?? ''));
+                if ($ri !== '' && !in_array($ri, $intake_keys, true)) continue;
+            }
             // Several offers (sections / shifts / batches) may carry this
             // course with different dates — prefer shift + batch matches.
             $best = null;

@@ -218,6 +218,14 @@ if ($students) {
     }
 }
 
+// Normalised card semester + intakes, used to tell which of a student's
+// enrollments actually belong to THIS card's exam — enrollments from other
+// semesters / intakes (old offers, retake years) are shown muted so staff
+// don't mistake them for courses printed on this card.
+$ac_norm       = static fn($s) => strtolower((string)preg_replace('/[^a-z0-9]+/i', '', (string)$s));
+$card_sem_key  = $ac_norm($card['semester'] ?? '');
+$card_intakes  = array_values(array_filter(array_map($ac_norm, ac_card_intakes($id))));
+
 // Source offer of each card course row — generator-built cards store the
 // offer_subject_id, so staff can jump from a listed course to its offer.
 $course_offer_map = [];
@@ -511,11 +519,16 @@ require_once __DIR__ . '/../includes/header.php';
                                     <?php foreach ($enr as $en):
                                         $lbl = trim(($en['semester'] ?? '') . ($en['academic_intake'] ? ' · ' . $en['academic_intake'] : ''));
                                         if ($lbl === '') { $lbl = 'Offer #' . (int)$en['offer_id']; }
+                                        $en_sem    = $ac_norm($en['semester'] ?? '');
+                                        $en_intake = $ac_norm($en['academic_intake'] ?? '');
+                                        $in_card   = ($card_sem_key === '' || $en_sem === '' || $en_sem === $card_sem_key)
+                                            && (!$card_intakes || $en_intake === '' || in_array($en_intake, $card_intakes, true));
                                     ?>
                                     <a href="<?= APP_URL ?>/course-offer/registrations.php?offer_id=<?= (int)$en['offer_id'] ?>"
-                                       class="badge bg-primary-subtle text-primary border text-decoration-none"
-                                       title="View this course offer's registrations">
-                                        <i class="fas fa-book-open me-1"></i><?= (int)$en['subj_count'] ?> subject<?= (int)$en['subj_count'] === 1 ? '' : 's' ?> — <?= h($lbl) ?>
+                                       class="badge <?= $in_card ? 'bg-primary-subtle text-primary' : 'bg-light text-muted' ?> border text-decoration-none"
+                                       title="<?= $in_card ? 'View this course offer\'s registrations'
+                                           : 'Other semester / intake — NOT part of this admit card\'s exam' ?>">
+                                        <i class="fas fa-book-open me-1"></i><?= (int)$en['subj_count'] ?> subject<?= (int)$en['subj_count'] === 1 ? '' : 's' ?> — <?= h($lbl) ?><?= $in_card ? '' : ' (other)' ?>
                                     </a>
                                     <?php endforeach; ?>
                                 </div>
