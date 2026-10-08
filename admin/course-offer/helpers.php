@@ -917,3 +917,106 @@ function co_get_offers_filtered(array $filters = [], int $page = 1, int $per_pag
 
     return ['rows' => $rowsSt->fetchAll(), 'total' => $total];
 }
+
+/**
+ * Find students whose student ID matches the given query (partial match),
+ * restricted to the current user's department scope. Returns at most $limit
+ * student rows: id, student_id, full_name, status, dept_name, batch_name.
+ */
+function co_find_students_by_id(string $q, int $limit = 10): array
+{
+    $q = trim($q);
+    if ($q === '') return [];
+
+    $where  = ['s.student_id LIKE ?'];
+    $params = ['%' . $q . '%'];
+
+    // Restrict to the departments the current user is scoped to.
+    $scope = get_dept_scope();
+    if ($scope !== null) {
+        if (empty($scope)) return [];
+        $ph      = implode(',', array_fill(0, count($scope), '?'));
+        $where[] = "s.dept_id IN ($ph)";
+        foreach ($scope as $sid) $params[] = (int)$sid;
+    }
+
+    // Faculty members only see students of their own department(s).
+    if (co_is_faculty()) {
+        $fac = co_faculty_dept_ids();
+        if (empty($fac)) return [];
+        $ph      = implode(',', array_fill(0, count($fac), '?'));
+        $where[] = "s.dept_id IN ($ph)";
+        foreach ($fac as $fd) $params[] = (int)$fd;
+    }
+
+    $limit_val = max(1, (int)$limit);
+    $st = db()->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.status,
+                d.name AS dept_name, b.name AS batch_name
+           FROM students s
+           LEFT JOIN dept_departments d ON d.id = s.dept_id
+           LEFT JOIN student_batches  b ON b.id = s.batch_id
+          WHERE " . implode(' AND ', $where) . "
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC
+          LIMIT {$limit_val}"
+    );
+    $st->execute($params);
+    return $st->fetchAll();
+}
+
+/**
+ * Every course (offered subject) a student is enrolled in, across all offers,
+ * restricted to the current user's department scope. Keyed by student pk.
+ *
+ * Returns [student_pk => list of rows with course + offer details].
+ */
+function co_student_enrolled_courses(array $student_pks): array
+{
+    if (empty($student_pks)) return [];
+
+    $ph     = implode(',', array_fill(0, count($student_pks), '?'));
+    $where  = ["r.student_id IN ($ph)"];
+    $params = array_map('intval', $student_pks);
+
+    // Restrict to the departments the current user is scoped to.
+    $scope = get_dept_scope();
+    if ($scope !== null) {
+        if (empty($scope)) return [];
+        $sph     = implode(',', array_fill(0, count($scope), '?'));
+        $where[] = "o.dept_id IN ($sph)";
+        foreach ($scope as $sid) $params[] = (int)$sid;
+    }
+
+    // Faculty members only see offers for their own department(s).
+    if (co_is_faculty()) {
+        $fac = co_faculty_dept_ids();
+        if (empty($fac)) return [];
+        $fph     = implode(',', array_fill(0, count($fac), '?'));
+        $where[] = "o.dept_id IN ($fph)";
+        foreach ($fac as $fd) $params[] = (int)$fd;
+    }
+
+    $st = db()->prepare(
+        "SELECT r.student_id AS student_pk, r.created_at AS registered_at, r.source,
+                cc.course_code, cc.course_name, cc.credit,
+                o.id AS offer_id, o.semester, o.academic_intake, o.shift, o.section,
+                o.status AS offer_status,
+                d.name AS dept_name, p.program_name, b.name AS batch_name
+           FROM co_registrations       r
+           JOIN co_offer_subjects      cos ON cos.id = r.offer_subject_id
+           JOIN co_offers              o   ON o.id   = cos.offer_id
+           JOIN course_curriculum      cc  ON cc.id  = cos.curriculum_id
+           JOIN dept_departments       d   ON d.id   = o.dept_id
+           JOIN dept_academic_programs p   ON p.id   = o.program_id
+           JOIN student_batches        b   ON b.id   = o.batch_id
+          WHERE " . implode(' AND ', $where) . "
+          ORDER BY o.semester ASC, cc.course_code ASC, cc.course_name ASC"
+    );
+    $st->execute($params);
+
+    $map = [];
+    foreach ($st->fetchAll() as $row) {
+        $map[(int)$row['student_pk']][] = $row;
+    }
+    return $map;
+}
