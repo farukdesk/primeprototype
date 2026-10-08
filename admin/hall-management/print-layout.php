@@ -2,8 +2,10 @@
 /**
  * Printable A4 landscape seat layout of a hall for one exam date.
  * Header: university logo + name, Room Number, exam date; FRONT / BOARD
- * banner above the seat grid, batch-coloured seats, legend and the exam
- * schedule (course / teacher / time slot per batch) below.
+ * banner above the seat grid, batch+section coloured seats (two sections of
+ * the same batch get different colours), legend and the exam schedule
+ * (course / teacher / time slot per batch+section) below, mirroring the
+ * on-screen Seat Layout.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('hall-management');
@@ -24,18 +26,24 @@ $asg_dates = hm_hall_assignment_dates($hall_id);
 if ($f_date === '' && $asg_dates) $f_date = (string)$asg_dates[0];
 
 $assignments   = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
-$batch_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_batch($hall_id, $f_date) : [];
+$group_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_group($hall_id, $f_date) : [];
 
+// Batch+section colours, matching the on-screen Seat Layout: two sections of
+// the same batch get different colours so sections are identified separately.
 $batch_palette = hm_batch_palette();
-$batch_colors  = [];
-$batch_names   = [];
+$group_colors  = [];   // "batch_id|section" => palette entry
+$group_names   = [];   // "batch_id|section" => display label (batch — Sec X)
 foreach ($assignments as $a) {
-    $bk = (int)($a['student_batch_id'] ?? 0);
-    if (!isset($batch_colors[$bk])) {
-        $batch_colors[$bk] = $batch_palette[count($batch_colors) % count($batch_palette)];
-        $batch_names[$bk]  = $a['batch_name'] !== null && $a['batch_name'] !== '' ? (string)$a['batch_name'] : 'No batch';
+    $bk  = (int)($a['student_batch_id'] ?? 0);
+    $sec = trim((string)($a['student_section'] ?? ''));
+    $gk  = $bk . '|' . $sec;
+    if (!isset($group_colors[$gk])) {
+        $group_colors[$gk] = $batch_palette[count($group_colors) % count($batch_palette)];
+        $bn = $a['batch_name'] !== null && $a['batch_name'] !== '' ? (string)$a['batch_name'] : 'No batch';
+        $group_names[$gk] = $bn . ($sec !== '' ? ' — Sec ' . $sec : '');
     }
 }
+ksort($group_colors);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -120,20 +128,19 @@ foreach ($assignments as $a) {
 
     <div class="layout">
         <?php foreach ($columns as $col):
-            $col_batch    = '';
-            $col_batch_id = null;
+            $col_group = null;
             for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
                 $o = $assignments[(int)$col['col_no'] . ':' . $s] ?? null;
-                if ($o) { $col_batch = (string)($o['batch_name'] ?? ''); $col_batch_id = (int)($o['student_batch_id'] ?? 0); break; }
+                if ($o) { $col_group = (int)($o['student_batch_id'] ?? 0) . '|' . trim((string)($o['student_section'] ?? '')); break; }
             }
-            $col_clr = $col_batch_id !== null ? ($batch_colors[$col_batch_id] ?? null) : null;
+            $col_clr = $col_group !== null ? ($group_colors[$col_group] ?? null) : null;
         ?>
         <div class="col">
             <div class="col-title">Column <?= (int)$col['col_no'] ?><small><?= (int)$col['seat_capacity'] ?> seats</small></div>
             <?php if ($col_clr !== null): ?>
             <div class="col-batch">
                 <span style="background:<?= h($col_clr['bg']) ?>;border-color:<?= h($col_clr['border']) ?>;color:<?= h($col_clr['text']) ?>;">
-                    <?= h($col_batch !== '' ? $col_batch : 'No batch') ?>
+                    <?= h($group_names[$col_group] ?? 'No batch') ?>
                 </span>
             </div>
             <?php endif; ?>
@@ -141,9 +148,11 @@ foreach ($assignments as $a) {
                 <?php for ($s = 1; $s <= (int)$col['seat_capacity']; $s++):
                     $occ = $assignments[(int)$col['col_no'] . ':' . $s] ?? null; ?>
                 <?php if ($occ):
-                    $clr = $batch_colors[(int)($occ['student_batch_id'] ?? 0)] ?? $batch_palette[0]; ?>
+                    $occ_gk  = (int)($occ['student_batch_id'] ?? 0) . '|' . trim((string)($occ['student_section'] ?? ''));
+                    $occ_sec = trim((string)($occ['student_section'] ?? ''));
+                    $clr     = $group_colors[$occ_gk] ?? $batch_palette[0]; ?>
                 <div class="seat" style="background:<?= h($clr['bg']) ?>;border-color:<?= h($clr['border']) ?>;color:<?= h($clr['text']) ?>;">
-                    <?= h($occ['student_code']) ?>
+                    <?= h($occ['student_code']) ?><?= $occ_sec !== '' ? ' · ' . h($occ_sec) : '' ?>
                 </div>
                 <?php else: ?>
                 <div class="seat free"><?= $s ?></div>
@@ -155,24 +164,33 @@ foreach ($assignments as $a) {
     </div>
 
     <div class="legend">
-        <?php foreach ($batch_colors as $bk => $clr): ?>
-        <span style="margin-right:14px;"><span class="sw" style="background:<?= h($clr['bg']) ?>;border-color:<?= h($clr['border']) ?>;"></span><?= h($batch_names[$bk]) ?></span>
+        <?php foreach ($group_colors as $gk => $clr): ?>
+        <span style="margin-right:14px;"><span class="sw" style="background:<?= h($clr['bg']) ?>;border-color:<?= h($clr['border']) ?>;"></span><?= h($group_names[$gk]) ?></span>
         <?php endforeach; ?>
         <span style="margin-right:14px;"><span class="sw" style="background:#f3f4f6;border-color:#bbb;"></span>Free (<?= max(0, (int)$hall['total_capacity'] - count($assignments)) ?>)</span>
         <span>Assigned: <?= count($assignments) ?> / <?= (int)$hall['total_capacity'] ?></span>
     </div>
 
     <?php
-    // Exam schedule of the seated batches (course, teacher, time slot, students)
-    $batch_counts = [];
+    // Exam schedule of the seated batch+section groups (course, teacher of
+    // that section, time slot, students), with a fallback to every section
+    // of the same batch when no courses resolved for the exact section key.
+    $group_counts = [];
     foreach ($assignments as $a) {
-        $bk = (int)($a['student_batch_id'] ?? 0);
-        $batch_counts[$bk] = ($batch_counts[$bk] ?? 0) + 1;
+        $gk = (int)($a['student_batch_id'] ?? 0) . '|' . trim((string)($a['student_section'] ?? ''));
+        $group_counts[$gk] = ($group_counts[$gk] ?? 0) + 1;
     }
     $schedule_rows = [];
-    foreach ($batch_colors as $bk => $clr) {
-        foreach (($batch_courses[$bk] ?? []) as $crs) {
-            $schedule_rows[] = ['batch' => $batch_names[$bk] ?? 'No batch', 'students' => $batch_counts[$bk] ?? 0, 'crs' => $crs];
+    foreach ($group_colors as $gk => $clr) {
+        $courses = $group_courses[$gk] ?? [];
+        if (!$courses) {
+            $gbk = (int)strtok((string)$gk, '|');
+            foreach ($group_courses as $ogk => $rows) {
+                if ((int)strtok((string)$ogk, '|') === $gbk) $courses = array_merge($courses, $rows);
+            }
+        }
+        foreach ($courses as $crs) {
+            $schedule_rows[] = ['group' => $group_names[$gk] ?? 'No batch', 'students' => $group_counts[$gk] ?? 0, 'crs' => $crs];
         }
     }
     ?>
@@ -182,7 +200,7 @@ foreach ($assignments as $a) {
         <table class="schedule-table">
             <thead>
                 <tr>
-                    <th style="width:110px;">Batch</th>
+                    <th style="width:140px;">Batch / Section</th>
                     <th style="width:110px;">Course Code</th>
                     <th>Course Title</th>
                     <th>Course Teacher(s)</th>
@@ -193,7 +211,7 @@ foreach ($assignments as $a) {
             <tbody>
                 <?php foreach ($schedule_rows as $row): $crs = $row['crs']; ?>
                 <tr>
-                    <td class="c"><?= h($row['batch']) ?></td>
+                    <td class="c"><?= h($row['group']) ?></td>
                     <td class="c"><?= $crs['course_code'] !== '' ? h($crs['course_code']) : '—' ?></td>
                     <td><?= $crs['course_title'] !== '' ? h($crs['course_title']) : '—' ?></td>
                     <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '—' ?></td>
