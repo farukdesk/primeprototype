@@ -11,9 +11,11 @@
  *   • number of eligible students (due as of today ≤ ৳500 or override)
  *   • number of NOT eligible students + the list of those students
  *
- * Everything is resolved through the exam's routines (exam_routines →
- * exam_routine_items → co_registrations), the same path used when the
- * admit cards are generated, so the report reflects reality.
+ * In this module the "routine" IS the schedule set on the Generate page
+ * (create.php): exam dates/times saved on ac_admit_card_courses. So the
+ * report is driven by the generated admit cards themselves
+ * (ac_admit_cards → ac_admit_card_courses → co_registrations), the exact
+ * data students see on their cards.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('admit-card');
@@ -25,25 +27,35 @@ $db = db();
 // Department scope: faculty users only see their own department(s)
 $ac_scope = ac_dept_scope();
 
-// ── Exam list for the selector ───────────────────────────────────────────
+// ── Exam list for the selector: the exams admit cards were generated for ─
+// (exam_name + semester entered on create.php), restricted to the scope.
+$exam_scope_sql    = '';
+$exam_scope_params = [];
+if ($ac_scope !== null) {
+    if (empty($ac_scope)) {
+        $exam_scope_sql = ' WHERE 1 = 0';
+    } else {
+        $exam_scope_sql    = ' WHERE dept_id IN (' . implode(',', array_fill(0, count($ac_scope), '?')) . ')';
+        $exam_scope_params = $ac_scope;
+    }
+}
 $exams = [];
 try {
-    $exams = $db->query(
-        'SELECT id, exam_name, exam_year
-           FROM ei_exams
-          ORDER BY exam_year DESC, exam_name ASC'
-    )->fetchAll();
+    $st = $db->prepare(
+        'SELECT exam_name, semester, COUNT(*) AS cards
+           FROM ac_admit_cards' . $exam_scope_sql . '
+          GROUP BY exam_name, semester
+          ORDER BY MAX(created_at) DESC, exam_name ASC'
+    );
+    $st->execute($exam_scope_params);
+    $exams = $st->fetchAll();
 } catch (Throwable $e) {}
 
-$f_exam = (int)($_GET['exam_id'] ?? 0);
+$f_exam = trim((string)($_GET['exam'] ?? ''));
 $exam   = null;
 foreach ($exams as $e) {
-    if ((int)$e['id'] === $f_exam) { $exam = $e; break; }
+    if ($e['exam_name'] . '|' . $e['semester'] === $f_exam) { $exam = $e; break; }
 }
-
-// Optional routine-link column on ac_admit_cards (admit-card-routine-link.sql)
-$has_routine_col = false;
-try { $db->query('SELECT routine_id FROM ac_admit_cards LIMIT 1'); $has_routine_col = true; } catch (Throwable $e) {}
 
 // ── Build the report ─────────────────────────────────────────────────────
 // $report[dept_id] = [
@@ -53,37 +65,27 @@ try { $db->query('SELECT routine_id FROM ac_admit_cards LIMIT 1'); $has_routine_
 // ]
 $report = [];
 
-$scope_sql    = '';
-$scope_params = [];
-if ($exam && $ac_scope !== null) {
-    if (empty($ac_scope)) {
-        $exam = null; // nothing visible for this user
-    } else {
-        $scope_sql    = ' AND r.dept_id IN (' . implode(',', array_fill(0, count($ac_scope), '?')) . ')';
-        $scope_params = $ac_scope;
-    }
-}
-
 if ($exam) {
-    // 1) Departments + batches + courses offered (from the exam's routines).
-    //    A routine without its own batch falls back to its offer's batch.
+    // 1) Admit cards of this exam (one card per class group from create.php)
+    //    → departments, batches, scheduled courses and card counts.
     $st = $db->prepare(
-        'SELECT r.dept_id,
-                d.name AS dept_name,
-                COALESCE(r.batch_id, o.batch_id) AS batch_id,
+        'SELECT ac.id, ac.dept_id, d.name AS dept_name,
+                ac.batch_id, ac.batch_label,
                 b.name AS batch_name,
-                COUNT(DISTINCT i.id) AS course_count
-           FROM exam_routines r
-           JOIN dept_departments d ON d.id = r.dept_id
-      LEFT JOIN co_offers o         ON o.id = r.offer_id
-      LEFT JOIN student_batches b   ON b.id = COALESCE(r.batch_id, o.batch_id)
-      LEFT JOIN exam_routine_items i ON i.routine_id = r.id
-          WHERE r.exam_id = ?' . $scope_sql . '
-          GROUP BY r.dept_id, COALESCE(r.batch_id, o.batch_id)
-          ORDER BY d.name ASC, b.sort_order ASC, b.name ASC'
+                (SELECT COUNT(*) FROM ac_admit_card_courses cc
+                  WHERE cc.admit_card_id = ac.id) AS course_count
+           FROM ac_admit_cards ac
+           JOIN dept_departments d ON d.id = ac.dept_id
+      LEFT JOIN student_batches b   ON b.id = ac.batch_id
+          WHERE ac.exam_name = ? AND ac.semester = ?'
+          . ($exam_scope_params ? ' AND ac.dept_id IN (' . implode(',', array_fill(0, count($exam_scope_params), '?')) . ')' : '') . '
+          ORDER BY d.name ASC, b.sort_order ASC, b.name ASC, ac.id ASC'
     );
-    $st->execute(array_merge([$f_exam], $scope_params));
-    foreach ($st->fetchAll() as $row) {
+    $st->execute(array_merge([$exam['exam_name'], $exam['semester']], $exam_scope_params));
+    $cards = $st->fetchAll();
+
+    $card_dept = [];   // card id → dept id
+    foreach ($cards as $row) {
         $did = (int)$row['dept_id'];
         if (!isset($report[$did])) {
             $report[$did] = [
@@ -97,72 +99,64 @@ if ($exam) {
                 'not_eligible' => [],
             ];
         }
-        $bid = (int)($row['batch_id'] ?? 0);
-        $report[$did]['batches'][$bid] = [
-            'name'    => (string)($row['batch_name'] ?? '') !== '' ? (string)$row['batch_name'] : '—',
-            'courses' => (int)$row['course_count'],
-            'cards'   => 0,
-        ];
+        $bname = (string)($row['batch_label'] ?? '');
+        if ($bname === '') $bname = (string)($row['batch_name'] ?? '');
+        $bkey  = $row['batch_id'] !== null ? 'b' . (int)$row['batch_id'] : 'l' . $bname;
+        if (!isset($report[$did]['batches'][$bkey])) {
+            $report[$did]['batches'][$bkey] = [
+                'name'    => $bname !== '' ? $bname : '—',
+                'courses' => 0,
+                'cards'   => 0,
+            ];
+        }
+        $report[$did]['batches'][$bkey]['courses'] += (int)$row['course_count'];
+        $report[$did]['batches'][$bkey]['cards']++;
         $report[$did]['courses'] += (int)$row['course_count'];
+        $report[$did]['cards']++;
+        $card_dept[(int)$row['id']] = $did;
     }
 
-    // 2) Admit card batches created from this exam's routines.
-    if ($has_routine_col && $report) {
-        $st = $db->prepare(
-            'SELECT ac.dept_id, ac.batch_id, COUNT(*) AS cards
-               FROM ac_admit_cards ac
-               JOIN exam_routines r ON r.id = ac.routine_id
-              WHERE r.exam_id = ?' . $scope_sql . '
-              GROUP BY ac.dept_id, ac.batch_id'
+    // 2) Students covered by each card — resolved exactly like the card
+    //    generation/download path (registered offer subjects, with the
+    //    dept/program/batch fallback for manual cards).
+    $sid_depts = [];    // internal student id → [dept id => true]
+    foreach ($card_dept as $cid => $did) {
+        foreach (ac_card_student_ids($cid) as $sid) {
+            $sid_depts[$sid][$did] = true;
+        }
+    }
+    if ($sid_depts) {
+        $ids = array_keys($sid_depts);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $st  = $db->prepare(
+            'SELECT s.id AS sid, s.student_id, s.full_name, sb.name AS batch_name
+               FROM students s
+          LEFT JOIN student_batches sb ON sb.id = s.batch_id
+              WHERE s.id IN (' . $ph . ')'
         );
-        $st->execute(array_merge([$f_exam], $scope_params));
+        $st->execute($ids);
         foreach ($st->fetchAll() as $row) {
-            $did = (int)$row['dept_id'];
-            if (!isset($report[$did])) continue;
-            $report[$did]['cards'] += (int)$row['cards'];
-            $bid = (int)($row['batch_id'] ?? 0);
-            if (isset($report[$did]['batches'][$bid])) {
-                $report[$did]['batches'][$bid]['cards'] += (int)$row['cards'];
+            foreach (array_keys($sid_depts[(int)$row['sid']]) as $did) {
+                $report[$did]['students'][(int)$row['sid']] = $row;
             }
         }
     }
 
-    // 3) Students covered by the exam (registered in the routines' subjects),
-    //    deduplicated per department.
-    $st = $db->prepare(
-        'SELECT DISTINCT r.dept_id, s.id AS sid, s.student_id, s.full_name,
-                sb.name AS batch_name
-           FROM exam_routines r
-           JOIN exam_routine_items i ON i.routine_id = r.id
-           JOIN co_registrations reg ON reg.offer_subject_id = i.offer_subject_id
-           JOIN students s           ON s.id = reg.student_id
-      LEFT JOIN student_batches sb   ON sb.id = s.batch_id
-          WHERE r.exam_id = ? AND s.status = \'Active\'' . $scope_sql
-    );
-    $st->execute(array_merge([$f_exam], $scope_params));
-    foreach ($st->fetchAll() as $row) {
-        $did = (int)$row['dept_id'];
-        if (!isset($report[$did])) continue;
-        $report[$did]['students'][(int)$row['sid']] = $row;
-    }
-
-    // 4) Override holders on this exam's cards: always eligible.
+    // 3) Override holders on this exam's cards: always eligible.
     $overrides = [];
-    if ($has_routine_col) {
+    if ($card_dept) {
         try {
+            $ph = implode(',', array_fill(0, count($card_dept), '?'));
             $st = $db->prepare(
-                'SELECT DISTINCT ov.student_id
-                   FROM ac_student_overrides ov
-                   JOIN ac_admit_cards ac ON ac.id = ov.admit_card_id
-                   JOIN exam_routines r   ON r.id  = ac.routine_id
-                  WHERE r.exam_id = ?'
+                'SELECT DISTINCT student_id FROM ac_student_overrides
+                  WHERE admit_card_id IN (' . $ph . ')'
             );
-            $st->execute([$f_exam]);
+            $st->execute(array_keys($card_dept));
             foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $sid) $overrides[(int)$sid] = true;
         } catch (Throwable $e) {}
     }
 
-    // 5) Eligibility per student (same rule as the download check:
+    // 4) Eligibility per student (same rule as the download check:
     //    due as of today ≤ AC_DUE_THRESHOLD, or an admin override).
     foreach ($report as $did => &$dep) {
         foreach ($dep['students'] as $sid => $srow) {
@@ -223,11 +217,11 @@ require_once __DIR__ . '/../includes/header.php';
         <form method="get" class="row g-2 align-items-end">
             <div class="col-md-6 col-lg-5">
                 <label class="form-label small text-muted mb-1">Exam</label>
-                <select name="exam_id" class="form-select">
+                <select name="exam" class="form-select">
                     <option value="">— Select an exam —</option>
-                    <?php foreach ($exams as $e): ?>
-                        <option value="<?= (int)$e['id'] ?>" <?= $f_exam === (int)$e['id'] ? 'selected' : '' ?>>
-                            <?= h($e['exam_name']) ?> (<?= h($e['exam_year']) ?>)
+                    <?php foreach ($exams as $e): $val = $e['exam_name'] . '|' . $e['semester']; ?>
+                        <option value="<?= h($val) ?>" <?= $f_exam === $val ? 'selected' : '' ?>>
+                            <?= h($e['exam_name']) ?> — <?= h($e['semester']) ?> (<?= (int)$e['cards'] ?> card<?= (int)$e['cards'] === 1 ? '' : 's' ?>)
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -239,13 +233,13 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
-<?php if (!$f_exam): ?>
-    <div class="alert alert-info"><i class="fas fa-circle-info me-2"></i>Select an exam above to build the department-wise report.</div>
+<?php if ($f_exam === ''): ?>
+    <div class="alert alert-info"><i class="fas fa-circle-info me-2"></i>Select an exam above to build the department-wise report. Exams appear here once admit cards are generated for them.</div>
 <?php elseif (!$exam): ?>
     <div class="alert alert-warning"><i class="fas fa-triangle-exclamation me-2"></i>Exam not found or you do not have access to any of its departments.</div>
 <?php else: ?>
 
-    <h5 class="fw-semibold mb-3"><?= h($exam['exam_name']) ?> (<?= h($exam['exam_year']) ?>)</h5>
+    <h5 class="fw-semibold mb-3"><?= h($exam['exam_name']) ?> — <?= h($exam['semester']) ?></h5>
 
     <!-- Totals -->
     <div class="d-flex flex-wrap gap-2 mb-3">
@@ -270,7 +264,7 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 
     <?php if (!$report): ?>
-        <div class="alert alert-secondary"><i class="fas fa-circle-info me-2"></i>No exam routines found for this exam — build routines first, then generate admit cards.</div>
+        <div class="alert alert-secondary"><i class="fas fa-circle-info me-2"></i>No admit cards found for this exam — generate them from the Generate page first.</div>
     <?php else: ?>
 
     <div class="card">
@@ -306,7 +300,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php if ($dep['cards'] > 0): ?>
                                 <span class="badge bg-dark-subtle text-dark-emphasis border"><?= (int)$dep['cards'] ?></span>
                             <?php else: ?>
-                                <span class="badge bg-warning-subtle text-warning-emphasis border" title="No admit cards generated from this exam's routines yet">0</span>
+                                <span class="badge bg-warning-subtle text-warning-emphasis border" title="No admit cards generated for this exam yet">0</span>
                             <?php endif; ?>
                         </td>
                         <td class="text-center"><?= count($dep['students']) ?></td>
@@ -378,7 +372,8 @@ require_once __DIR__ . '/../includes/header.php';
 
     <p class="text-muted small mt-2 mb-0">
         <i class="fas fa-circle-info me-1"></i>
-        Students are counted through their course-offer registrations in this exam's routines.
+        Students are counted through their course-offer registrations on this exam's admit cards —
+        the schedule set on the Generate page.
         "Eligible" means the student's due as of today is within ৳<?= number_format(AC_DUE_THRESHOLD) ?> or an admin override exists —
         the same rule used for admit card downloads.
     </p>
