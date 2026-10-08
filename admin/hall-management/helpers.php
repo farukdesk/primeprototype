@@ -392,6 +392,78 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
 }
 
 /**
+ * Manually seat ONE student on a specific column/seat of a hall.
+ *
+ * Validates that the seat exists and is free, the student is active,
+ * dept-accessible and not already seated elsewhere on that date/shift,
+ * and keeps the one-batch-per-column rule of the auto-assigner.
+ * Returns [bool ok, string message].
+ */
+function hm_assign_single_student(int $hall_id, string $exam_date, int $student_id, int $col_no, int $seat_no, array $ctx): array
+{
+    hm_ensure_assignments_table();
+    $db = db();
+
+    // Seat must exist in this hall
+    $cap = null;
+    foreach (hm_hall_columns($hall_id) as $col) {
+        if ((int)$col['col_no'] === $col_no) { $cap = (int)$col['seat_capacity']; break; }
+    }
+    if ($cap === null || $seat_no < 1 || $seat_no > $cap) {
+        return [false, 'That seat does not exist in this hall.'];
+    }
+
+    // Student must exist, be active and belong to an accessible department
+    $st = $db->prepare("SELECT id, student_id, full_name, dept_id, batch_id FROM students WHERE id = ? AND status = 'Active'");
+    $st->execute([$student_id]);
+    $stu = $st->fetch();
+    if (!$stu) return [false, 'Student not found or not active.'];
+    if (!can_access_dept((int)$stu['dept_id'])) {
+        return [false, 'You do not have permission for that student\'s department.'];
+    }
+
+    // Seat must be free and the column must keep a single batch
+    $taken     = hm_assignments($hall_id, $exam_date);
+    if (isset($taken[$col_no . ':' . $seat_no])) {
+        return [false, 'Seat C' . $col_no . '-S' . $seat_no . ' is already occupied.'];
+    }
+    $stu_batch = (int)($stu['batch_id'] ?? 0);
+    foreach ($taken as $key => $occ) {
+        if ((int)explode(':', (string)$key)[0] !== $col_no) continue;
+        if ((int)($occ['student_batch_id'] ?? 0) !== $stu_batch) {
+            return [false, 'Column ' . $col_no . ' already holds a different batch — each column seats a single batch.'];
+        }
+        break;
+    }
+
+    // Student must not already be seated on this date (same shift logic as auto-assign)
+    $busy = array_flip(hm_busy_student_ids($exam_date, (string)($ctx['shift'] ?? '')));
+    if (isset($busy[$student_id])) {
+        return [false, h($stu['full_name']) . ' is already seated in a hall on this date.'];
+    }
+
+    try {
+        $db->prepare(
+            'INSERT INTO hm_hall_assignments
+                (hall_id, exam_date, student_id, col_no, seat_no,
+                 dept_id, program_id, batch_id, section, shift, assigned_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+        )->execute([
+            $hall_id, $exam_date, $student_id, $col_no, $seat_no,
+            ($ctx['dept_id'] ?? null) ?: null,
+            ($ctx['program_id'] ?? null) ?: null,
+            $stu_batch ?: (($ctx['batch_id'] ?? null) ?: null),
+            ($ctx['section'] ?? '') !== '' ? $ctx['section'] : null,
+            ($ctx['shift'] ?? '') !== '' ? $ctx['shift'] : null,
+            auth_user()['id'] ?? null,
+        ]);
+    } catch (Throwable $e) {
+        return [false, 'Could not assign the seat — it may have just been taken.'];
+    }
+    return [true, h($stu['full_name']) . ' (' . h($stu['student_id']) . ') seated at C' . $col_no . '-S' . $seat_no . '.'];
+}
+
+/**
  * Exam courses (code, title, teacher(s), time slot) of the students seated
  * in a hall on a date, grouped by the students' batch_id.
  *
