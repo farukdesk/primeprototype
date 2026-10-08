@@ -1,9 +1,10 @@
 <?php
 /**
  * Printable A4 student attendance sheet for a hall on one exam date.
- * One sheet per batch seated in the hall: university logo, date, room
- * number, batch, program, course name, course teachers, time slot and the
- * number of students, followed by a Student ID / Name / Signature table.
+ * One sheet per batch seated in the hall: logo on the left; university,
+ * department, program and sheet title centered; Room Number / Batch /
+ * Section / Shift info; No. of Students with hand-written Present /
+ * Absent fields; Invigilator 1 & 2 sign-off lines.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('hall-management');
@@ -25,18 +26,24 @@ $assignments   = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
 $batch_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_batch($hall_id, $f_date) : [];
 
 // Group seated students per batch (sheet per batch), keeping seat order.
-$by_batch = [];   // batch_id => ['name' =>, 'program_ids' => [], 'students' => []]
+$by_batch = [];   // batch_id => ['name' =>, 'program_ids' => [], 'sections' => [], 'shifts' => [], 'students' => []]
 foreach ($assignments as $a) {
     $bk = (int)($a['student_batch_id'] ?? 0);
     if (!isset($by_batch[$bk])) {
         $by_batch[$bk] = [
             'name'        => $a['batch_name'] !== null && $a['batch_name'] !== '' ? (string)$a['batch_name'] : 'No batch',
             'program_ids' => [],
+            'sections'    => [],
+            'shifts'      => [],
             'students'    => [],
         ];
     }
     $pid = (int)($a['program_id'] ?? 0);
     if ($pid > 0) $by_batch[$bk]['program_ids'][$pid] = true;
+    $sec = trim((string)($a['section'] ?? ''));
+    if ($sec !== '') $by_batch[$bk]['sections'][$sec] = true;
+    $shf = trim((string)($a['shift'] ?? ''));
+    if ($shf !== '') $by_batch[$bk]['shifts'][$shf] = true;
     $by_batch[$bk]['students'][] = $a;
 }
 foreach ($by_batch as &$g) {
@@ -71,6 +78,7 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 24px; margin-bottom: 10px; font-size: 12px; line-height: 1.6; }
         .info-row { display: flex; gap: 5px; }
         .info-row .lbl { font-weight: bold; min-width: 120px; color: #002147; flex-shrink: 0; }
+        .blank-field { display: inline-block; min-width: 90px; border-bottom: 1px solid #666; height: 15px; }
 
         .att-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .att-table th, .att-table td { border: 1px solid #999; padding: 5px 8px; text-align: left; vertical-align: middle; }
@@ -128,19 +136,25 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
             <div class="header-text">
                 <h2>Prime University</h2>
                 <p><?= h($hall['dept_name']) ?></p>
+                <p><?= $programs ? h(implode(', ', $programs)) : '—' ?></p>
                 <div class="sheet-title">STUDENT ATTENDANCE SHEET</div>
             </div>
         </div>
 
         <div class="info-grid">
-            <div class="info-row"><span class="lbl">Exam Date:</span><span><?= $f_date !== '' ? h(date('d M Y', strtotime($f_date))) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">Room Number:</span><span><?= h($hall['room_number']) ?></span></div>
             <div class="info-row"><span class="lbl">Batch:</span><span><?= h($grp['name']) ?></span></div>
-            <div class="info-row"><span class="lbl">Program:</span><span><?= $programs ? h(implode(', ', $programs)) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Section:</span><span><?= $grp['sections'] ? h(implode(', ', array_keys($grp['sections']))) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Shift:</span><span><?= $grp['shifts'] ? h(implode(', ', array_keys($grp['shifts']))) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Exam Date:</span><span><?= $f_date !== '' ? h(date('d M Y', strtotime($f_date))) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Time Slot:</span><span><?= $time_slots ? h(implode('; ', $time_slots)) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">Course Name:</span><span><?= $course_names ? h(implode('; ', $course_names)) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">Course Teacher(s):</span><span><?= $teacher_names ? h(implode('; ', $teacher_names)) : '—' ?></span></div>
-            <div class="info-row"><span class="lbl">Time Slot:</span><span><?= $time_slots ? h(implode('; ', $time_slots)) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">No. of Students:</span><span><?= count($grp['students']) ?></span></div>
+            <div class="info-row">
+                <span class="lbl">Present:</span><span class="blank-field"></span>
+                <span class="lbl" style="min-width:auto; margin-left:24px;">Absent:</span><span class="blank-field"></span>
+            </div>
         </div>
 
         <table class="att-table">
@@ -169,11 +183,11 @@ foreach (hm_programs() as $p) $program_names[(int)$p['id']] = (string)$p['progra
         <div class="signoff">
             <div class="signoff-box">
                 <div class="sig-line"></div>
-                Invigilator's Signature
+                Invigilator 1
             </div>
             <div class="signoff-box">
                 <div class="sig-line"></div>
-                Controller of Examinations
+                Invigilator 2
             </div>
         </div>
 

@@ -2,7 +2,8 @@
 /**
  * Printable A4 seat layout of a hall for one exam date.
  * Header: university logo + name, Room Number, exam date; FRONT / BOARD
- * banner above the seat grid, batch-coloured seats and legend below.
+ * banner above the seat grid, batch-coloured seats, legend and the exam
+ * schedule (course / teacher / time slot per batch) below.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('hall-management');
@@ -22,7 +23,8 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_date)) $f_date = '';
 $asg_dates = hm_hall_assignment_dates($hall_id);
 if ($f_date === '' && $asg_dates) $f_date = (string)$asg_dates[0];
 
-$assignments = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
+$assignments   = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
+$batch_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_batch($hall_id, $f_date) : [];
 
 $batch_palette = hm_batch_palette();
 $batch_colors  = [];
@@ -57,18 +59,25 @@ foreach ($assignments as $a) {
         .front-board { text-align: center; margin: 10px 0 14px; }
         .front-board span { display: inline-block; background: #002147; color: #fff; font-weight: bold; letter-spacing: 2px; font-size: 13px; padding: 6px 60px; border-radius: 4px; }
 
+        .schedule { margin-top: 16px; }
+        .schedule h3 { font-size: 14px; color: #002147; text-align: center; margin-bottom: 6px; letter-spacing: 1px; }
+        .schedule-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .schedule-table th, .schedule-table td { border: 1px solid #999; padding: 5px 8px; text-align: left; vertical-align: middle; }
+        .schedule-table th { background: #002147; color: #fff; text-align: center; }
+        .schedule-table td.c { text-align: center; }
+
         .layout { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
         .col { text-align: center; }
-        .col-title { font-weight: bold; font-size: 11px; color: #002147; margin-bottom: 4px; }
-        .col-title small { display: block; font-weight: normal; color: #555; font-size: 9px; }
-        .col-batch { font-size: 9px; margin: 2px 0 4px; }
+        .col-title { font-weight: bold; font-size: 12px; color: #002147; margin-bottom: 4px; }
+        .col-title small { display: block; font-weight: normal; color: #555; font-size: 12px; }
+        .col-batch { font-size: 12px; margin: 2px 0 4px; }
         .col-batch span { display: inline-block; padding: 1px 8px; border-radius: 10px; border: 1px solid; }
         .seats { display: flex; flex-direction: column; gap: 3px; align-items: center; }
-        .seat { min-width: 92px; height: 26px; border-radius: 4px; border: 1px solid #999;
-                display: flex; align-items: center; justify-content: center; font-size: 9px; padding: 0 4px; white-space: nowrap; }
-        .seat.free { width: 36px; min-width: 36px; background: #f3f4f6; border: 1px dashed #bbb; color: #777; }
+        .seat { min-width: 100px; height: 28px; border-radius: 4px; border: 1px solid #999;
+                display: flex; align-items: center; justify-content: center; font-size: 12px; padding: 0 4px; white-space: nowrap; }
+        .seat.free { width: 40px; min-width: 40px; background: #f3f4f6; border: 1px dashed #bbb; color: #777; }
 
-        .legend { text-align: center; margin-top: 14px; font-size: 11px; color: #333; }
+        .legend { text-align: center; margin-top: 14px; font-size: 12px; color: #333; }
         .legend .sw { display: inline-block; width: 12px; height: 12px; border: 1px solid; border-radius: 3px; vertical-align: -2px; margin-right: 3px; }
 
         .footer { margin-top: 14px; border-top: 1px solid #ccc; padding-top: 4px; font-size: 10px; color: #666; display: flex; justify-content: space-between; }
@@ -77,8 +86,9 @@ foreach ($assignments as $a) {
             @page { size: A4 portrait; margin: 10mm; }
             .no-print { display: none !important; }
             .page { max-width: 100%; padding: 0; }
-            body, .seat, .front-board span, .col-batch span, .legend .sw { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            body, .seat, .front-board span, .col-batch span, .legend .sw, .schedule-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .layout { page-break-inside: avoid; }
+            .schedule-table tr { page-break-inside: avoid; }
         }
     </style>
 </head>
@@ -151,6 +161,43 @@ foreach ($assignments as $a) {
         <span style="margin-right:14px;"><span class="sw" style="background:#f3f4f6;border-color:#bbb;"></span>Free (<?= max(0, (int)$hall['total_capacity'] - count($assignments)) ?>)</span>
         <span>Assigned: <?= count($assignments) ?> / <?= (int)$hall['total_capacity'] ?></span>
     </div>
+
+    <?php
+    // Exam schedule of the seated batches (course, teacher, time slot)
+    $schedule_rows = [];
+    foreach ($batch_colors as $bk => $clr) {
+        foreach (($batch_courses[$bk] ?? []) as $crs) {
+            $schedule_rows[] = ['batch' => $batch_names[$bk] ?? 'No batch', 'crs' => $crs];
+        }
+    }
+    ?>
+    <?php if ($schedule_rows): ?>
+    <div class="schedule">
+        <h3>EXAM SCHEDULE<?= $f_date !== '' ? ' — ' . h(date('d M Y', strtotime($f_date))) : '' ?></h3>
+        <table class="schedule-table">
+            <thead>
+                <tr>
+                    <th style="width:110px;">Batch</th>
+                    <th style="width:110px;">Course Code</th>
+                    <th>Course Title</th>
+                    <th>Course Teacher(s)</th>
+                    <th style="width:150px;">Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($schedule_rows as $row): $crs = $row['crs']; ?>
+                <tr>
+                    <td class="c"><?= h($row['batch']) ?></td>
+                    <td class="c"><?= $crs['course_code'] !== '' ? h($crs['course_code']) : '—' ?></td>
+                    <td><?= $crs['course_title'] !== '' ? h($crs['course_title']) : '—' ?></td>
+                    <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '—' ?></td>
+                    <td class="c"><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '—' ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 
     <div class="footer">
