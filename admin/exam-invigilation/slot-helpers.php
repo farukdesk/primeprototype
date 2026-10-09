@@ -144,6 +144,120 @@ function ei_normalize_slot_date(string $value): ?string
     return null;
 }
 
+/**
+ * Collect slot candidates from the Hall Management module.
+ *
+ * Every scheduled room booking (hm_halls) and every seat-assignment date
+ * (hm_hall_assignments) becomes one candidate per room + date. The time
+ * range is derived from the seated students' admit-card course time slots
+ * (earliest start – latest end); when only a start time is known the
+ * $default_duration_minutes is used to compute the end time.
+ *
+ * Returns rows: ['slot_date','room_number','dept_id','time_slot','error'].
+ * Rows whose time range cannot be resolved carry a non-null 'error'.
+ */
+function ei_hall_management_slot_candidates(string $from_date = '', string $to_date = '', int $default_duration_minutes = 180): array
+{
+    require_once __DIR__ . '/../hall-management/helpers.php';
+    hm_ensure_schedule_columns();
+    hm_ensure_assignments_table();
+
+    $candidates = []; // "hall_id|date" => base row
+
+    // Rooms with seat assignments: one candidate per hall + assignment date.
+    try {
+        $st = db()->query(
+            'SELECT h.id AS hall_id, h.room_number, h.dept_id, a.exam_date
+               FROM hm_hall_assignments a
+               JOIN hm_halls h ON h.id = a.hall_id
+              WHERE h.is_active = 1
+              GROUP BY h.id, h.room_number, h.dept_id, a.exam_date'
+        );
+        foreach ($st->fetchAll() as $row) {
+            $candidates[$row['hall_id'] . '|' . $row['exam_date']] = $row + ['exam_time' => null];
+        }
+    } catch (Throwable $e) {}
+
+    // Manually scheduled rooms (exam_date set on the hall itself).
+    try {
+        $st = db()->query(
+            'SELECT h.id AS hall_id, h.room_number, h.dept_id, h.exam_date, h.exam_time
+               FROM hm_halls h
+              WHERE h.is_active = 1 AND h.exam_date IS NOT NULL'
+        );
+        foreach ($st->fetchAll() as $row) {
+            $key = $row['hall_id'] . '|' . $row['exam_date'];
+            if (!isset($candidates[$key])) {
+                $candidates[$key] = $row;
+            } elseif (!empty($row['exam_time'])) {
+                $candidates[$key]['exam_time'] = $row['exam_time'];
+            }
+        }
+    } catch (Throwable $e) {}
+
+    $out = [];
+    foreach ($candidates as $row) {
+        $slot_date = (string)$row['exam_date'];
+        if ($from_date !== '' && $slot_date < $from_date) continue;
+        if ($to_date !== '' && $slot_date > $to_date) continue;
+
+        // Derive the time range from the seated students' admit-card slots.
+        $start_min = null;
+        $end_min   = null;
+        foreach (hm_exam_courses_by_batch((int)$row['hall_id'], $slot_date) as $course_rows) {
+            foreach ($course_rows as $course) {
+                $label = trim((string)($course['time_slot'] ?? ''));
+                if ($label === '') continue;
+                $minutes = ei_time_slot_minutes($label);
+                if ($minutes !== null) {
+                    [$s, $e] = $minutes;
+                    $start_min = $start_min === null ? $s : min($start_min, $s);
+                    $end_min   = $end_min   === null ? $e : max($end_min, $e);
+                    continue;
+                }
+                // Label with a start time only (e.g. "1:00 PM").
+                $parsed = ei_parse_time_value($label);
+                if ($parsed) {
+                    $s = (int)$parsed->format('H') * 60 + (int)$parsed->format('i');
+                    $start_min = $start_min === null ? $s : min($start_min, $s);
+                }
+            }
+        }
+
+        // Fall back to the hall's own exam_time.
+        if ($start_min === null && !empty($row['exam_time'])) {
+            $ts = strtotime((string)$row['exam_time']);
+            if ($ts !== false) {
+                $start_min = (int)date('H', $ts) * 60 + (int)date('i', $ts);
+            }
+        }
+
+        $time_slot = null;
+        if ($start_min !== null) {
+            if ($end_min === null || $end_min <= $start_min) {
+                $end_min = min($start_min + max(1, $default_duration_minutes), 23 * 60 + 59);
+            }
+            $time_slot = ei_normalize_time_slot_range(
+                sprintf('%02d:%02d', intdiv($start_min, 60), $start_min % 60),
+                sprintf('%02d:%02d', intdiv($end_min, 60), $end_min % 60)
+            );
+        }
+
+        $out[] = [
+            'slot_date'   => $slot_date,
+            'room_number' => (string)$row['room_number'],
+            'dept_id'     => (int)$row['dept_id'] ?: null,
+            'time_slot'   => $time_slot,
+            'error'       => $time_slot ? null : 'no exam time could be determined',
+        ];
+    }
+
+    usort($out, static fn($a, $b) =>
+        [$a['slot_date'], $a['time_slot'] ?? '', $a['room_number']]
+        <=> [$b['slot_date'], $b['time_slot'] ?? '', $b['room_number']]);
+    return $out;
+}
+
 function ei_get_setting(string $key, ?string $default = null): ?string
 {
     static $settings = null;
