@@ -168,6 +168,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 fclose($fh);
             }
         }
+    } elseif ($action === 'import_halls') {
+        $from_date = ei_normalize_slot_date(trim($_POST['hm_from_date'] ?? '')) ?? '';
+        $to_date   = ei_normalize_slot_date(trim($_POST['hm_to_date'] ?? '')) ?? '';
+        $duration  = (int)($_POST['hm_duration'] ?? 180);
+        if ($duration < 30 || $duration > 720) $duration = 180;
+
+        $candidates = ei_hall_management_slot_candidates($from_date, $to_date, $duration);
+
+        if (empty($candidates)) {
+            flash_set('info', 'No scheduled rooms found in Hall Management' . ($from_date !== '' || $to_date !== '' ? ' for the selected date range.' : '.'));
+        } else {
+            $insert_st = db()->prepare(
+                'INSERT INTO ei_slots (exam_id, slot_date, time_slot, room_number, dept_id, faculty1_id, faculty2_id)
+                 VALUES (?,?,?,?,?,NULL,NULL)'
+            );
+            $exists_st = db()->prepare(
+                'SELECT id FROM ei_slots WHERE exam_id = ? AND slot_date = ? AND time_slot = ? AND room_number = ? LIMIT 1'
+            );
+
+            $created = 0;
+            $skipped = 0;
+            $failed  = 0;
+            $row_errors = [];
+
+            foreach ($candidates as $cand) {
+                $label = $cand['room_number'] . ' on ' . $cand['slot_date'];
+                if ($cand['time_slot'] === null) {
+                    $failed++;
+                    $row_errors[] = "Room {$label}: " . $cand['error'] . '.';
+                    continue;
+                }
+                $exists_st->execute([$exam_id, $cand['slot_date'], $cand['time_slot'], $cand['room_number']]);
+                if ($exists_st->fetchColumn()) {
+                    $skipped++;
+                    continue;
+                }
+                $insert_st->execute([$exam_id, $cand['slot_date'], $cand['time_slot'], $cand['room_number'], $cand['dept_id']]);
+                $created++;
+            }
+
+            $import_summary = [
+                'created'    => $created,
+                'failed'     => $failed,
+                'row_errors' => $row_errors,
+            ];
+
+            if ($created > 0) {
+                $msg = "Hall Management import complete. Added {$created} slot(s).";
+                if ($skipped > 0) $msg .= " {$skipped} already existed.";
+                if ($failed > 0)  $msg .= " {$failed} room(s) had no usable exam time.";
+                flash_set('success', $msg);
+            } elseif ($skipped > 0) {
+                flash_set('info', "No new slots added — all {$skipped} matching room booking(s) already exist as slots." . ($failed > 0 ? " {$failed} room(s) had no usable exam time." : ''));
+            } else {
+                flash_set('warning', "No slots imported. {$failed} room(s) had no usable exam time.");
+            }
+        }
     } else {
         $slot_date   = trim($_POST['slot_date']   ?? '');
         $start_time  = trim($_POST['start_time']  ?? '');
@@ -346,7 +403,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 </div>
     <div class="col-lg-5" id="csv-upload">
-    <div class="card h-100">
+    <div class="card">
         <div class="card-header py-3 px-4">
             <h6 class="mb-0 fw-semibold">
                 <i class="fas fa-file-csv me-2 text-muted"></i>
@@ -376,12 +433,61 @@ require_once __DIR__ . '/../includes/header.php';
 2026-06-20,13:00,16:00,Room 302,</pre>
         </div>
     </div>
+
+    <div class="card mt-3" id="hall-import">
+        <div class="card-header py-3 px-4">
+            <h6 class="mb-0 fw-semibold">
+                <i class="fas fa-door-open me-2 text-muted"></i>
+                Import from Hall Management
+            </h6>
+        </div>
+        <div class="card-body p-4">
+            <form method="POST" novalidate>
+                <?= csrf_field() ?>
+                <input type="hidden" name="_action" value="import_halls">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-medium">From Date <span class="text-muted">(optional)</span></label>
+                        <input type="date" name="hm_from_date" class="form-control" style="border-radius:10px;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-medium">To Date <span class="text-muted">(optional)</span></label>
+                        <input type="date" name="hm_to_date" class="form-control" style="border-radius:10px;">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-medium">Default Duration</label>
+                        <select name="hm_duration" class="form-select" style="border-radius:10px;">
+                            <option value="120">2 hours</option>
+                            <option value="150">2.5 hours</option>
+                            <option value="180" selected>3 hours</option>
+                            <option value="240">4 hours</option>
+                        </select>
+                        <div class="form-text">Used when only a start time is known for a room.</div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-outline-primary mt-3" style="border-radius:10px;">
+                    <i class="fas fa-file-import me-1"></i> Import Scheduled Rooms
+                </button>
+            </form>
+            <hr>
+            <p class="mb-2" style="font-size:.85rem;">
+                Creates one slot per room + exam date scheduled in
+                <a href="<?= APP_URL ?>/hall-management/index.php" target="_blank">Hall Management</a>.
+                The time range comes from the seated students' admit-card time slots; the hall's
+                department is set as the preferred department.
+            </p>
+            <p class="mb-0 text-muted" style="font-size:.8rem;">
+                <i class="fas fa-info-circle me-1"></i>
+                Rooms already added as slots (same date, time and room) are skipped, so re-importing is safe.
+            </p>
+        </div>
+    </div>
     </div>
     </div>
 
     <?php if ($import_summary && !empty($import_summary['row_errors'])): ?>
     <div class="card mt-3">
-        <div class="card-header py-2 px-4"><strong>CSV Row Errors</strong></div>
+        <div class="card-header py-2 px-4"><strong>Import Row Errors</strong></div>
         <div class="card-body">
             <ul class="mb-0 ps-3">
                 <?php foreach ($import_summary['row_errors'] as $row_error): ?>
