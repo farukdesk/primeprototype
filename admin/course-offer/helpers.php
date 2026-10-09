@@ -685,6 +685,37 @@ function co_batch_shifts(int $batch_id): array
 }
 
 /**
+ * Active students of the offer's batch (home batch or active transfer into it)
+ * who are NOT enrolled in any subject of the given offer.
+ * Each row contains id, student_id, full_name, phone, section, shift, batch_name.
+ */
+function co_offer_unenrolled_students(int $offer_id, int $batch_id): array
+{
+    if ($batch_id <= 0) {
+        return [];
+    }
+    $st = db()->prepare(
+        "SELECT s.id, s.student_id, s.full_name, s.phone, s.section, s.shift,
+                b.name AS batch_name
+           FROM students s
+           LEFT JOIN student_batches b ON b.id = s.batch_id
+          WHERE (s.batch_id = ?
+                 OR s.id IN (SELECT sbt.student_id FROM student_batch_transfers sbt
+                              WHERE sbt.to_batch_id = ? AND sbt.is_active = 1))
+            AND s.status = 'Active'
+            AND s.id NOT IN (
+                SELECT r.student_id
+                  FROM co_registrations  r
+                  JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+                 WHERE cos.offer_id = ?
+            )
+          ORDER BY LENGTH(s.student_id) ASC, s.student_id ASC"
+    );
+    $st->execute([$batch_id, $batch_id, $offer_id]);
+    return $st->fetchAll();
+}
+
+/**
  * Registered students for every subject in an offer.
  * Returns array keyed by offer_subject_id → list of student rows.
  */
