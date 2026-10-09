@@ -743,8 +743,104 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
         }
     } catch (Throwable $e) {}
 
+    hm_fill_missing_teachers_from_registrations($out);
+
     foreach ($out as $gk => $rows) $out[$gk] = array_values($rows);
     return $out;
+}
+
+/**
+ * Fill empty 'teachers' on exam-schedule rows by matching the seated
+ * students' course registrations on course code.
+ *
+ * Legacy admit-card course rows carry no offer-subject link, so the main
+ * query cannot reach co_offer_subject_teachers even when the teacher is
+ * assigned on the course offer. Here each teacher-less row is resolved
+ * through its own students' registrations (co_registrations →
+ * co_offer_subjects → course_curriculum) whose curriculum course code
+ * matches the row's course code, and the assigned teacher names of those
+ * offer subjects are combined (deduplicated).
+ *
+ * $out is the grouped structure built by hm_exam_courses_by_group():
+ * "batch_id|section" => dedupe-key => row. Modified in place.
+ */
+function hm_fill_missing_teachers_from_registrations(array &$out): void
+{
+    $codes = [];   // lowercase course code => true
+    $sids  = [];   // student id => true
+    foreach ($out as $rows) {
+        foreach ($rows as $r) {
+            if (($r['teachers'] ?? '') !== '' || $r['course_code'] === '' || empty($r['student_ids'])) continue;
+            $codes[mb_strtolower(trim((string)$r['course_code']))] = true;
+            foreach ($r['student_ids'] as $sid) $sids[(int)$sid] = true;
+        }
+    }
+    if (!$codes || !$sids) return;
+
+    $codes = array_keys($codes);
+    $sids  = array_keys($sids);
+
+    // student_id => code_lc => offer_subject_ids, via registrations.
+    $reg_os = [];
+    $osids  = [];
+    try {
+        $cph = implode(',', array_fill(0, count($codes), '?'));
+        $sph = implode(',', array_fill(0, count($sids), '?'));
+        $st  = db()->prepare(
+            "SELECT r.student_id, LOWER(TRIM(c.course_code)) AS code_lc, cos.id AS osid
+               FROM co_registrations r
+               JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+               JOIN course_curriculum c   ON c.id = cos.curriculum_id
+              WHERE r.student_id IN ($sph) AND LOWER(TRIM(c.course_code)) IN ($cph)"
+        );
+        $st->execute(array_merge($sids, $codes));
+        foreach ($st->fetchAll() as $r) {
+            $osid = (int)$r['osid'];
+            $reg_os[(int)$r['student_id']][(string)$r['code_lc']][$osid] = true;
+            $osids[$osid] = true;
+        }
+    } catch (Throwable $e) {
+        return;
+    }
+    if (!$osids) return;
+
+    // Teacher names per offer subject.
+    $teachers = [];
+    try {
+        $osids = array_keys($osids);
+        $ph    = implode(',', array_fill(0, count($osids), '?'));
+        $ts    = db()->prepare(
+            "SELECT t.offer_subject_id,
+                    GROUP_CONCAT(f.name ORDER BY t.sort_order ASC, f.name ASC SEPARATOR ', ') AS teacher_names
+               FROM co_offer_subject_teachers t
+               JOIN dept_faculty f ON f.id = t.faculty_id
+              WHERE t.offer_subject_id IN ($ph)
+              GROUP BY t.offer_subject_id"
+        );
+        $ts->execute($osids);
+        foreach ($ts->fetchAll() as $t) $teachers[(int)$t['offer_subject_id']] = (string)$t['teacher_names'];
+    } catch (Throwable $e) {
+        return;
+    }
+    if (!$teachers) return;
+
+    foreach ($out as $gk => $rows) {
+        foreach ($rows as $key => $r) {
+            if (($r['teachers'] ?? '') !== '' || $r['course_code'] === '' || empty($r['student_ids'])) continue;
+            $code_lc = mb_strtolower(trim((string)$r['course_code']));
+            $names   = [];
+            foreach ($r['student_ids'] as $sid) {
+                foreach (array_keys($reg_os[(int)$sid][$code_lc] ?? []) as $osid) {
+                    $tn = $teachers[$osid] ?? '';
+                    if ($tn === '') continue;
+                    foreach (array_map('trim', explode(',', $tn)) as $n) {
+                        if ($n !== '' && !in_array($n, $names, true)) $names[] = $n;
+                    }
+                }
+            }
+            if ($names) $out[$gk][$key]['teachers'] = implode(', ', $names);
+        }
+    }
 }
 
 /**
