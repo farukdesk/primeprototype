@@ -340,6 +340,38 @@ function hm_busy_student_ids(string $exam_date, string $shift): array
 }
 
 /**
+ * Map of student_id => hall/seat details for students already seated on the
+ * given exam date (optionally narrowed by shift). Used to link "Already
+ * seated" rows straight to the room where each student sits.
+ */
+function hm_busy_student_halls(string $exam_date, string $shift = ''): array
+{
+    hm_ensure_assignments_table();
+    try {
+        $sql = "SELECT a.student_id, a.hall_id, a.col_no, a.seat_no, h.room_number
+                  FROM hm_hall_assignments a
+                  JOIN hm_halls h ON h.id = a.hall_id
+                 WHERE a.exam_date = ?";
+        $params = [$exam_date];
+        if ($shift !== '') { $sql .= " AND (a.shift = ? OR a.shift IS NULL OR a.shift = '')"; $params[] = $shift; }
+        $st = db()->prepare($sql);
+        $st->execute($params);
+        $map = [];
+        foreach ($st->fetchAll() as $r) {
+            $map[(int)$r['student_id']] = [
+                'hall_id'     => (int)$r['hall_id'],
+                'room_number' => (string)$r['room_number'],
+                'col_no'      => (int)$r['col_no'],
+                'seat_no'     => (int)$r['seat_no'],
+            ];
+        }
+        return $map;
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
  * Auto-assign students to seats column by column (front to back), keeping
  * ONE batch per column and alternating batches between adjacent columns:
  * two neighbouring columns never hold the same batch. If only the
