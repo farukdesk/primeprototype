@@ -15,6 +15,14 @@ $filter_time = trim((string)($_GET['exam_time'] ?? ''));
 if ($filter_time !== '' && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $filter_time)) {
     $filter_time = '';
 }
+$filter_room    = trim((string)($_GET['room'] ?? ''));
+$filter_program = (int)($_GET['program_id'] ?? 0);
+$filter_batch   = (int)($_GET['batch_id'] ?? 0);
+$filter_shift   = trim((string)($_GET['shift'] ?? ''));
+$filter_section = trim((string)($_GET['section'] ?? ''));
+$filter_course  = strtoupper(trim((string)($_GET['course_code'] ?? '')));
+$filter_status  = trim((string)($_GET['status'] ?? ''));
+if (!in_array($filter_status, ['active', 'inactive'], true)) $filter_status = '';
 hm_ensure_schedule_columns();
 if ($filter_date === '') {
     // Default to the exam date with assignments nearest to today so the
@@ -35,6 +43,33 @@ if ($filter_date === '') {
 }
 if ($filter_date === '') $filter_date = date('Y-m-d');
 $departments = hm_departments();
+$programs    = hm_programs();
+$batches     = hm_batches();
+$shifts      = hm_shift_options();
+$sections    = hm_section_options();
+
+// Course options: courses with an exam on the selected date (from active admit cards).
+$course_options = [];
+try {
+    $st = db()->prepare(
+        "SELECT DISTINCT cc.course_code, cc.course_title
+           FROM ac_admit_card_courses cc
+           JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id AND ac.is_active = 1
+          WHERE cc.exam_date = ? AND cc.course_code <> ''
+          ORDER BY cc.course_code ASC"
+    );
+    $st->execute([$filter_date]);
+    foreach ($st->fetchAll() as $r) {
+        $code = strtoupper(trim((string)$r['course_code']));
+        if ($code === '' || isset($course_options[$code])) continue;
+        $course_options[$code] = (string)$r['course_title'];
+    }
+} catch (Throwable $e) {
+    $course_options = [];
+}
+if ($filter_course !== '' && !isset($course_options[$filter_course])) {
+    $course_options[$filter_course] = '';
+}
 
 $scope  = get_dept_scope();
 $where  = [];
@@ -42,6 +77,80 @@ $params = [];
 if ($filter_dept > 0) { $where[] = 'h.dept_id = ?'; $params[] = $filter_dept; }
 if ($date_given)      { $where[] = 'h.exam_date = ?'; $params[] = $filter_date; }
 if ($filter_time !== '') { $where[] = 'h.exam_time = ?'; $params[] = $filter_time; }
+if ($filter_room !== '') { $where[] = 'h.room_number LIKE ?'; $params[] = '%' . $filter_room . '%'; }
+if ($filter_status === 'active')   { $where[] = 'h.is_active = 1'; }
+if ($filter_status === 'inactive') { $where[] = 'h.is_active = 0'; }
+
+// Seat-assignment based filters: keep only halls that have at least one
+// seated student matching the chosen program / batch / shift / section on
+// the hall's own exam date (falls back to the student record when the
+// assignment row lacks the value).
+if ($filter_program > 0 || $filter_batch > 0 || $filter_shift !== '' || $filter_section !== '') {
+    hm_ensure_assignments_table();
+    $a_conds  = ['a.hall_id = h.id', '(h.exam_date IS NULL OR a.exam_date = h.exam_date)'];
+    $a_params = [];
+    if ($filter_program > 0) { $a_conds[] = 'COALESCE(a.program_id, s.program_id) = ?'; $a_params[] = $filter_program; }
+    if ($filter_batch > 0)   { $a_conds[] = 'COALESCE(a.batch_id, s.batch_id) = ?';     $a_params[] = $filter_batch; }
+    if ($filter_shift !== '')   { $a_conds[] = "COALESCE(NULLIF(a.shift, ''), s.shift) = ?";     $a_params[] = $filter_shift; }
+    if ($filter_section !== '') { $a_conds[] = "COALESCE(NULLIF(a.section, ''), s.section) = ?"; $a_params[] = $filter_section; }
+    $where[] = 'EXISTS (SELECT 1 FROM hm_hall_assignments a JOIN students s ON s.id = a.student_id WHERE '
+             . implode(' AND ', $a_conds) . ')';
+    $params  = array_merge($params, $a_params);
+}
+
+// Course filter: halls hosting at least one seated student who sits the
+// given course on the hall's exam date (subject-linked admit-card rows via
+// course registrations, legacy rows via the student's dept/program/batch).
+if ($filter_course !== '') {
+    hm_ensure_assignments_table();
+    $course_hall_ids = [];
+    $date_cond = $date_given ? ' AND a.exam_date = ?' : '';
+    $has_subject_col = false;
+    try { db()->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+    if ($has_subject_col) {
+        try {
+            $st = db()->prepare(
+                'SELECT DISTINCT a.hall_id
+                   FROM hm_hall_assignments a
+                   JOIN co_registrations r ON r.student_id = a.student_id
+                   JOIN ac_admit_card_courses cc ON cc.offer_subject_id = r.offer_subject_id
+                                                AND cc.exam_date = a.exam_date
+                                                AND UPPER(cc.course_code) = ?
+                   JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id AND ac.is_active = 1
+                  WHERE 1 = 1' . $date_cond
+            );
+            $st->execute($date_given ? [$filter_course, $filter_date] : [$filter_course]);
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $hid) $course_hall_ids[(int)$hid] = true;
+        } catch (Throwable $e) {}
+    }
+    $legacy_cond = $has_subject_col ? 'cc.offer_subject_id IS NULL' : '1=1';
+    try {
+        $st = db()->prepare(
+            "SELECT DISTINCT a.hall_id
+               FROM hm_hall_assignments a
+               JOIN students s ON s.id = a.student_id
+               JOIN ac_admit_cards ac ON ac.is_active = 1
+                                     AND ac.dept_id = s.dept_id
+                                     AND ac.program_id = s.program_id
+                                     AND (ac.batch_id IS NULL OR ac.batch_id = s.batch_id)
+               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+                                            AND cc.exam_date = a.exam_date
+                                            AND $legacy_cond
+                                            AND UPPER(cc.course_code) = ?
+              WHERE 1 = 1$date_cond"
+        );
+        $st->execute($date_given ? [$filter_course, $filter_date] : [$filter_course]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $hid) $course_hall_ids[(int)$hid] = true;
+    } catch (Throwable $e) {}
+    if ($course_hall_ids) {
+        $ids = array_keys($course_hall_ids);
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $where[] = "h.id IN ($ph)";
+        $params  = array_merge($params, $ids);
+    } else {
+        $where[] = '1 = 0';
+    }
+}
 if ($scope !== null) {
     if (empty($scope)) {
         $where[] = '1 = 0';
@@ -121,7 +230,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card mb-4" style="border-radius:12px;">
     <div class="card-body p-3">
         <form method="GET" class="row g-2 align-items-end">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label fw-medium mb-1">Department</label>
                 <select name="dept_id" class="form-select form-select-sm">
                     <option value="">All departments</option>
@@ -133,14 +242,78 @@ require_once __DIR__ . '/../includes/header.php';
                 </select>
             </div>
             <div class="col-md-3">
+                <label class="form-label fw-medium mb-1">Program</label>
+                <select name="program_id" class="form-select form-select-sm">
+                    <option value="">All programs</option>
+                    <?php foreach ($programs as $p): ?>
+                    <option value="<?= $p['id'] ?>" <?= $filter_program === (int)$p['id'] ? 'selected' : '' ?>>
+                        <?= h($p['program_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1">Batch</label>
+                <select name="batch_id" class="form-select form-select-sm">
+                    <option value="">All batches</option>
+                    <?php foreach ($batches as $b): ?>
+                    <option value="<?= $b['id'] ?>" <?= $filter_batch === (int)$b['id'] ? 'selected' : '' ?>>
+                        <?= h($b['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1">Shift</label>
+                <select name="shift" class="form-select form-select-sm">
+                    <option value="">All shifts</option>
+                    <?php foreach ($shifts as $sh): ?>
+                    <option value="<?= h($sh) ?>" <?= $filter_shift === (string)$sh ? 'selected' : '' ?>><?= h($sh) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1">Section</label>
+                <select name="section" class="form-select form-select-sm">
+                    <option value="">All sections</option>
+                    <?php foreach ($sections as $sec): ?>
+                    <option value="<?= h($sec) ?>" <?= $filter_section === (string)$sec ? 'selected' : '' ?>><?= h($sec) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-medium mb-1">Course <span class="text-muted fw-normal">(exam on selected date)</span></label>
+                <select name="course_code" class="form-select form-select-sm">
+                    <option value="">All courses</option>
+                    <?php foreach ($course_options as $code => $title): ?>
+                    <option value="<?= h($code) ?>" <?= $filter_course === (string)$code ? 'selected' : '' ?>>
+                        <?= h($code . ($title !== '' ? ' — ' . $title : '')) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1">Room</label>
+                <input type="text" name="room" class="form-control form-control-sm" placeholder="Search room no."
+                       value="<?= h($filter_room) ?>">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-medium mb-1">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All statuses</option>
+                    <option value="active" <?= $filter_status === 'active' ? 'selected' : '' ?>>Active</option>
+                    <option value="inactive" <?= $filter_status === 'inactive' ? 'selected' : '' ?>>Inactive</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label fw-medium mb-1">Exam Date <span class="text-muted fw-normal">(for seat counts)</span></label>
                 <input type="date" name="exam_date" class="form-control form-control-sm" value="<?= h($filter_date) ?>">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <label class="form-label fw-medium mb-1">Exam Time</label>
                 <input type="time" name="exam_time" class="form-control form-control-sm" value="<?= h($filter_time !== '' ? substr($filter_time, 0, 5) : '') ?>">
             </div>
-            <div class="col-md-3 d-flex gap-2">
+            <div class="col-md-2 d-flex gap-2">
                 <button class="btn btn-sm btn-primary" style="border-radius:8px;"><i class="fas fa-filter me-1"></i> Filter</button>
                 <a href="<?= APP_URL ?>/hall-management/index.php" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">Reset</a>
             </div>
