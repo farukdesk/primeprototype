@@ -63,9 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         redirect($ret);
     }
 
-    if ($action === 'assign_one') {
-        $p_student = (int)($_POST['student_id'] ?? 0);
-        $p_seat    = trim((string)($_POST['seat'] ?? ''));
+    if ($action === 'assign_many') {
         $p_dept    = (int)($_POST['dept_id'] ?? 0);
         $p_program = (int)($_POST['program_id'] ?? 0);
         $p_batch   = (int)($_POST['batch_id'] ?? 0);
@@ -73,33 +71,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         $p_section = trim($_POST['section'] ?? '');
         $p_shift   = trim($_POST['shift'] ?? '');
         $p_force   = (string)($_POST['force'] ?? '') === '1';
-        if ($p_student <= 0 || !preg_match('/^\d+:\d+$/', $p_seat) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
-            flash_set('error', 'Pick a student, a seat and an exam date to assign manually.');
+        // seat_map[student_id] = "col:seat" — rows with no seat picked are skipped
+        $picks = [];
+        $used  = [];
+        $dupes = 0;
+        foreach ((array)($_POST['seat_map'] ?? []) as $sid => $seat) {
+            $sid  = (int)$sid;
+            $seat = trim((string)$seat);
+            if ($sid <= 0 || $seat === '' || !preg_match('/^\d+:\d+$/', $seat)) continue;
+            if (isset($used[$seat])) { $dupes++; continue; }
+            $used[$seat] = true;
+            $picks[$sid] = $seat;
+        }
+        if (!$picks || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
+            flash_set('error', 'Pick a seat for at least one student (and a valid exam date) to assign manually.');
         } else {
-            [$col_no, $seat_no] = array_map('intval', explode(':', $p_seat));
-            [$ok, $msg, $warnings] = hm_assign_single_student($hall_id, $p_date, $p_student, $col_no, $seat_no, [
+            $ctx = [
                 'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
                 'section' => $p_section, 'shift' => $p_shift,
-            ], $p_force);
-            if (!$ok && $warnings) {
+            ];
+            $ok_cnt    = 0;
+            $fail_msgs = [];
+            $conflicts = [];
+            foreach ($picks as $sid => $seat) {
+                [$col_no, $seat_no] = array_map('intval', explode(':', $seat));
+                [$ok, $msg, $warnings] = hm_assign_single_student($hall_id, $p_date, $sid, $col_no, $seat_no, $ctx, $p_force);
+                if ($ok) {
+                    $ok_cnt++;
+                } elseif ($warnings) {
+                    $conflicts[] = [
+                        'student_id' => $sid, 'seat' => $seat,
+                        'col_no' => $col_no, 'seat_no' => $seat_no, 'warnings' => $warnings,
+                    ];
+                } else {
+                    $fail_msgs[] = $msg;
+                }
+            }
+            if ($ok_cnt > 0) hm_sync_hall_schedule($hall_id);
+            if ($conflicts) {
                 // Rule conflicts — render the page with a confirmation panel
-                // instead of blocking; the user may confirm to seat anyway.
+                // instead of blocking; the user may confirm to seat the rest anyway.
+                foreach ($conflicts as &$cf) {
+                    $cs = db()->prepare('SELECT student_id, full_name FROM students WHERE id = ?');
+                    $cs->execute([$cf['student_id']]);
+                    $cf['student'] = $cs->fetch() ?: null;
+                }
+                unset($cf);
                 $pending_confirm = [
-                    'student_id' => $p_student, 'seat' => $p_seat,
-                    'col_no' => $col_no, 'seat_no' => $seat_no,
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
                     'exam_date' => $p_date, 'section' => $p_section, 'shift' => $p_shift,
-                    'warnings' => $warnings,
+                    'items' => $conflicts, 'seated' => $ok_cnt, 'failed' => $fail_msgs, 'dupes' => $dupes,
                 ];
-                $cs = db()->prepare('SELECT student_id, full_name FROM students WHERE id = ?');
-                $cs->execute([$p_student]);
-                $pending_confirm['student'] = $cs->fetch() ?: null;
             } else {
-                flash_set($ok ? 'success' : 'error', $msg);
+                $msg = $ok_cnt . ' student(s) seated manually.';
+                if ($fail_msgs) $msg .= ' ' . count($fail_msgs) . ' failed: ' . implode(' ', $fail_msgs);
+                if ($dupes > 0) $msg .= ' ' . $dupes . ' skipped — the same seat was picked more than once.';
+                flash_set($ok_cnt > 0 ? 'success' : 'error', $msg);
             }
         }
         if (!isset($pending_confirm)) {
-            hm_sync_hall_schedule($hall_id);
             // Keep the student preview open so more students can be seated
             $ret .= '&preview=1&a_dept=' . $p_dept . '&a_program=' . $p_program . '&a_batch=' . $p_batch
                   . '&a_date=' . urlencode($p_date) . '&a_section=' . urlencode($p_section) . '&a_shift=' . urlencode($p_shift);
@@ -189,26 +219,43 @@ require_once __DIR__ . '/../includes/header.php';
         <i class="fas fa-triangle-exclamation me-2 text-warning"></i>Seating Rule Conflicts — confirm to seat anyway
     </div>
     <div class="card-body">
+        <?php if ((int)$pending_confirm['seated'] > 0 || $pending_confirm['failed']): ?>
         <p class="mb-2" style="font-size:.9rem;">
-            Seating
-            <strong><?= h($pending_confirm['student']['full_name'] ?? 'this student') ?></strong>
-            <?php if (!empty($pending_confirm['student']['student_id'])): ?>(<?= h($pending_confirm['student']['student_id']) ?>)<?php endif; ?>
-            at <strong>C<?= (int)$pending_confirm['col_no'] ?>-S<?= (int)$pending_confirm['seat_no'] ?></strong>
+            <?php if ((int)$pending_confirm['seated'] > 0): ?>
+            <span class="badge bg-success"><?= (int)$pending_confirm['seated'] ?> student(s) already seated</span>
+            <?php endif; ?>
+            <?php foreach ($pending_confirm['failed'] as $fm): ?>
+            <span class="text-danger d-block"><?= h($fm) ?></span>
+            <?php endforeach; ?>
+        </p>
+        <?php endif; ?>
+        <p class="mb-2" style="font-size:.9rem;">
+            Seating the following <?= count($pending_confirm['items']) ?> student(s)
             on <strong><?= h(date('d M Y', strtotime($pending_confirm['exam_date']))) ?></strong>
-            breaks the following rule(s):
+            breaks seating rule(s):
         </p>
         <ul class="mb-3" style="font-size:.88rem;">
-            <?php foreach ($pending_confirm['warnings'] as $w): ?>
-            <li class="text-danger"><?= h($w) ?></li>
+            <?php foreach ($pending_confirm['items'] as $it): ?>
+            <li class="mb-1">
+                <strong><?= h($it['student']['full_name'] ?? 'Student #' . (int)$it['student_id']) ?></strong>
+                <?php if (!empty($it['student']['student_id'])): ?>(<?= h($it['student']['student_id']) ?>)<?php endif; ?>
+                at <strong>C<?= (int)$it['col_no'] ?>-S<?= (int)$it['seat_no'] ?></strong>:
+                <ul class="mb-0">
+                    <?php foreach ($it['warnings'] as $w): ?>
+                    <li class="text-danger"><?= h($w) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </li>
             <?php endforeach; ?>
         </ul>
         <div class="d-flex gap-2">
             <form method="post" class="mb-0">
                 <?= csrf_field() ?>
-                <input type="hidden" name="action" value="assign_one">
+                <input type="hidden" name="action" value="assign_many">
                 <input type="hidden" name="force" value="1">
-                <input type="hidden" name="student_id" value="<?= (int)$pending_confirm['student_id'] ?>">
-                <input type="hidden" name="seat" value="<?= h($pending_confirm['seat']) ?>">
+                <?php foreach ($pending_confirm['items'] as $it): ?>
+                <input type="hidden" name="seat_map[<?= (int)$it['student_id'] ?>]" value="<?= h($it['seat']) ?>">
+                <?php endforeach; ?>
                 <input type="hidden" name="dept_id" value="<?= (int)$pending_confirm['dept_id'] ?>">
                 <input type="hidden" name="program_id" value="<?= (int)$pending_confirm['program_id'] ?>">
                 <input type="hidden" name="batch_id" value="<?= (int)$pending_confirm['batch_id'] ?>">
@@ -507,8 +554,17 @@ require_once __DIR__ . '/../includes/header.php';
             </form>
         </div>
         <div class="text-muted mb-2" style="font-size:.8rem;">
-            <i class="fas fa-hand-pointer me-1"></i>Or seat a single student manually with the seat picker in each row — manual seating is free-form: any seat can be chosen and rule conflicts (mixed/adjacent batches, double seating) only ask for confirmation.
+            <i class="fas fa-hand-pointer me-1"></i>Or seat students manually: pick a seat (e.g. C1, C2…) for each student below, then press <strong>Save Manual Seats</strong> to assign them all at once. Manual seating is free-form: any seat can be chosen and rule conflicts (mixed/adjacent batches, double seating) only ask for confirmation.
         </div>
+        <form method="post" class="mb-0" id="hmManualForm">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="assign_many">
+            <input type="hidden" name="dept_id" value="<?= $f_dept ?>">
+            <input type="hidden" name="program_id" value="<?= $f_program ?>">
+            <input type="hidden" name="batch_id" value="<?= $f_batch ?>">
+            <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
+            <input type="hidden" name="section" value="<?= h($f_section) ?>">
+            <input type="hidden" name="shift" value="<?= h($f_shift) ?>">
         <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
             <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                 <thead class="table-light" style="position:sticky;top:0;">
@@ -539,25 +595,10 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td>
                             <?php if ($seat_opts !== ''): ?>
-                            <form method="post" class="d-flex gap-1 mb-0">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="action" value="assign_one">
-                                <input type="hidden" name="student_id" value="<?= (int)$stu['id'] ?>">
-                                <input type="hidden" name="dept_id" value="<?= $f_dept ?>">
-                                <input type="hidden" name="program_id" value="<?= $f_program ?>">
-                                <input type="hidden" name="batch_id" value="<?= $f_batch ?>">
-                                <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
-                                <input type="hidden" name="section" value="<?= h($f_section) ?>">
-                                <input type="hidden" name="shift" value="<?= h($f_shift) ?>">
-                                <select name="seat" class="form-select form-select-sm" required style="width:auto;font-size:.75rem;">
-                                    <option value="">Seat…</option>
-                                    <?= $seat_opts ?>
-                                </select>
-                                <button type="submit" class="btn btn-sm btn-outline-success py-0" style="border-radius:6px;font-size:.75rem;"
-                                        title="Seat this student manually">
-                                    <i class="fas fa-chair"></i>
-                                </button>
-                            </form>
+                            <select name="seat_map[<?= (int)$stu['id'] ?>]" class="form-select form-select-sm hm-seat-pick" style="width:auto;font-size:.75rem;">
+                                <option value="">Seat…</option>
+                                <?= $seat_opts ?>
+                            </select>
                             <?php else: ?>
                             <span class="text-muted">—</span>
                             <?php endif; ?>
@@ -567,6 +608,15 @@ require_once __DIR__ . '/../includes/header.php';
                 </tbody>
             </table>
         </div>
+        <?php if ($seat_opts !== ''): ?>
+        <div class="d-flex align-items-center gap-2 mt-2">
+            <button type="submit" class="btn btn-sm btn-success" style="border-radius:8px;" id="hmManualSave">
+                <i class="fas fa-chair me-1"></i> Save Manual Seats
+            </button>
+            <span class="text-muted" style="font-size:.8rem;" id="hmManualCount">No seats picked yet.</span>
+        </div>
+        <?php endif; ?>
+        </form>
         <?php endif; ?>
         <?php endif; ?>
     </div>
@@ -623,6 +673,38 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <script>
+// Manual seat pickers — block picking the same seat twice and show how many
+// seats are picked before saving the whole batch together.
+(function () {
+    var form = document.getElementById('hmManualForm');
+    if (!form) return;
+    var picks = form.querySelectorAll('.hm-seat-pick');
+    var count = document.getElementById('hmManualCount');
+    function refresh() {
+        var usedBy = {};
+        picks.forEach(function (sel) { if (sel.value !== '') usedBy[sel.value] = sel; });
+        picks.forEach(function (sel) {
+            Array.prototype.forEach.call(sel.options, function (opt) {
+                if (opt.value === '') return;
+                opt.disabled = !!(usedBy[opt.value] && usedBy[opt.value] !== sel);
+            });
+        });
+        var n = Object.keys(usedBy).length;
+        if (count) count.textContent = n > 0 ? n + ' seat(s) picked — press Save Manual Seats to assign them together.' : 'No seats picked yet.';
+    }
+    picks.forEach(function (sel) { sel.addEventListener('change', refresh); });
+    form.addEventListener('submit', function (e) {
+        var n = 0;
+        picks.forEach(function (sel) { if (sel.value !== '') n++; });
+        if (n === 0) {
+            e.preventDefault();
+            alert('Pick a seat for at least one student first.');
+            return;
+        }
+        if (!confirm('Assign ' + n + ' student(s) to the picked seats?')) e.preventDefault();
+    });
+    refresh();
+})();
 // "Students Here" badge → highlight those students' seats in the layout.
 (function () {
     var active = null;
