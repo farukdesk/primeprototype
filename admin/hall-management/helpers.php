@@ -220,17 +220,74 @@ function hm_section_options(): array
 }
 
 /**
+ * Courses (code + title) that have an exam on $exam_date according to the
+ * generated (active) admit cards of the given dept / program (+ optional
+ * batch / shift). Used as the Course filter options on the hall
+ * "Assign Students" panel: once an exam date (and shift) is picked, only
+ * the courses examined on that day are offered, and students can then be
+ * narrowed down to those sitting a specific course.
+ *
+ * For subject-linked card rows the shift resolves from the course offer;
+ * legacy rows without a subject link have no offer shift and are always
+ * included. Returns rows: course_code, course_title (deduped by code).
+ */
+function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $shift): array
+{
+    if ($dept_id <= 0 || $program_id <= 0 || $exam_date === '') return [];
+    $db = db();
+
+    $card_where = 'ac.is_active = 1 AND ac.dept_id = ? AND ac.program_id = ?';
+    $params     = [$dept_id, $program_id];
+    if ($batch_id > 0) { $card_where .= ' AND ac.batch_id = ?'; $params[] = $batch_id; }
+
+    $has_subject_col = false;
+    try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+
+    $joins = '';
+    $shift_cond = '';
+    if ($has_subject_col) {
+        $joins = ' LEFT JOIN co_offer_subjects cos ON cos.id = cc.offer_subject_id
+                   LEFT JOIN co_offers o ON o.id = cos.offer_id';
+        if ($shift !== '') { $shift_cond = ' AND (o.id IS NULL OR o.shift = ?)'; }
+    }
+    $sql = "SELECT DISTINCT cc.course_code, cc.course_title
+              FROM ac_admit_cards ac
+              JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+              $joins
+             WHERE $card_where AND cc.exam_date = ?$shift_cond
+             ORDER BY cc.course_code ASC, cc.course_title ASC";
+    $params[] = $exam_date;
+    if ($shift_cond !== '') $params[] = $shift;
+    try {
+        $st = $db->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll() as $row) {
+            $code = (string)$row['course_code'];
+            if ($code === '' || isset($out[$code])) continue;
+            $out[$code] = ['course_code' => $code, 'course_title' => (string)$row['course_title']];
+        }
+        return array_values($out);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
  * Students sitting an exam on $exam_date, found through generated (active)
- * admit cards matching dept / program (+ optional batch / section / shift).
+ * admit cards matching dept / program (+ optional batch / section / shift /
+ * course).
  *
  * Cards whose course rows are linked to course-offer subjects resolve
  * students via co_registrations (shift from the offer); legacy cards
  * without subject links fall back to the card's dept/program/batch
- * students (shift / section from the students table).
+ * students (shift / section from the students table). A non-empty
+ * $course_code narrows both paths to students whose admit-card course row
+ * for that date is the given course.
  *
  * Returns rows: id, student_id, full_name, batch_name, shift, section.
  */
-function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $section, string $shift): array
+function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $section, string $shift, string $course_code = ''): array
 {
     $db  = db();
     $out = [];
@@ -255,8 +312,9 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
                   LEFT JOIN student_batches b ON b.id = s.batch_id
                  WHERE $card_where AND cc.exam_date = ?";
         $params = array_merge($card_params, [$exam_date]);
-        if ($section !== '') { $sql .= ' AND cc.section = ?'; $params[] = $section; }
-        if ($shift !== '')   { $sql .= ' AND o.shift = ?';    $params[] = $shift; }
+        if ($section !== '')     { $sql .= ' AND cc.section = ?';     $params[] = $section; }
+        if ($shift !== '')       { $sql .= ' AND o.shift = ?';        $params[] = $shift; }
+        if ($course_code !== '') { $sql .= ' AND cc.course_code = ?'; $params[] = $course_code; }
         $st = $db->prepare($sql);
         $st->execute($params);
         foreach ($st->fetchAll() as $row) $out[(int)$row['id']] = $row;
@@ -280,6 +338,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
     $params = array_merge($card_params, [$exam_date]);
     if ($section !== '') { $sql .= ' AND (cc.section = ? OR s.section = ?)'; $params[] = $section; $params[] = $section; }
     if ($shift !== '')   { $sql .= ' AND s.shift = ?'; $params[] = $shift; }
+    if ($course_code !== '') { $sql .= ' AND cc.course_code = ?'; $params[] = $course_code; }
     try {
         $st = $db->prepare($sql);
         $st->execute($params);
