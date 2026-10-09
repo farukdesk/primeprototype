@@ -161,7 +161,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th class="text-center">Available</th>
                         <th class="text-center">Status</th>
                         <th>Created By</th>
-                        <th class="text-end" style="width:160px;">Actions</th>
+                        <th class="text-end" style="width:200px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -206,6 +206,17 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end">
                             <a href="<?= APP_URL ?>/hall-management/view.php?id=<?= $hl['id'] ?>"
                                class="btn btn-sm btn-outline-secondary" title="View seat layout"><i class="fas fa-eye"></i></a>
+                            <?php if ($can_create): ?>
+                            <button type="button" class="btn btn-sm btn-outline-success hm-copy-btn"
+                                    title="Copy room with seated students to another exam date"
+                                    data-bs-toggle="modal" data-bs-target="#copyHallModal"
+                                    data-hall-id="<?= $hl['id'] ?>"
+                                    data-room="<?= h($hl['room_number']) ?>"
+                                    data-filled="<?= $fill ?>"
+                                    data-exam-date="<?= h($hl['exam_date'] ?? '') ?>">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            <?php endif; ?>
                             <?php if ($can_edit): ?>
                             <a href="<?= APP_URL ?>/hall-management/edit.php?id=<?= $hl['id'] ?>"
                                class="btn btn-sm btn-outline-primary" title="Edit"><i class="fas fa-edit"></i></a>
@@ -227,5 +238,58 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($can_create): ?>
+<!-- Copy room (with its seated students) to another exam date -->
+<div class="modal fade" id="copyHallModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" action="<?= APP_URL ?>/hall-management/copy.php" class="modal-content" style="border-radius:12px;">
+            <?= csrf_field() ?>
+            <input type="hidden" name="id" id="copyHallId" value="">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-copy me-2 text-success"></i>Copy Room <span id="copyHallRoom"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3" style="font-size:.9rem;">
+                    Creates a duplicate booking of this room — same layout and the
+                    <strong><span id="copyHallFilled">0</span> seated student(s)</strong> on the same seats —
+                    for a new exam date, so the same students can sit a different exam on another day.
+                    Students already seated in another room on the new date are skipped automatically.
+                </p>
+                <div class="row g-2">
+                    <div class="col-7">
+                        <label class="form-label fw-medium">New Exam Date <span class="text-danger">*</span></label>
+                        <input type="date" name="exam_date" id="copyHallDate" class="form-control" required>
+                    </div>
+                    <div class="col-5">
+                        <label class="form-label fw-medium">Exam Time <span class="text-muted fw-normal">(optional)</span></label>
+                        <input type="time" name="exam_time" class="form-control">
+                    </div>
+                    <div class="form-text">Leave the time blank to derive it automatically from the students' admit-card schedule for the new date.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" style="border-radius:8px;" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-success" style="border-radius:8px;"><i class="fas fa-copy me-1"></i> Copy Room</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.hm-copy-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+        document.getElementById('copyHallId').value = this.dataset.hallId;
+        document.getElementById('copyHallRoom').textContent = this.dataset.room;
+        document.getElementById('copyHallFilled').textContent = this.dataset.filled;
+        var src = this.dataset.examDate;
+        var d = src ? new Date(src + 'T00:00:00') : new Date();
+        d.setDate(d.getDate() + 1);
+        document.getElementById('copyHallDate').value = d.toISOString().slice(0, 10);
+    });
+});
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
