@@ -941,10 +941,16 @@ function renderFeeSummary(data) {
     }
 
     const badge = document.getElementById('totalOutstandingBadge');
-    if (grandOut > 0) {
+    // Current due shown to the student: prefer the server-computed figure
+    // (acc_outstanding_through_current_month) — the SAME amount the admit-card
+    // download check uses — so My Finances and the admit card never disagree.
+    const currentDue = (typeof data.due_as_of_today === 'number')
+        ? data.due_as_of_today
+        : currentlyDueOut;
+    if (grandOut > 0 || currentDue > 0) {
         // Show currently-due amount prominently; note total outstanding separately
-        let badgeText = 'Outstanding: ' + fmt(currentlyDueOut);
-        if (grandOut > currentlyDueOut) {
+        let badgeText = 'Outstanding: ' + fmt(currentDue);
+        if (grandOut > currentDue) {
             badgeText += ' (Total: ' + fmt(grandOut) + ')';
         }
         badge.textContent   = badgeText;

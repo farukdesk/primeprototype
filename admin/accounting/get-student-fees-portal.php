@@ -123,6 +123,14 @@ try {
         ];
     }, $raw_payments);
 
+    // Due that has actually fallen due as of TODAY — the EXACT amount the
+    // admit-card download check uses (ac_check_access), so the portal and the
+    // admit card always show the same figure.
+    $due_as_of_today = null;
+    try {
+        $due_as_of_today = acc_outstanding_through_current_month((int)$student['package_id']);
+    } catch (Throwable $e) {}
+
     echo json_encode([
         'student' => [
             'id'         => $student['id'],
@@ -131,6 +139,7 @@ try {
             'package_id' => $student['package_id'],
         ],
         'summary'  => $summary,
+        'due_as_of_today' => $due_as_of_today !== null ? round($due_as_of_today, 2) : null,
         'payments' => $payments,
         // Old ERP proof images attached to this student (via Student Accounts
         // → Bulk OLD ERP Proof Upload) so the portal can show them read-only.
