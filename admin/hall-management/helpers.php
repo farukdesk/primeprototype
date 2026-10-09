@@ -829,3 +829,142 @@ function hm_hall_assignment_dates(int $hall_id): array
         return [];
     }
 }
+
+/**
+ * Students who have an active admit-card exam on $exam_date but NO seat in
+ * any hall on that date — the "unseated" report.
+ *
+ * Mirrors hm_find_exam_students() (subject-linked cards via co_registrations,
+ * legacy cards via dept/program/batch students) but runs across every
+ * accessible department/program and excludes students already present in
+ * hm_hall_assignments for the date. Dept-scope aware.
+ *
+ * Optional filters: dept_id, program_id, batch_id, section, shift, time_slot.
+ *
+ * Returns rows: id, student_id, full_name, dept_name, program_name,
+ * batch_name, section, shift, time_slot, exam_name, semester, exam_date.
+ */
+function hm_unseated_students(string $exam_date, array $filters = []): array
+{
+    hm_ensure_assignments_table();
+    $db  = db();
+    $out = [];
+
+    $scope = get_dept_scope();
+    if ($scope !== null && empty($scope)) return [];
+
+    $dept_id    = (int)($filters['dept_id'] ?? 0);
+    $program_id = (int)($filters['program_id'] ?? 0);
+    $batch_id   = (int)($filters['batch_id'] ?? 0);
+    $section    = trim((string)($filters['section'] ?? ''));
+    $shift      = trim((string)($filters['shift'] ?? ''));
+    $time_slot  = trim((string)($filters['time_slot'] ?? ''));
+
+    $card_where  = 'ac.is_active = 1';
+    $card_params = [];
+    if ($dept_id > 0)    { $card_where .= ' AND ac.dept_id = ?';    $card_params[] = $dept_id; }
+    if ($program_id > 0) { $card_where .= ' AND ac.program_id = ?'; $card_params[] = $program_id; }
+    if ($batch_id > 0)   { $card_where .= ' AND ac.batch_id = ?';   $card_params[] = $batch_id; }
+    if ($scope !== null) {
+        $ph = implode(',', array_fill(0, count($scope), '?'));
+        $card_where .= " AND ac.dept_id IN ($ph)";
+        $card_params = array_merge($card_params, $scope);
+    }
+
+    $not_seated = 'NOT EXISTS (SELECT 1 FROM hm_hall_assignments a
+                                WHERE a.exam_date = cc.exam_date AND a.student_id = s.id)';
+
+    $has_subject_col = false;
+    try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+
+    // ── Subject-linked cards: students via their registrations ─────────
+    if ($has_subject_col) {
+        $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
+                       d.name AS dept_name, p.program_name,
+                       b.name AS batch_name, o.shift, cc.section,
+                       cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
+                  FROM ac_admit_cards ac
+                  JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+                  JOIN co_offer_subjects cos ON cos.id = cc.offer_subject_id
+                  JOIN co_offers o ON o.id = cos.offer_id
+                  JOIN co_registrations r ON r.offer_subject_id = cos.id
+                  JOIN students s ON s.id = r.student_id AND s.status = 'Active'
+                  JOIN dept_departments d ON d.id = ac.dept_id
+             LEFT JOIN dept_academic_programs p ON p.id = ac.program_id
+             LEFT JOIN student_batches b ON b.id = s.batch_id
+                 WHERE $card_where AND cc.exam_date = ? AND $not_seated";
+        $params = array_merge($card_params, [$exam_date]);
+        if ($section !== '')   { $sql .= ' AND cc.section = ?';   $params[] = $section; }
+        if ($shift !== '')     { $sql .= ' AND o.shift = ?';      $params[] = $shift; }
+        if ($time_slot !== '') { $sql .= ' AND cc.time_slot = ?'; $params[] = $time_slot; }
+        try {
+            $st = $db->prepare($sql);
+            $st->execute($params);
+            foreach ($st->fetchAll() as $row) $out[(int)$row['id']] = $row;
+        } catch (Throwable $e) {}
+    }
+
+    // ── Legacy / manual cards (no subject links): dept+program+batch ───
+    $legacy_cond = $has_subject_col
+        ? 'NOT EXISTS (SELECT 1 FROM ac_admit_card_courses cx
+                        WHERE cx.admit_card_id = ac.id AND cx.offer_subject_id IS NOT NULL)'
+        : '1=1';
+    $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
+                   d.name AS dept_name, p.program_name,
+                   b.name AS batch_name, s.shift, s.section,
+                   cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
+              FROM ac_admit_cards ac
+              JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+              JOIN students s ON s.dept_id = ac.dept_id
+                             AND s.program_id = ac.program_id
+                             AND (ac.batch_id IS NULL OR s.batch_id = ac.batch_id)
+                             AND s.status = 'Active'
+              JOIN dept_departments d ON d.id = ac.dept_id
+         LEFT JOIN dept_academic_programs p ON p.id = ac.program_id
+         LEFT JOIN student_batches b ON b.id = s.batch_id
+             WHERE $card_where AND $legacy_cond AND cc.exam_date = ? AND $not_seated";
+    $params = array_merge($card_params, [$exam_date]);
+    if ($section !== '')   { $sql .= ' AND (cc.section = ? OR s.section = ?)'; $params[] = $section; $params[] = $section; }
+    if ($shift !== '')     { $sql .= ' AND s.shift = ?';      $params[] = $shift; }
+    if ($time_slot !== '') { $sql .= ' AND cc.time_slot = ?'; $params[] = $time_slot; }
+    try {
+        $st = $db->prepare($sql);
+        $st->execute($params);
+        foreach ($st->fetchAll() as $row) {
+            $sid = (int)$row['id'];
+            if (!isset($out[$sid])) $out[$sid] = $row;
+        }
+    } catch (Throwable $e) {}
+
+    $out = array_values($out);
+    usort($out, static function ($a, $b) {
+        return [$a['dept_name'], (string)$a['program_name'], (string)$a['batch_name'], (string)$a['student_id']]
+           <=> [$b['dept_name'], (string)$b['program_name'], (string)$b['batch_name'], (string)$b['student_id']];
+    });
+    return $out;
+}
+
+/** Distinct time-slot labels on admit-card exams of a given date (scope aware). */
+function hm_time_slot_options(string $exam_date): array
+{
+    $scope = get_dept_scope();
+    if ($scope !== null && empty($scope)) return [];
+    $sql = "SELECT DISTINCT cc.time_slot
+              FROM ac_admit_card_courses cc
+              JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id AND ac.is_active = 1
+             WHERE cc.exam_date = ? AND cc.time_slot IS NOT NULL AND cc.time_slot <> ''";
+    $params = [$exam_date];
+    if ($scope !== null) {
+        $ph  = implode(',', array_fill(0, count($scope), '?'));
+        $sql .= " AND ac.dept_id IN ($ph)";
+        $params = array_merge($params, $scope);
+    }
+    $sql .= ' ORDER BY cc.time_slot ASC';
+    try {
+        $st = db()->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        return [];
+    }
+}

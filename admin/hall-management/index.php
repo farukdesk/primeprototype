@@ -96,11 +96,17 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Hall Management</li>
         </ol>
     </nav>
-    <?php if ($can_create): ?>
-    <a href="<?= APP_URL ?>/hall-management/create.php" class="btn btn-primary" style="border-radius:10px;">
-        <i class="fas fa-plus me-1"></i> New Hall / Room
-    </a>
-    <?php endif; ?>
+    <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/hall-management/unseated.php?exam_date=<?= h($filter_date) ?><?= $filter_dept > 0 ? '&dept_id=' . $filter_dept : '' ?>"
+           class="btn btn-outline-warning" style="border-radius:10px;" title="Students with an admit card on this date but no seat yet">
+            <i class="fas fa-user-clock me-1"></i> Unseated Students
+        </a>
+        <?php if ($can_create): ?>
+        <a href="<?= APP_URL ?>/hall-management/create.php" class="btn btn-primary" style="border-radius:10px;">
+            <i class="fas fa-plus me-1"></i> New Hall / Room
+        </a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <?php flash_show(); ?>
