@@ -285,7 +285,8 @@ function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, st
  * $course_code narrows both paths to students whose admit-card course row
  * for that date is the given course.
  *
- * Returns rows: id, student_id, full_name, batch_name, shift, section.
+ * Returns rows: id, student_id, full_name, batch_name, shift, section,
+ * course_code (the exam course the student sits on that date).
  */
 function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $section, string $shift, string $course_code = ''): array
 {
@@ -302,7 +303,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
     // ── Subject-linked cards: students via their registrations ─────────
     if ($has_subject_col) {
         $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name, s.batch_id,
-                       b.name AS batch_name, o.shift, cc.section
+                       b.name AS batch_name, o.shift, cc.section, cc.course_code
                   FROM ac_admit_cards ac
                   JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
                   JOIN co_offer_subjects cos ON cos.id = cc.offer_subject_id
@@ -326,7 +327,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
                         WHERE cx.admit_card_id = ac.id AND cx.offer_subject_id IS NOT NULL)'
         : '1=1';
     $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name, s.batch_id,
-                   b.name AS batch_name, s.shift, s.section
+                   b.name AS batch_name, s.shift, s.section, cc.course_code
               FROM ac_admit_cards ac
               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
               JOIN students s ON s.dept_id = ac.dept_id
@@ -431,11 +432,71 @@ function hm_busy_student_halls(string $exam_date, string $shift = ''): array
 }
 
 /**
+ * Exam course (course_code) of each given student on $exam_date, resolved
+ * from active admit cards: subject-linked card rows via the student's
+ * course registrations, legacy rows via cards matching the student's
+ * dept / program / batch. Returns student_id => COURSE_CODE (uppercased);
+ * students without a resolvable course are omitted.
+ */
+function hm_student_course_map(array $student_ids, string $exam_date): array
+{
+    $ids = array_values(array_unique(array_filter(array_map('intval', $student_ids))));
+    if (!$ids) return [];
+    $db  = db();
+    $map = [];
+    $ph  = implode(',', array_fill(0, count($ids), '?'));
+
+    $has_subject_col = false;
+    try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+
+    if ($has_subject_col) {
+        try {
+            $st = $db->prepare(
+                "SELECT DISTINCT r.student_id, cc.course_code
+                   FROM co_registrations r
+                   JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
+                   JOIN ac_admit_card_courses cc ON cc.offer_subject_id = cos.id AND cc.exam_date = ?
+                   JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id AND ac.is_active = 1
+                  WHERE r.student_id IN ($ph)"
+            );
+            $st->execute(array_merge([$exam_date], $ids));
+            foreach ($st->fetchAll() as $r) {
+                $sid = (int)$r['student_id'];
+                if (!isset($map[$sid])) $map[$sid] = strtoupper(trim((string)$r['course_code']));
+            }
+        } catch (Throwable $e) {}
+    }
+
+    $legacy_cond = $has_subject_col ? 'cc.offer_subject_id IS NULL' : '1=1';
+    try {
+        $st = $db->prepare(
+            "SELECT DISTINCT s.id AS student_id, cc.course_code
+               FROM students s
+               JOIN ac_admit_cards ac ON ac.is_active = 1
+                                     AND ac.dept_id = s.dept_id
+                                     AND ac.program_id = s.program_id
+                                     AND (ac.batch_id IS NULL OR ac.batch_id = s.batch_id)
+               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+                                            AND cc.exam_date = ?
+                                            AND $legacy_cond
+              WHERE s.id IN ($ph)"
+        );
+        $st->execute(array_merge([$exam_date], $ids));
+        foreach ($st->fetchAll() as $r) {
+            $sid = (int)$r['student_id'];
+            if (!isset($map[$sid])) $map[$sid] = strtoupper(trim((string)$r['course_code']));
+        }
+    } catch (Throwable $e) {}
+
+    return $map;
+}
+
+/**
  * Auto-assign students to seats column by column (front to back), keeping
- * ONE batch per column and alternating batches between adjacent columns:
- * two neighbouring columns never hold the same batch. If only the
- * neighbouring column's batch remains, the column is left empty (the gap
- * lets the batch be seated again in the column after it).
+ * ONE course per column and alternating courses between adjacent columns:
+ * two neighbouring columns never hold the same exam course. If only the
+ * neighbouring column's course remains, the column is left empty (the gap
+ * lets the course be seated again in the column after it).
  * Returns [assigned_count, skipped_already_seated, left_over].
  */
 function hm_assign_students(int $hall_id, string $exam_date, array $students, array $ctx): array
@@ -444,18 +505,22 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
     $taken = hm_assignments($hall_id, $exam_date);
     $busy  = array_flip(hm_busy_student_ids($exam_date, (string)($ctx['shift'] ?? '')));
 
-    // Group the waiting students by their batch
-    $groups  = [];   // batch key => list of student rows
+    // Course of each student already seated in this hall (for column locks)
+    $seated_ids  = array_map(static fn($r) => (int)$r['student_id'], $taken);
+    $course_map  = hm_student_course_map($seated_ids, $exam_date);
+
+    // Group the waiting students by their exam course
+    $groups  = [];   // course key => list of student rows
     $skipped = 0;
     foreach ($students as $stu) {
         $sid = (int)$stu['id'];
         if (isset($busy[$sid])) { $skipped++; continue; }
-        $bk = (int)($stu['batch_id'] ?? 0);
-        $groups[$bk][] = $stu;
+        $ck = strtoupper(trim((string)($stu['course_code'] ?? '')));
+        $groups[$ck][] = $stu;
     }
 
-    // Free seats + batch already seated in each column (columns stay single-batch)
-    $cols = [];      // col_no => ['free' => [seat_no, …], 'batch' => int|null]
+    // Free seats + course already seated in each column (columns stay single-course)
+    $cols = [];      // col_no => ['free' => [seat_no, …], 'course' => string|null]
     foreach (hm_hall_columns($hall_id) as $col) {
         $c    = (int)$col['col_no'];
         $free = [];
@@ -465,10 +530,10 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
             if ($occ === null) {
                 $free[] = $s;
             } elseif ($cb === null) {
-                $cb = (int)($occ['student_batch_id'] ?? $occ['batch_id'] ?? 0);
+                $cb = $course_map[(int)$occ['student_id']] ?? '';
             }
         }
-        $cols[$c] = ['free' => $free, 'batch' => $cb];
+        $cols[$c] = ['free' => $free, 'course' => $cb];
     }
 
     $ins = db()->prepare(
@@ -478,42 +543,42 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
          VALUES (?,?,?,?,?,?,?,?,?,?,?)'
     );
 
-    $assigned   = 0;
-    $prev_batch = null; // batch of the previous (occupied) column
+    $assigned    = 0;
+    $prev_course = null; // course of the previous (occupied) column
     foreach ($cols as $c => $info) {
         if (!$info['free']) {                 // column already full
-            if ($info['batch'] !== null) $prev_batch = $info['batch'];
+            if ($info['course'] !== null) $prev_course = $info['course'];
             continue;
         }
 
-        // Pick the batch for this column
-        if ($info['batch'] !== null) {
-            $pick = $info['batch'];           // partially filled: keep its batch
-            if (empty($groups[$pick])) { $prev_batch = $pick; continue; }
+        // Pick the course for this column
+        if ($info['course'] !== null) {
+            $pick = $info['course'];          // partially filled: keep its course
+            if (empty($groups[$pick])) { $prev_course = $pick; continue; }
         } else {
             $pick = null;
             $best = -1;
-            foreach ($groups as $bk => $list) {   // largest batch different from neighbour
-                if (!$list || $bk === $prev_batch) continue;
-                if (count($list) > $best) { $best = count($list); $pick = $bk; }
+            foreach ($groups as $ck => $list) {   // largest course group different from neighbour
+                if (!$list || ($prev_course !== null && (string)$ck === (string)$prev_course)) continue;
+                if (count($list) > $best) { $best = count($list); $pick = $ck; }
             }
             if ($pick === null) {
-                // Only the neighbouring column's batch remains — leave this
-                // column empty so adjacent columns never share a batch. The
+                // Only the neighbouring column's course remains — leave this
+                // column empty so adjacent columns never share a course. The
                 // empty column acts as a separator, so the next column may
-                // seat that batch again.
+                // seat that course again.
                 $has_left = false;
                 foreach ($groups as $list) {
                     if ($list) { $has_left = true; break; }
                 }
                 if (!$has_left) break;            // no students left at all
-                $prev_batch = null;               // empty column breaks adjacency
+                $prev_course = null;              // empty column breaks adjacency
                 continue;
             }
         }
 
         foreach ($info['free'] as $s) {
-            if (empty($groups[$pick])) break;     // batch exhausted — leave rest of column empty
+            if (empty($groups[$pick])) break;     // course exhausted — leave rest of column empty
             $stu = array_shift($groups[$pick]);
             try {
                 $ins->execute([
@@ -530,7 +595,7 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
                 $skipped++; // duplicate seat/student race — ignore
             }
         }
-        $prev_batch = $pick;
+        $prev_course = $pick;
     }
 
     $left = 0;
@@ -543,8 +608,8 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
  *
  * Hard checks (never overridable): the seat exists and is free, the
  * student is active, dept-accessible and not already seated in THIS hall
- * on that date. Soft rule conflicts (mixed batches in a column, same
- * batch in an adjacent column, already seated in another hall) are
+ * on that date. Soft rule conflicts (mixed courses in a column, same
+ * course in an adjacent column, already seated in another hall) are
  * returned as warnings; passing $force = true seats the student anyway.
  * Returns [bool ok, string message, string[] warnings] — a false result
  * with non-empty warnings means user confirmation is required.
@@ -582,28 +647,34 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
 
     // ── Rule conflicts: manual seating MAY override them after a confirm ──
     $stu_batch = (int)($stu['batch_id'] ?? 0);
-    $stu_bname = (string)($stu['batch_name'] ?? '') !== '' ? (string)$stu['batch_name'] : 'No batch';
     $warnings  = [];
 
-    // 1) Column should hold a single batch
+    // Exam course of this student and of every student already seated here
+    $occ_ids    = array_map(static fn($r) => (int)$r['student_id'], $taken);
+    $course_map = hm_student_course_map(array_merge($occ_ids, [$student_id]), $exam_date);
+    $stu_course = $course_map[$student_id] ?? '';
+    $stu_cname  = $stu_course !== '' ? $stu_course : 'Unknown course';
+
+    // 1) Column should hold a single course
     foreach ($taken as $key => $occ) {
         if ((int)explode(':', (string)$key)[0] !== $col_no) continue;
-        if ((int)($occ['student_batch_id'] ?? 0) !== $stu_batch) {
-            $obn = (string)($occ['batch_name'] ?? '') !== '' ? (string)$occ['batch_name'] : 'No batch';
-            $warnings[] = 'Column ' . $col_no . ' already seats batch "' . $obn . '" — this student is from batch "'
-                        . $stu_bname . '", so the column would mix batches.';
+        $occ_course = $course_map[(int)$occ['student_id']] ?? '';
+        if ($occ_course !== $stu_course) {
+            $ocn = $occ_course !== '' ? $occ_course : 'Unknown course';
+            $warnings[] = 'Column ' . $col_no . ' already seats course "' . $ocn . '" — this student sits course "'
+                        . $stu_cname . '", so the column would mix courses.';
         }
         break;
     }
 
-    // 2) Adjacent columns should hold a DIFFERENT batch (no same batch side by side)
+    // 2) Adjacent columns should hold a DIFFERENT course (no same course side by side)
     foreach ([$col_no - 1, $col_no + 1] as $adj) {
         if ($adj < 1) continue;
         foreach ($taken as $key => $occ) {
             if ((int)explode(':', (string)$key)[0] !== $adj) continue;
-            if ((int)($occ['student_batch_id'] ?? 0) === $stu_batch) {
-                $warnings[] = 'Adjacent Column ' . $adj . ' already seats batch "' . $stu_bname
-                            . '" — same-batch students would sit side by side.';
+            if (($course_map[(int)$occ['student_id']] ?? '') === $stu_course) {
+                $warnings[] = 'Adjacent Column ' . $adj . ' already seats course "' . $stu_cname
+                            . '" — students of the same course would sit side by side.';
             }
             break;
         }

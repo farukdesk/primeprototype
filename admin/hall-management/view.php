@@ -54,9 +54,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
                     'section' => $p_section, 'shift' => $p_shift,
                 ]);
-                $msg = $assigned . ' student(s) assigned to seats (one batch per column, different batches in adjacent columns).';
+                $msg = $assigned . ' student(s) assigned to seats (one course per column, different courses in adjacent columns).';
                 if ($skipped > 0) $msg .= ' ' . $skipped . ' already seated elsewhere were skipped.';
-                if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — no suitable seats left (each column holds a single batch).';
+                if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — no suitable seats left (each column holds a single course).';
                 flash_set($assigned > 0 ? 'success' : 'error', $msg);
             }
             hm_sync_hall_schedule($hall_id);
@@ -585,7 +585,7 @@ require_once __DIR__ . '/../includes/header.php';
             </form>
         </div>
         <div class="text-muted mb-2" style="font-size:.8rem;">
-            <i class="fas fa-hand-pointer me-1"></i>Or seat students manually: pick a seat (e.g. C1, C2…) for each student below, then press <strong>Save Manual Seats</strong> to assign them all at once. Manual seating is free-form: any seat can be chosen and rule conflicts (mixed/adjacent batches, double seating) only ask for confirmation.
+            <i class="fas fa-hand-pointer me-1"></i>Or seat students manually: pick a seat (e.g. C1, C2…) for each student below, then press <strong>Save Manual Seats</strong> to assign them all at once. Manual seating is free-form: any seat can be chosen and rule conflicts (mixed/adjacent courses, double seating) only ask for confirmation.
         </div>
         <form method="post" class="mb-0" id="hmManualForm">
             <?= csrf_field() ?>
