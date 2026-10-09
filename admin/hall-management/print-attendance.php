@@ -1,10 +1,12 @@
 <?php
 /**
  * Printable A4 student attendance sheet for a hall on one exam date.
- * One sheet per batch+section group seated in the hall (same batch in two
- * sections prints two sheets, each with that section's course teacher):
- * logo on the left; university, department, program and sheet title
- * centered; Room Number / Batch / Section / Shift info; No. of Students
+ * One sheet per exam course (course code) seated in the hall: each sheet
+ * lists only the seated students who sit that course, with batch, section
+ * and shift derived from those students. Seated students whose course
+ * could not be resolved get a final sheet of their own. Layout: logo on
+ * the left; university, department, program and sheet title centered;
+ * Room Number / Course / Batch / Section / Shift info; No. of Students
  * with hand-written Present / Absent fields; Invigilator 1 & 2 sign-off
  * lines. Sheets with more than 24 students are split across pages, each
  * page repeating the header, info section and invigilator sign-off with
@@ -29,48 +31,87 @@ if ($f_date === '' && $asg_dates) $f_date = (string)$asg_dates[0];
 $assignments   = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
 $group_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_group($hall_id, $f_date) : [];
 
-// Group seated students per batch + section (sheet per group), keeping seat
-// order, so two sections of the same batch each get their own sheet with
-// that section's course teacher(s).
-$by_group = [];   // "batch_id|section" => ['batch_id' =>, 'name' =>, 'section' =>, 'program_ids' => [], 'shifts' => [], 'students' => []]
-foreach ($assignments as $a) {
-    $bk  = (int)($a['student_batch_id'] ?? 0);
-    $sec = trim((string)($a['student_section'] ?? ''));
-    $gk  = $bk . '|' . $sec;
-    if (!isset($by_group[$gk])) {
-        $by_group[$gk] = [
-            'batch_id'    => $bk,
-            'name'        => $a['batch_name'] !== null && $a['batch_name'] !== '' ? (string)$a['batch_name'] : 'No batch',
-            'section'     => $sec,
-            'program_ids' => [],
-            'shifts'      => [],
-            'students'    => [],
-        ];
-    }
-    $pid = (int)($a['program_id'] ?? 0);
-    if ($pid > 0) $by_group[$gk]['program_ids'][$pid] = true;
-    $shf = trim((string)($a['shift'] ?? ''));
-    if ($shf !== '') $by_group[$gk]['shifts'][$shf] = true;
-    $by_group[$gk]['students'][] = $a;
-}
-ksort($by_group);
-foreach ($by_group as &$g) {
-    usort($g['students'], static fn($x, $y) => strcmp((string)$x['student_code'], (string)$y['student_code']));
-}
-unset($g);
+// Seated assignments keyed by student DB id.
+$by_sid = [];
+foreach ($assignments as $a) $by_sid[(int)$a['student_id']] = $a;
 
-/** Courses of a batch+section group, falling back to every section of the
- *  batch when no courses were resolved for the exact section. */
-function hm_att_group_courses(array $group_courses, int $batch_id, string $section): array
-{
-    $exact = $group_courses[$batch_id . '|' . $section] ?? [];
-    if ($exact) return $exact;
-    $merged = [];
-    foreach ($group_courses as $gk => $rows) {
-        if ((int)strtok((string)$gk, '|') === $batch_id) $merged = array_merge($merged, $rows);
+// One sheet per course code: course rows of every batch+section group are
+// merged per course, combining titles, time slots, teachers and the seated
+// students who sit that course.
+$by_course = [];   // lowercase course code => ['code','title','time_slots'=>[],'teachers'=>[],'student_ids'=>[]]
+foreach ($group_courses as $rows) {
+    foreach ($rows as $crs) {
+        $code = trim((string)($crs['course_code'] ?? ''));
+        $ck   = mb_strtolower($code);
+        if ($ck === '' || $ck === '—') continue;
+        if (!isset($by_course[$ck])) {
+            $by_course[$ck] = [
+                'code'        => $code,
+                'title'       => trim((string)($crs['course_title'] ?? '')),
+                'time_slots'  => [],
+                'teachers'    => [],
+                'student_ids' => [],
+            ];
+        }
+        if ($by_course[$ck]['title'] === '') $by_course[$ck]['title'] = trim((string)($crs['course_title'] ?? ''));
+        $slot = trim((string)($crs['time_slot'] ?? ''));
+        if ($slot !== '') $by_course[$ck]['time_slots'][$slot] = true;
+        foreach (array_map('trim', explode(',', (string)($crs['teachers'] ?? ''))) as $tn) {
+            if ($tn !== '') $by_course[$ck]['teachers'][$tn] = true;
+        }
+        foreach (($crs['student_ids'] ?? []) as $sid) $by_course[$ck]['student_ids'][(int)$sid] = true;
     }
-    return $merged;
 }
+ksort($by_course);
+
+/** Build one printable sheet: students sorted by student ID, with batch /
+ *  section / shift / program info derived from those students. */
+function hm_att_make_sheet(string $code, string $title, array $time_slots, array $teachers, array $students): array
+{
+    usort($students, static fn($x, $y) => strcmp((string)$x['student_code'], (string)$y['student_code']));
+    $batches = $sections = $shifts = $program_ids = [];
+    foreach ($students as $s) {
+        $bn = ($s['batch_name'] ?? '') !== '' ? (string)$s['batch_name'] : 'No batch';
+        $batches[$bn] = true;
+        $sec = trim((string)($s['student_section'] ?? ''));
+        if ($sec !== '') $sections[$sec] = true;
+        $shf = trim((string)($s['shift'] ?? ''));
+        if ($shf !== '') $shifts[$shf] = true;
+        $pid = (int)($s['program_id'] ?? 0);
+        if ($pid > 0) $program_ids[$pid] = true;
+    }
+    return [
+        'course_code'  => $code,
+        'course_title' => $title,
+        'time_slots'   => $time_slots,
+        'teachers'     => $teachers,
+        'batches'      => array_keys($batches),
+        'sections'     => array_keys($sections),
+        'shifts'       => array_keys($shifts),
+        'program_ids'  => $program_ids,
+        'students'     => $students,
+    ];
+}
+
+// Course-wise sheets; seated students whose exam course could not be
+// resolved are collected on a final sheet so nobody is missed.
+$sheets  = [];
+$covered = [];   // student DB id => true, once placed on a course sheet
+foreach ($by_course as $c) {
+    $students = [];
+    foreach (array_keys($c['student_ids']) as $sid) {
+        if (!isset($by_sid[$sid])) continue;
+        $students[]    = $by_sid[$sid];
+        $covered[$sid] = true;
+    }
+    if (!$students) continue;
+    $sheets[] = hm_att_make_sheet($c['code'], $c['title'], array_keys($c['time_slots']), array_keys($c['teachers']), $students);
+}
+$leftover = [];
+foreach ($by_sid as $sid => $a) {
+    if (!isset($covered[$sid])) $leftover[] = $a;
+}
+if ($leftover) $sheets[] = hm_att_make_sheet('', '', [], [], $leftover);
 
 // Program names used by the seated students.
 $program_names = [];
@@ -150,26 +191,14 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
         <button onclick="window.close()" style="padding:6px 14px; margin-left:6px; border:1px solid #ccc; border-radius:6px; cursor:pointer; font-size:13px;">Close</button>
     </div>
 
-    <?php if (empty($by_group)): ?>
+    <?php if (empty($sheets)): ?>
     <p style="text-align:center;color:#777;padding:30px 0;">
         No students are assigned to this hall<?= $f_date !== '' ? ' for ' . h(date('d M Y', strtotime($f_date))) : '' ?>.
     </p>
     <?php else: ?>
-    <?php foreach ($by_group as $gk => $grp):
-        $courses  = hm_att_group_courses($group_courses, (int)$grp['batch_id'], (string)$grp['section']);
-        $programs = array_values(array_intersect_key($program_names, $grp['program_ids']));
-        $course_names  = [];
-        $teacher_names = [];
-        $time_slots    = [];
-        foreach ($courses as $crs) {
-            $cn = trim($crs['course_code'] . ' — ' . $crs['course_title'], ' —');
-            if ($cn !== '' && $crs['course_code'] !== '—') $course_names[] = $cn;
-            if ($crs['teachers']  !== '') $teacher_names[] = $crs['teachers'];
-            if ($crs['time_slot'] !== '') $time_slots[]    = $crs['time_slot'];
-        }
-        $course_names  = array_values(array_unique($course_names));
-        $teacher_names = array_values(array_unique($teacher_names));
-        $time_slots    = array_values(array_unique($time_slots));
+    <?php foreach ($sheets as $grp):
+        $programs    = array_values(array_intersect_key($program_names, $grp['program_ids']));
+        $course_name = trim($grp['course_code'] . ' — ' . $grp['course_title'], ' —');
         $pages       = array_chunk($grp['students'], HM_ATT_STUDENTS_PER_PAGE, true);
         $total_pages = count($pages);
     ?>
@@ -188,13 +217,13 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
 
         <div class="info-grid">
             <div class="info-row"><span class="lbl">Room Number:</span><span><?= h($hall['room_number']) ?></span></div>
-            <div class="info-row"><span class="lbl">Batch:</span><span><?= h($grp['name']) ?></span></div>
-            <div class="info-row"><span class="lbl">Section:</span><span><?= $grp['section'] !== '' ? h($grp['section']) : '—' ?></span></div>
-            <div class="info-row"><span class="lbl">Shift:</span><span><?= $grp['shifts'] ? h(implode(', ', array_keys($grp['shifts']))) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Course:</span><span><?= $course_name !== '' ? h($course_name) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Batch:</span><span><?= $grp['batches'] ? h(implode(', ', $grp['batches'])) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Section:</span><span><?= $grp['sections'] ? h(implode(', ', $grp['sections'])) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Shift:</span><span><?= $grp['shifts'] ? h(implode(', ', $grp['shifts'])) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">Exam Date:</span><span><?= $f_date !== '' ? h(date('d M Y', strtotime($f_date))) : '—' ?></span></div>
-            <div class="info-row"><span class="lbl">Time Slot:</span><span><?= $time_slots ? h(implode('; ', $time_slots)) : '—' ?></span></div>
-            <div class="info-row"><span class="lbl">Course Name:</span><span><?= $course_names ? h(implode('; ', $course_names)) : '—' ?></span></div>
-            <div class="info-row"><span class="lbl">Course Teacher(s):</span><span><?= $teacher_names ? h(implode('; ', $teacher_names)) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Time Slot:</span><span><?= $grp['time_slots'] ? h(implode('; ', $grp['time_slots'])) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Course Teacher(s):</span><span><?= $grp['teachers'] ? h(implode(', ', $grp['teachers'])) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">No. of Students:</span><span><?= count($grp['students']) ?></span></div>
             <div class="info-row">
                 <span class="lbl">Present:</span><span class="blank-field"></span>
