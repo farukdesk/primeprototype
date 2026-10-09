@@ -469,10 +469,10 @@ require_once __DIR__ . '/../includes/header.php';
             No admit-card students found for the selected filters.
         </div>
         <?php else:
-            $busy_ids  = array_flip(hm_busy_student_ids($f_date, $f_shift));
+            $busy_map  = hm_busy_student_halls($f_date, $f_shift);
             $free_cnt  = max(0, (int)$hall['total_capacity'] - count($assignments));
             $new_cnt   = 0;
-            foreach ($preview as $stu) { if (!isset($busy_ids[(int)$stu['id']])) $new_cnt++; }
+            foreach ($preview as $stu) { if (!isset($busy_map[(int)$stu['id']])) $new_cnt++; }
             // Free seat options for manual (single-student) assignment
             $seat_opts = '';
             foreach ($columns as $col) {
@@ -524,9 +524,18 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= h($stu['shift'] ?? '') ?></td>
                         <td><?= h($stu['section'] ?? '') ?></td>
                         <td>
-                            <?= isset($busy_ids[(int)$stu['id']])
-                                ? '<span class="badge bg-secondary">Already seated</span>'
-                                : '<span class="badge bg-success">Will be seated</span>' ?>
+                            <?php if (isset($busy_map[(int)$stu['id']])):
+                                $bm   = $busy_map[(int)$stu['id']];
+                                $burl = APP_URL . '/hall-management/view.php?id=' . $bm['hall_id']
+                                      . '&a_date=' . urlencode($f_date)
+                                      . '&focus_sid=' . (int)$stu['id']; ?>
+                            <a href="<?= h($burl) ?>" class="badge bg-secondary text-decoration-none"
+                               title="Go to Room <?= h($bm['room_number']) ?> — seat C<?= $bm['col_no'] ?>-S<?= $bm['seat_no'] ?>">
+                                <i class="fas fa-location-arrow me-1"></i>Seated — Room <?= h($bm['room_number']) ?> (C<?= $bm['col_no'] ?>-S<?= $bm['seat_no'] ?>)
+                            </a>
+                            <?php else: ?>
+                            <span class="badge bg-success">Will be seated</span>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php if ($seat_opts !== ''): ?>
@@ -656,6 +665,22 @@ require_once __DIR__ . '/../includes/header.php';
             if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
     });
+    // ?focus_sid= → highlight and scroll to that student's seat on page load
+    var focusSid = new URLSearchParams(window.location.search).get('focus_sid');
+    if (focusSid) {
+        var seat = document.querySelector('.hm-seat[data-sid="' + CSS.escape(focusSid) + '"]');
+        if (seat) {
+            document.querySelectorAll('.hm-seat[data-sid]').forEach(function (el) {
+                if (el !== seat) { el.classList.add('hm-seat-dim'); el.style.opacity = '0.3'; }
+            });
+            seat.classList.add('hm-seat-hl');
+            seat.style.boxShadow = '0 0 0 3px #f59e0b';
+            seat.style.outline = '1px solid #b45309';
+            seat.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            seat.addEventListener('click', clearHighlight, { once: true });
+            setTimeout(clearHighlight, 8000);
+        }
+    }
 })();
 </script>
 
