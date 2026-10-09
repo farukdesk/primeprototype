@@ -22,6 +22,7 @@ $f_batch   = (int)($_GET['a_batch'] ?? 0);
 $f_date    = trim($_GET['a_date'] ?? '');
 $f_section = trim($_GET['a_section'] ?? '');
 $f_shift   = trim($_GET['a_shift'] ?? '');
+$f_course  = trim($_GET['a_course'] ?? '');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_date)) $f_date = '';
 if ($f_dept > 0 && !can_access_dept($f_dept)) $f_dept = 0;
 
@@ -39,14 +40,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         $p_date    = trim($_POST['exam_date'] ?? '');
         $p_section = trim($_POST['section'] ?? '');
         $p_shift   = trim($_POST['shift'] ?? '');
+        $p_course  = trim($_POST['course_code'] ?? '');
         if ($p_dept <= 0 || $p_program <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
             flash_set('error', 'Department, Program and Exam Date are required.');
         } elseif (!can_access_dept($p_dept)) {
             flash_set('error', 'You do not have permission for that department.');
         } else {
-            $students = hm_find_exam_students($p_dept, $p_program, $p_batch, $p_date, $p_section, $p_shift);
+            $students = hm_find_exam_students($p_dept, $p_program, $p_batch, $p_date, $p_section, $p_shift, $p_course);
             if (!$students) {
-                flash_set('error', 'No admit-card students found for the selected Department / Program / Batch / Exam Date / Section / Shift.');
+                flash_set('error', 'No admit-card students found for the selected Department / Program / Batch / Exam Date / Section / Shift / Course.');
             } else {
                 [$assigned, $skipped, $left] = hm_assign_students($hall_id, $p_date, $students, [
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
@@ -70,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         $p_date    = trim($_POST['exam_date'] ?? '');
         $p_section = trim($_POST['section'] ?? '');
         $p_shift   = trim($_POST['shift'] ?? '');
+        $p_course  = trim($_POST['course_code'] ?? '');
         $p_force   = (string)($_POST['force'] ?? '') === '1';
         // seat_map[student_id] = "col:seat" — rows with no seat picked are skipped
         $picks = [];
@@ -119,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
                 unset($cf);
                 $pending_confirm = [
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
-                    'exam_date' => $p_date, 'section' => $p_section, 'shift' => $p_shift,
+                    'exam_date' => $p_date, 'section' => $p_section, 'shift' => $p_shift, 'course_code' => $p_course,
                     'items' => $conflicts, 'seated' => $ok_cnt, 'failed' => $fail_msgs, 'dupes' => $dupes,
                 ];
             } else {
@@ -132,7 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         if (!isset($pending_confirm)) {
             // Keep the student preview open so more students can be seated
             $ret .= '&preview=1&a_dept=' . $p_dept . '&a_program=' . $p_program . '&a_batch=' . $p_batch
-                  . '&a_date=' . urlencode($p_date) . '&a_section=' . urlencode($p_section) . '&a_shift=' . urlencode($p_shift);
+                  . '&a_date=' . urlencode($p_date) . '&a_section=' . urlencode($p_section) . '&a_shift=' . urlencode($p_shift)
+                  . '&a_course=' . urlencode($p_course);
             redirect($ret);
         }
     }
@@ -187,10 +191,18 @@ foreach ($assignments as $a) {
 ksort($group_colors);
 $group_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_group($hall_id, $f_date) : [];
 
+// Course options for the filter: exams found on the selected date for the
+// chosen dept / program (+ batch / shift). Lets the user narrow students
+// down to one of the courses actually examined on that day.
+$asg_courses = ($f_dept > 0 && $f_program > 0 && $f_date !== '')
+    ? hm_exam_course_options($f_dept, $f_program, $f_batch, $f_date, $f_shift)
+    : [];
+if ($f_course !== '' && !in_array($f_course, array_column($asg_courses, 'course_code'), true)) $f_course = '';
+
 // Preview of matching students (before assigning)
 $preview = null;
 if (isset($_GET['preview']) && $f_dept > 0 && $f_program > 0 && $f_date !== '') {
-    $preview = hm_find_exam_students($f_dept, $f_program, $f_batch, $f_date, $f_section, $f_shift);
+    $preview = hm_find_exam_students($f_dept, $f_program, $f_batch, $f_date, $f_section, $f_shift, $f_course);
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -262,11 +274,12 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="hidden" name="exam_date" value="<?= h($pending_confirm['exam_date']) ?>">
                 <input type="hidden" name="section" value="<?= h($pending_confirm['section']) ?>">
                 <input type="hidden" name="shift" value="<?= h($pending_confirm['shift']) ?>">
+                <input type="hidden" name="course_code" value="<?= h($pending_confirm['course_code'] ?? '') ?>">
                 <button type="submit" class="btn btn-sm btn-warning fw-semibold" style="border-radius:8px;">
                     <i class="fas fa-chair me-1"></i> Seat Anyway (override rules)
                 </button>
             </form>
-            <a href="<?= APP_URL ?>/hall-management/view.php?id=<?= $hall_id ?>&preview=1&a_dept=<?= (int)$pending_confirm['dept_id'] ?>&a_program=<?= (int)$pending_confirm['program_id'] ?>&a_batch=<?= (int)$pending_confirm['batch_id'] ?>&a_date=<?= urlencode($pending_confirm['exam_date']) ?>&a_section=<?= urlencode($pending_confirm['section']) ?>&a_shift=<?= urlencode($pending_confirm['shift']) ?>"
+            <a href="<?= APP_URL ?>/hall-management/view.php?id=<?= $hall_id ?>&preview=1&a_dept=<?= (int)$pending_confirm['dept_id'] ?>&a_program=<?= (int)$pending_confirm['program_id'] ?>&a_batch=<?= (int)$pending_confirm['batch_id'] ?>&a_date=<?= urlencode($pending_confirm['exam_date']) ?>&a_section=<?= urlencode($pending_confirm['section']) ?>&a_shift=<?= urlencode($pending_confirm['shift']) ?>&a_course=<?= urlencode($pending_confirm['course_code'] ?? '') ?>"
                class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">Cancel</a>
         </div>
     </div>
@@ -446,7 +459,7 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="text-muted fw-normal" style="font-size:.8rem;">— students come from generated admit cards</span>
     </div>
     <div class="card-body">
-        <form method="get" class="row g-3 align-items-end">
+        <form method="get" class="row g-3 align-items-end" id="hmAssignFilter">
             <input type="hidden" name="id" value="<?= $hall_id ?>">
             <input type="hidden" name="preview" value="1">
             <div class="col-md-3">
@@ -502,6 +515,23 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="col-md-3">
+                <label class="form-label" style="font-size:.8rem;">Course <span class="text-muted fw-normal">(exams on that day)</span></label>
+                <?php if ($asg_courses): ?>
+                <select name="a_course" class="form-select form-select-sm">
+                    <option value="">All Courses</option>
+                    <?php foreach ($asg_courses as $crs): ?>
+                    <option value="<?= h($crs['course_code']) ?>" <?= $f_course === $crs['course_code'] ? 'selected' : '' ?>>
+                        <?= h($crs['course_code']) ?> — <?= h($crs['course_title']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php else: ?>
+                <select class="form-select form-select-sm" disabled>
+                    <option><?= ($f_dept > 0 && $f_program > 0 && $f_date !== '') ? 'No exams found on that date' : 'Pick Department, Program & Exam Date first' ?></option>
+                </select>
+                <?php endif; ?>
+            </div>
             <div class="col-md-2">
                 <button type="submit" class="btn btn-sm btn-outline-primary w-100" style="border-radius:8px;">
                     <i class="fas fa-search me-1"></i> Find Students
@@ -547,6 +577,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
                 <input type="hidden" name="section" value="<?= h($f_section) ?>">
                 <input type="hidden" name="shift" value="<?= h($f_shift) ?>">
+                <input type="hidden" name="course_code" value="<?= h($f_course) ?>">
                 <button type="submit" class="btn btn-sm btn-success" style="border-radius:8px;"
                         onclick="return confirm('Assign <?= $new_cnt ?> student(s) to the free seats of this hall?');">
                     <i class="fas fa-chair me-1"></i> Auto Assign to Seats
@@ -565,6 +596,7 @@ require_once __DIR__ . '/../includes/header.php';
             <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
             <input type="hidden" name="section" value="<?= h($f_section) ?>">
             <input type="hidden" name="shift" value="<?= h($f_shift) ?>">
+            <input type="hidden" name="course_code" value="<?= h($f_course) ?>">
         <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
             <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                 <thead class="table-light" style="position:sticky;top:0;">
@@ -673,6 +705,27 @@ require_once __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <script>
+// Assign Students filter: reload course options (and the student preview)
+// when Department / Program / Batch / Exam Date / Shift change, so the
+// Course dropdown always lists the exams of the selected day.
+(function () {
+    var form = document.getElementById('hmAssignFilter');
+    if (!form) return;
+    ['a_dept', 'a_program', 'a_batch', 'a_date', 'a_shift'].forEach(function (name) {
+        var el = form.querySelector('[name="' + name + '"]');
+        if (!el) return;
+        el.addEventListener('change', function () {
+            var dept = form.querySelector('[name="a_dept"]'),
+                prog = form.querySelector('[name="a_program"]'),
+                date = form.querySelector('[name="a_date"]');
+            if (dept && dept.value !== '' && prog && prog.value !== '' && date && date.value !== '') {
+                var course = form.querySelector('[name="a_course"]');
+                if (course) course.value = '';
+                form.submit();
+            }
+        });
+    });
+})();
 // Manual seat pickers — block picking the same seat twice and show how many
 // seats are picked before saving the whole batch together.
 (function () {
