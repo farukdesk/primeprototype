@@ -319,10 +319,6 @@ try {
 }
 $pending_total = count($pending_map);
 
-// Active students of the offer's batch who are not enrolled in any subject
-// of this offer — highlighted below with a printable list.
-$unenrolled = co_offer_unenrolled_students($offer_id, $batch_id);
-
 // ── Trace a student (?student=<pk>) — linked from the admit-card "Comes
 //    from" badges so staff land here and immediately see where (and
 //    whether) the student is registered in this offer, even when the
@@ -452,11 +448,6 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-auto">
             <?= (int)$total_regs ?> registration<?= $total_regs != 1 ? 's' : '' ?>
         </span>
-        <?php if (count($unenrolled) > 0): ?>
-        <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">
-            <?= count($unenrolled) ?> not enrolled
-        </span>
-        <?php endif; ?>
         <?php if ($pending_total > 0): ?>
         <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
             <?= (int)$pending_total ?> pending approval
@@ -488,66 +479,6 @@ require_once __DIR__ . '/../includes/header.php';
         <?php endif; ?>
     </div>
 </div>
-
-<?php if (count($unenrolled) > 0): ?>
-<!-- Students of this batch not enrolled in any subject of this offer -->
-<style>
-@media print {
-    body.print-unenrolled-only * { visibility: hidden !important; }
-    body.print-unenrolled-only #unenrolled-card,
-    body.print-unenrolled-only #unenrolled-card * { visibility: visible !important; }
-    body.print-unenrolled-only #unenrolled-card {
-        position: absolute; left: 0; top: 0; width: 100%;
-        border: none !important; box-shadow: none !important;
-    }
-}
-</style>
-<div class="card mb-4 border-danger" id="unenrolled-card" style="border-radius:12px;">
-    <div class="card-header py-2 px-4 d-flex align-items-center gap-2 bg-danger-subtle">
-        <i class="fas fa-user-slash text-danger"></i>
-        <span class="fw-semibold text-danger-emphasis">Students Not Enrolled in Any Course</span>
-        <span class="badge bg-danger text-white ms-1"><?= count($unenrolled) ?> student<?= count($unenrolled) != 1 ? 's' : '' ?></span>
-        <span class="d-none d-print-inline ms-2 small text-muted">
-            <?= h($offer['batch_name']) ?> — <?= h($offer['dept_name']) ?> &rsaquo; <?= h($offer['program_name']) ?>
-            <?php if ($offer['semester']): ?> &middot; <?= h($offer['semester']) ?><?php endif; ?>
-            <?php if ($offer['academic_intake']): ?> &middot; <?= h($offer['academic_intake']) ?><?php endif; ?>
-            &middot; Printed: <?= date('d M Y, h:i A') ?>
-        </span>
-        <button type="button" class="btn btn-sm btn-outline-danger ms-auto d-print-none" id="print-unenrolled" style="border-radius:8px;">
-            <i class="fas fa-print me-1"></i>Print
-        </button>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-sm table-hover align-middle mb-0" style="font-size:.85rem;">
-            <thead class="table-light">
-                <tr>
-                    <th style="width:2.5rem;">#</th>
-                    <th>Student</th>
-                    <th style="width:10rem;">Phone</th>
-                    <th style="width:7rem;">Batch</th>
-                    <th style="width:5rem;">Section</th>
-                    <th style="width:6rem;">Shift</th>
-                </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($unenrolled as $i => $u): ?>
-                <tr class="table-danger">
-                    <td class="text-muted"><?= $i + 1 ?></td>
-                    <td>
-                        <div class="fw-medium"><?= h($u['full_name']) ?></div>
-                        <div class="text-muted font-monospace" style="font-size:.78rem;"><?= h($u['student_id']) ?></div>
-                    </td>
-                    <td class="font-monospace"><?= h($u['phone'] ?: '—') ?></td>
-                    <td><?= h($u['batch_name'] ?: '—') ?></td>
-                    <td><?= h($u['section'] ?: '—') ?></td>
-                    <td><?= h($u['shift'] ?: '—') ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
-<?php endif; ?>
 
 <?php if (empty($subjects)): ?>
 <div class="alert alert-warning" style="border-radius:12px;">
@@ -870,15 +801,6 @@ function toggleAllSubs(on) {
 (function () {
     var row = document.getElementById('trace-student');
     if (row) { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-})();
-(function () {
-    var btn = document.getElementById('print-unenrolled');
-    if (!btn) return;
-    btn.addEventListener('click', function () {
-        document.body.classList.add('print-unenrolled-only');
-        window.print();
-        document.body.classList.remove('print-unenrolled-only');
-    });
 })();
 <?php if (co_is_staff() && !empty($subjects)): ?>
 (function () {
