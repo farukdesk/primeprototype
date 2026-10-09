@@ -69,17 +69,24 @@ try {
     flash_set('error', 'Hall Management tables are missing. Please run admin/hall-management-schema.sql.');
 }
 
-// Seats filled per hall on the selected exam date
-$filled = [];
+// Seats filled per hall, keyed by the hall's own exam date so every row in
+// the list reflects its actual assignments (the list can span many dates).
+$filled = [];       // "hall_id|exam_date" => count
+$filled_any = [];   // hall_id => total count across all dates (for undated halls)
 try {
     hm_ensure_assignments_table();
-    $st = db()->prepare(
-        'SELECT hall_id, COUNT(*) AS cnt FROM hm_hall_assignments WHERE exam_date = ? GROUP BY hall_id'
+    $st = db()->query(
+        'SELECT hall_id, exam_date, COUNT(*) AS cnt FROM hm_hall_assignments GROUP BY hall_id, exam_date'
     );
-    $st->execute([$filter_date]);
-    foreach ($st->fetchAll() as $r) $filled[(int)$r['hall_id']] = (int)$r['cnt'];
+    foreach ($st->fetchAll() as $r) {
+        $hid = (int)$r['hall_id'];
+        $cnt = (int)$r['cnt'];
+        $filled[$hid . '|' . (string)$r['exam_date']] = $cnt;
+        $filled_any[$hid] = ($filled_any[$hid] ?? 0) + $cnt;
+    }
 } catch (Throwable $e) {
     $filled = [];
+    $filled_any = [];
 }
 
 $can_create = is_super_admin() || can_access('hall-management', 'can_create');
@@ -191,7 +198,10 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-center"><?= (int)$hl['num_rows'] ?></td>
                         <?php
                             $cap   = (int)$hl['total_capacity'];
-                            $fill  = $filled[(int)$hl['id']] ?? 0;
+                            $hdate = (string)($hl['exam_date'] ?? '');
+                            $fill  = $hdate !== ''
+                                ? ($filled[(int)$hl['id'] . '|' . $hdate] ?? 0)
+                                : ($filled_any[(int)$hl['id']] ?? 0);
                             $avail = max(0, $cap - $fill);
                         ?>
                         <td class="text-center"><span class="badge bg-primary"><?= $cap ?> seats</span></td>
