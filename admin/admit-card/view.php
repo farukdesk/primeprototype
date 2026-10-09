@@ -188,7 +188,7 @@ if ($card_has_subject_rows) {
          LEFT JOIN sfp_packages p ON p.student_id = s.id
          WHERE s.status = 'Active'
          GROUP BY s.id
-         ORDER BY s.full_name ASC"
+         ORDER BY s.student_id ASC, s.full_name ASC"
     );
     $students_stmt->execute([$id]);
 } elseif ($routine_id > 0) {
@@ -203,7 +203,7 @@ if ($card_has_subject_rows) {
          LEFT JOIN sfp_packages p ON p.student_id = s.id
          WHERE s.status = 'Active'
          GROUP BY s.id
-         ORDER BY s.full_name ASC"
+         ORDER BY s.student_id ASC, s.full_name ASC"
     );
     $students_stmt->execute([$routine_id]);
 } else {
@@ -215,7 +215,7 @@ if ($card_has_subject_rows) {
          WHERE s.dept_id = ? AND s.program_id = ? $batch_cond
            AND s.status = 'Active'
          GROUP BY s.id
-         ORDER BY s.full_name ASC"
+         ORDER BY s.student_id ASC, s.full_name ASC"
     );
     $students_stmt->execute(array_merge([$card['dept_id'], $card['program_id']], $batch_params));
 }
