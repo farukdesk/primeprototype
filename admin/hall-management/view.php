@@ -312,7 +312,8 @@ require_once __DIR__ . '/../includes/header.php';
                                 $occ_gk  = (int)($occ['student_batch_id'] ?? 0) . '|' . trim((string)($occ['student_section'] ?? ''));
                                 $clr     = $group_colors[$occ_gk] ?? $batch_palette[0];
                                 $occ_sec = trim((string)($occ['student_section'] ?? '')); ?>
-                            <div title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')' . (!empty($occ['batch_name']) ? ' — ' . $occ['batch_name'] : '') . ($occ_sec !== '' ? ' — Sec ' . $occ_sec : '')) ?>"
+                            <div class="hm-seat" data-sid="<?= (int)$occ['student_id'] ?>"
+                                 title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')' . (!empty($occ['batch_name']) ? ' — ' . $occ['batch_name'] : '') . ($occ_sec !== '' ? ' — Sec ' . $occ_sec : '')) ?>"
                                  style="min-width:92px;height:26px;border-radius:6px;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;
                                         display:flex;align-items:center;justify-content:center;font-size:.6rem;color:<?= h($clr['text']) ?>;padding:0 4px;white-space:nowrap;">
                                 <?= h($occ['student_code']) ?><?= $occ_sec !== '' ? ' · ' . h($occ_sec) : '' ?>
@@ -379,7 +380,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <td><?= h($crs['course_title']) ?></td>
                                 <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '<span class="text-muted">—</span>' ?></td>
                                 <td><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '<span class="text-muted">—</span>' ?></td>
-                                <td class="pe-3 text-center"><?php if (isset($crs['student_count']) && $crs['student_count'] !== null): ?><span class="badge bg-primary-subtle text-primary border" style="font-size:.75rem;"><?= (int)$crs['student_count'] ?></span><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
+                                <td class="pe-3 text-center"><?php if (isset($crs['student_count']) && $crs['student_count'] !== null): ?><?php $sids = array_values(array_unique(array_map('intval', (array)($crs['student_ids'] ?? [])))); ?><?php if ($sids): ?><button type="button" class="badge bg-primary-subtle text-primary border hm-count-btn" style="font-size:.75rem;cursor:pointer;" data-students="<?= h(implode(',', $sids)) ?>" title="Click to highlight these students in the seat layout"><?= count($sids) ?></button><?php else: ?><span class="badge bg-primary-subtle text-primary border" style="font-size:.75rem;"><?= (int)$crs['student_count'] ?></span><?php endif; ?><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
                             </tr>
                             <?php endforeach; endforeach; ?>
                         </tbody>
@@ -611,5 +612,51 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 <?php endif; ?>
+
+<script>
+// "Students Here" badge → highlight those students' seats in the layout.
+(function () {
+    var active = null;
+    function clearHighlight() {
+        document.querySelectorAll('.hm-seat.hm-seat-hl').forEach(function (el) {
+            el.classList.remove('hm-seat-hl');
+            el.style.boxShadow = '';
+            el.style.outline = '';
+        });
+        document.querySelectorAll('.hm-seat.hm-seat-dim').forEach(function (el) {
+            el.classList.remove('hm-seat-dim');
+            el.style.opacity = '';
+        });
+        if (active) { active.classList.remove('active'); active.style.boxShadow = ''; }
+        active = null;
+    }
+    document.querySelectorAll('.hm-count-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var same = active === btn;
+            clearHighlight();
+            if (same) return;
+            var ids = (btn.getAttribute('data-students') || '').split(',').filter(Boolean);
+            var set = {};
+            ids.forEach(function (id) { set[id] = true; });
+            var first = null;
+            document.querySelectorAll('.hm-seat[data-sid]').forEach(function (el) {
+                if (set[el.getAttribute('data-sid')]) {
+                    el.classList.add('hm-seat-hl');
+                    el.style.boxShadow = '0 0 0 3px #f59e0b';
+                    el.style.outline = '1px solid #b45309';
+                    if (!first) first = el;
+                } else {
+                    el.classList.add('hm-seat-dim');
+                    el.style.opacity = '0.3';
+                }
+            });
+            active = btn;
+            btn.classList.add('active');
+            btn.style.boxShadow = '0 0 0 2px #f59e0b';
+            if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    });
+})();
+</script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

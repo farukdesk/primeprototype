@@ -580,7 +580,9 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
  * student's dept / program / batch (no teacher information available).
  *
  * Returns: "batch_id|section" => list of
- *          ['course_code','course_title','time_slot','teachers','section','student_count'].
+ *          ['course_code','course_title','time_slot','teachers','section','student_count','student_ids'].
+ * student_count always equals count(student_ids) — the students actually
+ * seated in this hall on the date who sit that course.
  */
 function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
 {
@@ -590,6 +592,7 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
 
     $has_subject_col = false;
     try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+    try { $db->query('SET SESSION group_concat_max_len = 1000000'); } catch (Throwable $e) {}
 
     $sec_expr = $has_subject_col
         ? "COALESCE(NULLIF(a.section, ''), NULLIF(s.section, ''), NULLIF(cc.section, ''), '')"
@@ -602,7 +605,8 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
                 "SELECT s.batch_id, $sec_expr AS grp_section,
                         cc.course_code, cc.course_title, cc.time_slot,
                         cos.id AS offer_subject_id,
-                        COUNT(DISTINCT a.student_id) AS student_count
+                        COUNT(DISTINCT a.student_id) AS student_count,
+                        GROUP_CONCAT(DISTINCT a.student_id) AS student_ids
                    FROM hm_hall_assignments a
                    JOIN students s ON s.id = a.student_id
                    JOIN co_registrations r ON r.student_id = s.id
@@ -637,10 +641,12 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
                 $gk  = (int)($r['batch_id'] ?? 0) . '|' . $sec;
                 $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
                 $tn  = $teachers[(int)$r['offer_subject_id']] ?? '';
+                $ids = array_values(array_filter(array_map('intval', explode(',', (string)($r['student_ids'] ?? '')))));
                 if (isset($out[$gk][$key])) {
                     // Same course offered via multiple offer subjects within
-                    // the group — combine seated counts and teacher names.
-                    $out[$gk][$key]['student_count'] = max((int)$out[$gk][$key]['student_count'], (int)$r['student_count']);
+                    // the group — combine seated students and teacher names.
+                    $out[$gk][$key]['student_ids']   = array_values(array_unique(array_merge($out[$gk][$key]['student_ids'], $ids)));
+                    $out[$gk][$key]['student_count'] = count($out[$gk][$key]['student_ids']);
                     if ($tn !== '') {
                         $names = $out[$gk][$key]['teachers'] !== ''
                             ? array_map('trim', explode(',', $out[$gk][$key]['teachers']))
@@ -658,7 +664,8 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
                     'time_slot'     => (string)($r['time_slot'] ?? ''),
                     'teachers'      => $tn,
                     'section'       => $sec,
-                    'student_count' => (int)$r['student_count'],
+                    'student_count' => count($ids),
+                    'student_ids'   => $ids,
                 ];
             }
         } catch (Throwable $e) {}
@@ -671,7 +678,8 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
         $st = $db->prepare(
             "SELECT s.batch_id, $legacy_sec AS grp_section,
                     cc.course_code, cc.course_title, cc.time_slot,
-                    COUNT(DISTINCT a.student_id) AS student_count
+                    COUNT(DISTINCT a.student_id) AS student_count,
+                    GROUP_CONCAT(DISTINCT a.student_id) AS student_ids
                FROM hm_hall_assignments a
                JOIN students s ON s.id = a.student_id
                JOIN ac_admit_cards ac ON ac.is_active = 1
@@ -690,13 +698,15 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
             $gk  = (int)($r['batch_id'] ?? 0) . '|' . $sec;
             $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
             if (isset($out[$gk][$key])) continue;
+            $ids = array_values(array_filter(array_map('intval', explode(',', (string)($r['student_ids'] ?? '')))));
             $out[$gk][$key] = [
                 'course_code'   => (string)$r['course_code'],
                 'course_title'  => (string)$r['course_title'],
                 'time_slot'     => (string)($r['time_slot'] ?? ''),
                 'teachers'      => '',
                 'section'       => $sec,
-                'student_count' => (int)$r['student_count'],
+                'student_count' => count($ids),
+                'student_ids'   => $ids,
             ];
         }
     } catch (Throwable $e) {}
@@ -710,7 +720,7 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
  * hm_exam_courses_by_group() merged per batch; teachers of all sections
  * are combined (deduplicated) per course.
  *
- * Returns: batch_id => list of ['course_code','course_title','time_slot','teachers','student_count'].
+ * Returns: batch_id => list of ['course_code','course_title','time_slot','teachers','student_count','student_ids'].
  */
 function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
 {
@@ -724,7 +734,8 @@ function hm_exam_courses_by_batch(int $hall_id, string $exam_date): array
                 $out[$bk][$key] = $r;
                 continue;
             }
-            $out[$bk][$key]['student_count'] = (int)$out[$bk][$key]['student_count'] + (int)$r['student_count'];
+            $out[$bk][$key]['student_ids']   = array_values(array_unique(array_merge($out[$bk][$key]['student_ids'] ?? [], $r['student_ids'] ?? [])));
+            $out[$bk][$key]['student_count'] = count($out[$bk][$key]['student_ids']);
             if ($r['teachers'] !== '') {
                 $names = $out[$bk][$key]['teachers'] !== ''
                     ? array_map('trim', explode(',', $out[$bk][$key]['teachers']))
