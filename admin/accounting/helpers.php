@@ -3436,142 +3436,96 @@ function acc_month_year_for_slot(int $start_month, int $start_year, int $offset)
  *   - Admission + form/ID fees (always due in full – one-time on admission)
  *   - Registration fee for each semester whose first month ≤ today
  *   - Monthly tuition / fixed / English fees for months that are ≤ today
+ *   - Bi-Tri Shift Merge extra months that are ≤ today
+ *   - One-time Project Fee once the LAST month of the final semester is ≤ today
  *
  * A month's installment is COUNTED as due from the 1st of its month.
  * The 10th (ACC_MONTHLY_LAST_PAYMENT_DAY) is only the last date of payment
  * for that month – it never delays when the due starts counting.
  *
- * Used by the admit-card access check so students are not blocked by dues that
- * have not yet fallen due.
+ * The figure is derived from acc_student_fee_summary() – the SAME per-item
+ * outstanding breakdown (with per-fee-type payment allocation) that drives the
+ * Collect Payment "Current Dues" badge – so every student-facing surface
+ * (My Finances, admit-card access check, student portal API) reports the same
+ * amount the cashier sees on collect-payment.php.
  */
 function acc_outstanding_through_current_month(int $package_id): float
 {
     $db = db();
 
-    $pkg_stmt = $db->prepare(
-        'SELECT p.*,
-                cp.bi_semester_start_month  AS linked_bi_semester_start_month,
-                cp.tri_semester_start_month AS linked_tri_semester_start_month
-         FROM sfp_packages p
-         LEFT JOIN cf_programs cp ON cp.id = p.cf_program_id
-         WHERE p.id = ?'
-    );
-    $pkg_stmt->execute([$package_id]);
-    $pkg = $pkg_stmt->fetch();
-    if (!$pkg) return 0.0;
+    $stu_stmt = $db->prepare('SELECT student_id FROM sfp_packages WHERE id = ?');
+    $stu_stmt->execute([$package_id]);
+    $student_id = (int)$stu_stmt->fetchColumn();
+    if ($student_id <= 0) return 0.0;
 
-    $sf_stmt = $db->prepare(
-        'SELECT * FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number ASC'
-    );
-    $sf_stmt->execute([$package_id]);
-    $semester_fees = $sf_stmt->fetchAll();
-    $num_semesters = count($semester_fees);
+    // Official dropout: from the dropout effective date the account is frozen and
+    // is no longer counted as a due in any financial fact, so report zero.
+    if (function_exists('sd_student_dropped_out') && sd_student_dropped_out($student_id)) {
+        return 0.0;
+    }
 
-    $payment_start = acc_package_payment_start($pkg, $semester_fees);
-    $start_month   = (int)$payment_start['month'];
-    $start_year    = (int)$payment_start['year'];
+    $summary = acc_student_fee_summary($student_id);
+    if (!$summary) return 0.0;
 
     $now_month = (int)date('n');
     $now_year  = (int)date('Y');
 
-    $sd_student_id = (int)($pkg['student_id'] ?? 0);
+    // Dues count from the 1st of the month – the 10th is only the LAST DATE OF
+    // PAYMENT, it never delays the due. Items with no calendar slot (admission-day
+    // one-time fees) are owed immediately.
+    $is_due_now = static function (?int $m, ?int $y) use ($now_month, $now_year): bool {
+        if (!$m || !$y) return true;
+        return ($y < $now_year) || ($y === $now_year && $m <= $now_month);
+    };
 
-    // Official dropout: from the dropout effective date the account is frozen and
-    // is no longer counted as a due in any financial fact, so report zero.
-    if ($sd_student_id > 0 && function_exists('sd_student_dropped_out')
-        && sd_student_dropped_out($sd_student_id)) {
-        return 0.0;
-    }
+    $t = $summary['totals'];
 
-    $months     = (float)($pkg['total_months'] ?? 0);
-    $mps        = (float)($pkg['months_per_semester'] ?? 0);
-    $months_int = max(1, (int)round($mps));
-    $reg_fee    = (float)($pkg['reg_fee_per_semester'] ?? 0.0);
+    // Admission-day one-time fees are always due in full
+    $due = (float)($t['admission']['out']   ?? 0)
+         + (float)($t['form_fee']['out']    ?? 0)
+         + (float)($t['id_card_fee']['out'] ?? 0);
 
-    // Admission and form/ID fees are always due immediately
-    $total_due = (float)$pkg['admission_fees'] + acc_package_form_id_fee($pkg);
+    $semesters = $summary['semesters'] ?? [];
+    foreach ($semesters as $sf) {
+        $rows = $sf['monthly_rows'] ?? [];
 
-    foreach ($semester_fees as $sf) {
-        $sem_num = (int)$sf['semester_number'];
-
-        // Offset of the first month of this semester. Shifted forward past any
-        // active drop windows so a deferred semester's registration / tuition is
-        // not treated as due before its real (post-drop) start month.
-        $first_offset    = ($sem_num - 1) * $months_int;
-        $first_month_info = ($sd_student_id > 0 && function_exists('sd_shifted_slot_calendar'))
-            ? sd_shifted_slot_calendar($sd_student_id, $start_month, $start_year, $first_offset)
-            : acc_month_year_for_slot($start_month, $start_year, $first_offset);
-
-        // Has this semester started yet? (dues count from the 1st of the month)
-        $sem_started = ($first_month_info['year'] < $now_year)
-            || ($first_month_info['year'] === $now_year && $first_month_info['month'] <= $now_month);
-
-        if (!$sem_started) {
-            continue;
+        // Registration is anchored to the semester's FIRST month – a future
+        // semester's registration is an upcoming due, not a current one.
+        $first = $rows[0] ?? null;
+        if ((float)($sf['reg_out'] ?? 0) > 0
+            && $is_due_now($first ? (int)$first['cal_month'] : null, $first ? (int)$first['cal_year'] : null)) {
+            $due += (float)$sf['reg_out'];
         }
 
-        // Registration is due at the start of each semester
-        $total_due += $reg_fee;
-
-        // One-time Project Fee falls due with the final semester
-        if ($sem_num === $num_semesters) {
-            $total_due += acc_package_project_fee($pkg);
-            // The Bi-Tri Shift Merge fee (extra months) also falls due with the final semester
-            $total_due += acc_package_bi_tri_shift_fee($pkg);
-        }
-
-        // Per-semester portions of fixed institutional + English fees (after discounts)
-        $fixed_per_sem   = ($months > 0 && $mps > 0)
-            ? round((float)$pkg['fixed_institutional_fees'] / $months * $mps, 2) : 0.0;
-        $english_per_sem = ($months > 0 && $mps > 0)
-            ? round((float)$pkg['english_course_fee'] / $months * $mps, 2) : 0.0;
-        $fixed_per_sem   = max(0.0, $fixed_per_sem   - (float)($sf['fixed_discount_amount']   ?? 0));
-        $english_per_sem = max(0.0, $english_per_sem - (float)($sf['english_discount_amount'] ?? 0));
-
-        $merit_sem_total_due = (float)$sf['tuition_payable'] + $fixed_per_sem + $english_per_sem;
-        [$sem_total_due, $monthly_fee] = acc_semester_monthly_due($pkg, $sf, $merit_sem_total_due, $months_int);
-
-        // Only add months that have already fallen due (≤ current calendar month).
-        // Semester drop (deferral): the obligation month is shifted forward past any
-        // active drop windows, so a dropped month's tuition is not discarded – it is
-        // simply not counted as due until its deferred calendar month arrives.
-        for ($m = 1; $m <= $months_int; $m++) {
-            $global_offset = $first_offset + ($m - 1);
-            $month_info = ($sd_student_id > 0 && function_exists('sd_shifted_slot_calendar'))
-                ? sd_shifted_slot_calendar($sd_student_id, $start_month, $start_year, $global_offset)
-                : acc_month_year_for_slot($start_month, $start_year, $global_offset);
-
-            // Dues count from the 1st of the month – the 10th is only the
-            // LAST DATE OF PAYMENT, it never delays the due.
-            $month_due = ($month_info['year'] < $now_year)
-                || ($month_info['year'] === $now_year && $month_info['month'] <= $now_month);
-
-            if (!$month_due) {
-                // Months map to strictly increasing (deferred) calendar months, so once
-                // one is in the future all remaining months are also in the future.
-                break;
+        // Monthly tuition / fixed / English installments that have fallen due.
+        // Semester drop (deferral): the summary already shifts obligation months
+        // forward past any active drop windows.
+        foreach ($rows as $mr) {
+            if ((float)$mr['out'] > 0 && $is_due_now((int)$mr['cal_month'], (int)$mr['cal_year'])) {
+                $due += (float)$mr['out'];
             }
-
-            // Last month absorbs any rounding remainder
-            $total_due += ($m < $months_int)
-                ? $monthly_fee
-                : max(0.0, $sem_total_due - $monthly_fee * ($months_int - 1));
         }
     }
 
-    // Total actually paid (real payments)
-    $paid_stmt = $db->prepare(
-        "SELECT COALESCE(SUM(sp.amount),0)
-         FROM sfp_payments sp
-         JOIN acc_vouchers v ON v.id = sp.voucher_id
-         WHERE sp.package_id = ?
-           AND v.is_deleted = 0
-           AND v.status IN ('posted','memo')"
-    );
-    $paid_stmt->execute([$package_id]);
-    $total_paid = (float)$paid_stmt->fetchColumn();
+    // Bi-Tri Shift Merge fee: extra months appended after the last scheduled month
+    foreach (($summary['bi_tri_shift']['months'] ?? []) as $bm) {
+        if ((float)$bm['out'] > 0 && $is_due_now((int)$bm['cal_month'], (int)$bm['cal_year'])) {
+            $due += (float)$bm['out'];
+        }
+    }
 
-    return max(0.0, $total_due - $total_paid);
+    // One-time Project Fee falls due with the LAST month of the final semester
+    $pf_out = (float)($t['project_fee']['out'] ?? 0);
+    if ($pf_out > 0) {
+        $last_sf = $semesters ? $semesters[count($semesters) - 1] : null;
+        $last_mr = ($last_sf && !empty($last_sf['monthly_rows']))
+            ? $last_sf['monthly_rows'][count($last_sf['monthly_rows']) - 1] : null;
+        if ($is_due_now($last_mr ? (int)$last_mr['cal_month'] : null, $last_mr ? (int)$last_mr['cal_year'] : null)) {
+            $due += $pf_out;
+        }
+    }
+
+    return round(max(0.0, $due), 2);
 }
 
 /**
