@@ -8,9 +8,11 @@
  * the left; university, department, program and sheet title centered;
  * Room Number / Course / Batch / Section / Shift info; No. of Students
  * with hand-written Present / Absent fields; Invigilator 1 & 2 sign-off
- * lines. Sheets with more than 24 students are split across pages, each
- * page repeating the header, info section and invigilator sign-off with
- * "Page X of Y".
+ * lines. When a sheet mixes batches, the majority batch is the "common"
+ * batch: students from any other batch get a shaded row with a batch tag
+ * beside their name, plus a legend note under the table. Sheets with more
+ * than 24 students are split across pages, each page repeating the header,
+ * info section and invigilator sign-off with "Page X of Y".
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('hall-management');
@@ -65,14 +67,16 @@ foreach ($group_courses as $rows) {
 ksort($by_course);
 
 /** Build one printable sheet: students sorted by student ID, with batch /
- *  section / shift / program info derived from those students. */
+ *  section / shift / program info derived from those students. The batch
+ *  with the most students becomes the sheet's "common" batch so students
+ *  from any other batch can be visually flagged on the printout. */
 function hm_att_make_sheet(string $code, string $title, array $time_slots, array $teachers, array $students): array
 {
     usort($students, static fn($x, $y) => strcmp((string)$x['student_code'], (string)$y['student_code']));
     $batches = $sections = $shifts = $program_ids = [];
     foreach ($students as $s) {
         $bn = ($s['batch_name'] ?? '') !== '' ? (string)$s['batch_name'] : 'No batch';
-        $batches[$bn] = true;
+        $batches[$bn] = ($batches[$bn] ?? 0) + 1;
         $sec = trim((string)($s['student_section'] ?? ''));
         if ($sec !== '') $sections[$sec] = true;
         $shf = trim((string)($s['shift'] ?? ''));
@@ -80,12 +84,18 @@ function hm_att_make_sheet(string $code, string $title, array $time_slots, array
         $pid = (int)($s['program_id'] ?? 0);
         if ($pid > 0) $program_ids[$pid] = true;
     }
+    // Common batch = the one seating the most students (first wins on ties).
+    $common_batch = '';
+    foreach ($batches as $bn => $cnt) {
+        if ($common_batch === '' || $cnt > $batches[$common_batch]) $common_batch = (string)$bn;
+    }
     return [
         'course_code'  => $code,
         'course_title' => $title,
         'time_slots'   => $time_slots,
         'teachers'     => $teachers,
         'batches'      => array_keys($batches),
+        'common_batch' => $common_batch,
         'sections'     => array_keys($sections),
         'shifts'       => array_keys($shifts),
         'program_ids'  => $program_ids,
@@ -150,6 +160,9 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
         .att-table th { background: #002147; color: #fff; text-align: center; }
         .att-table td.c { text-align: center; }
         .att-table .sig { min-width: 160px; height: 28px; }
+        .att-table tr.other-batch td { background: #f3f3f3; }
+        .batch-flag { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid #555; border-radius: 3px; font-size: 10px; font-weight: bold; white-space: nowrap; }
+        .batch-note { margin-top: 5px; font-size: 11px; color: #333; }
 
         .signoff { margin-top: 42px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 160px; font-size: 12px; }
         .signoff-box { text-align: center; }
@@ -161,7 +174,7 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
             @page { size: A4 portrait; margin: 8mm 10mm; }
             .no-print { display: none !important; }
             .page { max-width: 100%; padding: 0; }
-            .header, .att-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .header, .att-table th, .att-table tr.other-batch td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .att-table tr, .signoff { page-break-inside: avoid; }
             /* Compress vertical space so 24 students + the invigilator
                sign-off always fit on a single printed A4 page at 12px. */
@@ -197,10 +210,17 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
     </p>
     <?php else: ?>
     <?php foreach ($sheets as $grp):
-        $programs    = array_values(array_intersect_key($program_names, $grp['program_ids']));
-        $course_name = trim($grp['course_code'] . ' — ' . $grp['course_title'], ' —');
-        $pages       = array_chunk($grp['students'], HM_ATT_STUDENTS_PER_PAGE, true);
-        $total_pages = count($pages);
+        $programs     = array_values(array_intersect_key($program_names, $grp['program_ids']));
+        $course_name  = trim($grp['course_code'] . ' — ' . $grp['course_title'], ' —');
+        $pages        = array_chunk($grp['students'], HM_ATT_STUDENTS_PER_PAGE, true);
+        $total_pages  = count($pages);
+        $multi_batch  = count($grp['batches']) > 1;
+        $common_batch = $grp['common_batch'];
+        $batch_labels = [];
+        foreach ($grp['batches'] as $bn) {
+            $bn = (string)$bn; // numeric batch names become int array keys
+            $batch_labels[] = ($multi_batch && $bn === $common_batch) ? $bn . ' (common)' : $bn;
+        }
     ?>
     <?php foreach ($pages as $page_idx => $page_students): ?>
     <div class="sheet">
@@ -218,7 +238,7 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
         <div class="info-grid">
             <div class="info-row"><span class="lbl">Room Number:</span><span><?= h($hall['room_number']) ?></span></div>
             <div class="info-row"><span class="lbl">Course:</span><span><?= $course_name !== '' ? h($course_name) : '—' ?></span></div>
-            <div class="info-row"><span class="lbl">Batch:</span><span><?= $grp['batches'] ? h(implode(', ', $grp['batches'])) : '—' ?></span></div>
+            <div class="info-row"><span class="lbl">Batch:</span><span><?= $batch_labels ? h(implode(', ', $batch_labels)) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">Section:</span><span><?= $grp['sections'] ? h(implode(', ', $grp['sections'])) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">Shift:</span><span><?= $grp['shifts'] ? h(implode(', ', $grp['shifts'])) : '—' ?></span></div>
             <div class="info-row"><span class="lbl">Exam Date:</span><span><?= $f_date !== '' ? h(date('d M Y', strtotime($f_date))) : '—' ?></span></div>
@@ -244,11 +264,14 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($page_students as $i => $stu): ?>
-                <tr>
+                <?php foreach ($page_students as $i => $stu):
+                    $stu_batch = ($stu['batch_name'] ?? '') !== '' ? (string)$stu['batch_name'] : 'No batch';
+                    $is_other  = $multi_batch && $stu_batch !== $common_batch;
+                ?>
+                <tr<?= $is_other ? ' class="other-batch"' : '' ?>>
                     <td class="c"><?= $i + 1 ?></td>
                     <td class="c"><?= h($stu['student_code']) ?></td>
-                    <td><?= h($stu['full_name']) ?></td>
+                    <td><?= h($stu['full_name']) ?><?php if ($is_other): ?><span class="batch-flag">Batch: <?= h($stu_batch) ?></span><?php endif; ?></td>
                     <td class="c">C<?= (int)$stu['col_no'] ?>-S<?= (int)$stu['seat_no'] ?></td>
                     <td></td>
                     <td class="sig"></td>
@@ -258,6 +281,9 @@ const HM_ATT_STUDENTS_PER_PAGE = 24;
             </tbody>
         </table>
 
+        <?php if ($multi_batch): ?>
+        <div class="batch-note">* Shaded rows with a batch tag mark students from a batch other than the common batch (<?= h($common_batch) ?>).</div>
+        <?php endif; ?>
         <div class="signoff">
             <div class="signoff-box">
                 <div class="sig-line"></div>
