@@ -228,6 +228,16 @@ foreach ($assignments as $a) {
 ksort($group_colors);
 $group_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_group($hall_id, $f_date) : [];
 
+// Students seated here whose department differs from the hall's own
+// department are marked distinctly in the layout and the assigned list.
+$dept_names = [];
+foreach (hm_departments(true) as $dn) $dept_names[(int)$dn['id']] = (string)$dn['name'];
+$hall_dept_id   = (int)$hall['dept_id'];
+$other_dept_cnt = 0;
+foreach ($assignments as $a) {
+    if ((int)($a['student_dept_id'] ?? 0) !== $hall_dept_id) $other_dept_cnt++;
+}
+
 // Course options for the filter: exams found on the selected date for the
 // chosen dept / program (+ batch / shift). Lets the user narrow students
 // down to one of the courses actually examined on that day.
@@ -408,12 +418,14 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php if ($occ):
                                 $occ_gk  = (int)($occ['student_batch_id'] ?? 0) . '|' . trim((string)($occ['student_section'] ?? ''));
                                 $clr     = $group_colors[$occ_gk] ?? $batch_palette[0];
-                                $occ_sec = trim((string)($occ['student_section'] ?? '')); ?>
-                            <div class="hm-seat" data-sid="<?= (int)$occ['student_id'] ?>"
-                                 title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')' . (!empty($occ['batch_name']) ? ' — ' . $occ['batch_name'] : '') . ($occ_sec !== '' ? ' — Sec ' . $occ_sec : '')) ?>"
-                                 style="min-width:92px;height:26px;border-radius:6px;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;
-                                        display:flex;align-items:center;justify-content:center;font-size:.6rem;color:<?= h($clr['text']) ?>;padding:0 4px;white-space:nowrap;">
-                                <?= h($occ['student_code']) ?><?= $occ_sec !== '' ? ' · ' . h($occ_sec) : '' ?>
+                                $occ_sec = trim((string)($occ['student_section'] ?? ''));
+                                $occ_other = (int)($occ['student_dept_id'] ?? 0) !== $hall_dept_id;
+                                $occ_dept  = $dept_names[(int)($occ['student_dept_id'] ?? 0)] ?? 'Unknown dept'; ?>
+                            <div class="hm-seat<?= $occ_other ? ' hm-seat-other' : '' ?>" data-sid="<?= (int)$occ['student_id'] ?>"
+                                 title="<?= h($occ['full_name'] . ' (' . $occ['student_code'] . ')' . (!empty($occ['batch_name']) ? ' — ' . $occ['batch_name'] : '') . ($occ_sec !== '' ? ' — Sec ' . $occ_sec : '') . ($occ_other ? ' — OTHER DEPARTMENT: ' . $occ_dept : '')) ?>"
+                                 style="min-width:92px;height:26px;border-radius:6px;background:<?= h($clr['bg']) ?>;border:<?= $occ_other ? '2px dashed #dc2626' : '1px solid ' . h($clr['border']) ?>;
+                                        display:flex;align-items:center;justify-content:center;font-size:.6rem;color:<?= h($clr['text']) ?>;padding:0 4px;white-space:nowrap;<?= $occ_other ? 'box-shadow:0 0 0 1px #fecaca;' : '' ?>">
+                                <?php if ($occ_other): ?><i class="fas fa-exclamation-circle me-1" style="color:#dc2626;font-size:.6rem;"></i><?php endif; ?><?= h($occ['student_code']) ?><?= $occ_sec !== '' ? ' · ' . h($occ_sec) : '' ?>
                             </div>
                             <?php else: ?>
                             <div title="Column <?= (int)$col['col_no'] ?>, Seat <?= $s ?>"
@@ -433,6 +445,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;border-radius:3px;"></span> <?= h($group_names[$gk]) ?></span>
                     <?php endforeach; ?>
                     <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:3px;"></span> Free (<?= max(0, (int)$hall['total_capacity'] - count($assignments)) ?>)</span>
+                    <?php if ($other_dept_cnt > 0): ?>
+                    <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#fff;border:2px dashed #dc2626;border-radius:3px;"></span> <span class="text-danger fw-semibold">Other department student (<?= $other_dept_cnt ?>)</span></span>
+                    <?php endif; ?>
                     <span>Assigned: <?= count($assignments) ?></span>
                 </div>
                 <?php endif; ?>
@@ -709,14 +724,25 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                 <thead class="table-light">
-                    <tr><th class="ps-3">Seat</th><th>Student ID</th><th>Name</th><th>Batch</th><th>Section</th><th>Shift</th><th class="text-end pe-3">Action</th></tr>
+                    <tr><th class="ps-3">Seat</th><th>Student ID</th><th>Name</th><th>Department</th><th>Batch</th><th>Section</th><th>Shift</th><th class="text-end pe-3">Action</th></tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($assignments as $a): ?>
-                    <tr>
+                    <?php foreach ($assignments as $a):
+                        $a_other = (int)($a['student_dept_id'] ?? 0) !== $hall_dept_id;
+                        $a_dept  = $dept_names[(int)($a['student_dept_id'] ?? 0)] ?? 'Unknown dept'; ?>
+                    <tr<?= $a_other ? ' class="table-danger"' : '' ?>>
                         <td class="ps-3 fw-semibold">C<?= (int)$a['col_no'] ?>-S<?= (int)$a['seat_no'] ?></td>
                         <td><?= h($a['student_code']) ?></td>
                         <td><?= h($a['full_name']) ?></td>
+                        <td>
+                            <?php if ($a_other): ?>
+                            <span class="badge bg-danger" title="Different department from this hall (<?= h($hall['dept_name']) ?>)">
+                                <i class="fas fa-exclamation-circle me-1"></i><?= h($a_dept) ?>
+                            </span>
+                            <?php else: ?>
+                            <?= h($a_dept) ?>
+                            <?php endif; ?>
+                        </td>
                         <td><?= h($a['batch_name'] ?? '') ?></td>
                         <td><?= h($a['section'] ?? '') ?></td>
                         <td><?= h($a['shift'] ?? '') ?></td>
