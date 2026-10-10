@@ -281,7 +281,18 @@ foreach ($columns as $col) {
     }
     if ($col_free) $empty_cols++;
 }
-$fit_hints = ($can_edit && $f_date !== '' && $free_seats > 0) ? hm_unseated_group_counts($f_date) : [];
+$fit_hints = [];
+$hall_slot_time = null; // the room's exam time ("HH:MM:SS") on the selected date
+if ($can_edit && $f_date !== '' && $free_seats > 0) {
+    // Same room + same date + same time: prefer the time of students already
+    // seated here on the selected date; otherwise the room's booked slot time.
+    $hall_slot_time = hm_derive_exam_time($hall_id, $f_date);
+    if ($hall_slot_time === null && (string)($hall['exam_date'] ?? '') === $f_date) {
+        $t = trim((string)($hall['exam_time'] ?? ''));
+        if ($t !== '') $hall_slot_time = $t;
+    }
+    $fit_hints = hm_unseated_group_counts($f_date, $hall_slot_time);
+}
 
 // Course options for the filter: exams found on the selected date for the
 // chosen dept / program (+ batch / shift). Lets the user narrow students
@@ -549,7 +560,7 @@ require_once __DIR__ . '/../includes/header.php';
         <?php if ($fit_hints): ?>
         <div class="card mt-4" style="border-radius:12px;border-left:4px solid #0ea5e9;">
             <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
-                <i class="fas fa-lightbulb me-2 text-warning"></i>Seating Suggestions — <?= h(date('d M Y', strtotime($f_date))) ?>
+                <i class="fas fa-lightbulb me-2 text-warning"></i>Seating Suggestions — <?= h(date('d M Y', strtotime($f_date))) ?><?= $hall_slot_time !== null ? ', ' . h(date('g:i A', strtotime($hall_slot_time))) : '' ?>
                 <span class="text-muted fw-normal" style="font-size:.8rem;">
                     — <?= $free_seats ?> free seat(s)<?= $empty_cols > 0 ? ' (' . $empty_cols . ' fully empty column' . ($empty_cols > 1 ? 's' : '') . ')' : '' ?> ·
                     leftover (unseated) admit-card students who could sit here
@@ -606,7 +617,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="alert alert-light border mt-4 mb-0" style="font-size:.85rem;border-radius:12px;">
             <i class="fas fa-lightbulb me-2 text-warning"></i>
             <strong><?= $free_seats ?> free seat(s)</strong> in this room — every admit-card student of
-            <?= h(date('d M Y', strtotime($f_date))) ?> is already seated (no leftover students to suggest).
+            <?= h(date('d M Y', strtotime($f_date))) ?><?= $hall_slot_time !== null ? ', ' . h(date('g:i A', strtotime($hall_slot_time))) : '' ?> is already seated (no leftover students to suggest<?= $hall_slot_time !== null ? ' for this room\'s exam slot' : '' ?>).
         </div>
         <?php endif; ?>
 
