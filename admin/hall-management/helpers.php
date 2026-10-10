@@ -1126,7 +1126,8 @@ function hm_hall_assignment_dates(int $hall_id): array
  * Optional filters: dept_id, program_id, batch_id, section, shift, time_slot.
  *
  * Returns rows: id, student_id, full_name, dept_name, program_name,
- * batch_name, section, shift, time_slot, exam_name, semester, exam_date.
+ * batch_name, section, shift, course_code, time_slot, exam_name, semester,
+ * exam_date.
  */
 function hm_unseated_students(string $exam_date, array $filters = []): array
 {
@@ -1166,7 +1167,7 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
         $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
                        ac.dept_id, ac.program_id, s.batch_id,
                        d.name AS dept_name, p.program_name,
-                       b.name AS batch_name, o.shift, cc.section,
+                       b.name AS batch_name, o.shift, cc.section, cc.course_code,
                        cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
                   FROM ac_admit_cards ac
                   JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
@@ -1197,7 +1198,7 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
     $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
                    ac.dept_id, ac.program_id, s.batch_id,
                    d.name AS dept_name, p.program_name,
-                   b.name AS batch_name, s.shift, s.section,
+                   b.name AS batch_name, s.shift, s.section, cc.course_code,
                    cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
               FROM ac_admit_cards ac
               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
@@ -1233,17 +1234,19 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
 /**
  * Leftover (unseated) student groups on an exam date — fit hints for the
  * hall view: hm_unseated_students() grouped by dept / program / batch /
- * section / shift so a partially filled or empty room can suggest which
- * batch's leftover students would fully fit its free seats. When the
- * room's exam time ($exam_time, "HH:MM:SS") is known, only groups whose
- * admit-card time slot starts at that same time are suggested — a room
- * booked for one date + time must not suggest students sitting at another
- * time. Dept-scope aware (only groups the current faculty may actually
- * seat are returned).
+ * section / shift / course code so a partially filled or empty room can
+ * suggest which batch's leftover students would fully fit its free seats.
+ * Grouping by course code lets the caller apply the column seating rules
+ * (one course per column, no same course in adjacent columns) per group.
+ * When the room's exam time ($exam_time, "HH:MM:SS") is known, only
+ * groups whose admit-card time slot starts at that same time are
+ * suggested — a room booked for one date + time must not suggest students
+ * sitting at another time. Dept-scope aware (only groups the current
+ * faculty may actually seat are returned).
  *
  * Returns rows sorted by student_count DESC:
  * dept_id, dept_name, program_id, program_name, batch_id, batch_name,
- * section, shift, student_count.
+ * section, shift, course_code, student_count.
  */
 function hm_unseated_group_counts(string $exam_date, ?string $exam_time = null): array
 {
@@ -1259,7 +1262,8 @@ function hm_unseated_group_counts(string $exam_date, ?string $exam_time = null):
         $batch_id   = (int)($r['batch_id'] ?? 0);
         $section    = trim((string)($r['section'] ?? ''));
         $shift      = trim((string)($r['shift'] ?? ''));
-        $key = $dept_id . '|' . $program_id . '|' . $batch_id . '|' . $section . '|' . $shift;
+        $course     = strtoupper(trim((string)($r['course_code'] ?? '')));
+        $key = $dept_id . '|' . $program_id . '|' . $batch_id . '|' . $section . '|' . $shift . '|' . $course;
         if (!isset($groups[$key])) {
             $groups[$key] = [
                 'dept_id'       => $dept_id,
@@ -1270,6 +1274,7 @@ function hm_unseated_group_counts(string $exam_date, ?string $exam_time = null):
                 'batch_name'    => (string)($r['batch_name'] ?? ''),
                 'section'       => $section,
                 'shift'         => $shift,
+                'course_code'   => $course,
                 'student_count' => 0,
             ];
         }
@@ -1279,6 +1284,51 @@ function hm_unseated_group_counts(string $exam_date, ?string $exam_time = null):
     usort($groups, static fn($a, $b) => [$b['student_count'], $a['dept_name'], (string)$a['batch_name']]
                                     <=> [$a['student_count'], $b['dept_name'], (string)$b['batch_name']]);
     return $groups;
+}
+
+/**
+ * Maximum number of students of ONE course that can still be seated in a
+ * hall under the column seating rules used by hm_assign_students():
+ * a column holds a single course only, and two ADJACENT columns must not
+ * hold the same course.
+ *
+ * $col_state is the per-column state in col_no order:
+ *   col_no => ['free' => int free-seat count,
+ *              'course' => string|null course of its current occupants
+ *                          (null when the column is completely empty)]
+ *
+ * A partially filled column only accepts the course already seated in it;
+ * an empty column may take the course only when the chosen set of columns
+ * never puts the course side by side. Solved as a small DP over columns.
+ */
+function hm_course_fit_seats(array $col_state, string $course_code): int
+{
+    $course = strtoupper(trim($course_code));
+    $dp0 = 0;      // best seats so far, previous column does NOT hold the course
+    $dp1 = null;   // best seats so far, previous column DOES hold the course
+    foreach ($col_state as $info) {
+        $free = max(0, (int)($info['free'] ?? 0));
+        $occ  = $info['course'] ?? null;   // null = empty column
+        $best = max($dp0 ?? PHP_INT_MIN, $dp1 ?? PHP_INT_MIN); // one is always set
+        if ($occ !== null) {
+            if (strtoupper(trim((string)$occ)) === $course) {
+                // Column already seats this course: its free seats belong to it.
+                $dp1 = $best + $free;
+                $dp0 = null;
+            } else {
+                // Column is locked to another course — unusable for this one.
+                $dp0 = $best;
+                $dp1 = null;
+            }
+        } else {
+            // Empty column: either leave it to another course / empty, or
+            // seat this course here (only if the previous column doesn't).
+            $new1 = ($free > 0 && $dp0 !== null) ? $dp0 + $free : null;
+            $dp0  = $best;
+            $dp1  = $new1;
+        }
+    }
+    return max($dp0 ?? 0, $dp1 ?? 0);
 }
 
 /** Distinct time-slot labels on admit-card exams of a given date (scope aware). */
