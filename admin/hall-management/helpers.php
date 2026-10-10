@@ -6,10 +6,12 @@ require_once __DIR__ . '/../includes/auth.php';
 
 /**
  * Departments visible to the current user (dept scope aware).
+ * Pass $all = true to list every active department regardless of scope
+ * (used where every faculty may browse all departments' rooms).
  */
-function hm_departments(): array
+function hm_departments(bool $all = false): array
 {
-    $scope = get_dept_scope();
+    $scope = $all ? null : get_dept_scope();
     if ($scope !== null && empty($scope)) return [];
     $sql    = 'SELECT id, name FROM dept_departments WHERE is_active = 1';
     $params = [];
@@ -25,9 +27,11 @@ function hm_departments(): array
 }
 
 /**
- * Load one hall (with dept name) or null. Enforces dept scope.
+ * Load one hall (with dept name) or null. Enforces dept scope unless
+ * $enforce_scope = false (every faculty may VIEW any department's room;
+ * structural edits stay restricted to their own department).
  */
-function hm_get_hall(int $id): ?array
+function hm_get_hall(int $id, bool $enforce_scope = true): ?array
 {
     $st = db()->prepare(
         'SELECT h.*, d.name AS dept_name
@@ -38,7 +42,7 @@ function hm_get_hall(int $id): ?array
     $st->execute([$id]);
     $hall = $st->fetch();
     if (!$hall) return null;
-    if (!can_access_dept((int)$hall['dept_id'])) return null;
+    if ($enforce_scope && !can_access_dept((int)$hall['dept_id'])) return null;
     return $hall;
 }
 
@@ -363,6 +367,7 @@ function hm_assignments(int $hall_id, string $exam_date): array
     try {
         $st = db()->prepare(
             "SELECT a.*, s.student_id AS student_code, s.full_name,
+                    s.dept_id AS student_dept_id,
                     s.batch_id AS student_batch_id, b.name AS batch_name,
                     COALESCE(NULLIF(a.section, ''), NULLIF(s.section, ''), '') AS student_section
                FROM hm_hall_assignments a

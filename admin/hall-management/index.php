@@ -42,7 +42,7 @@ if ($filter_date === '') {
     }
 }
 if ($filter_date === '') $filter_date = date('Y-m-d');
-$departments = hm_departments();
+$departments = hm_departments(true);
 $programs    = hm_programs();
 $batches     = hm_batches();
 $shifts      = hm_shift_options();
@@ -71,7 +71,6 @@ if ($filter_course !== '' && !isset($course_options[$filter_course])) {
     $course_options[$filter_course] = '';
 }
 
-$scope  = get_dept_scope();
 $where  = [];
 $params = [];
 if ($filter_dept > 0) { $where[] = 'h.dept_id = ?'; $params[] = $filter_dept; }
@@ -151,15 +150,9 @@ if ($filter_course !== '') {
         $where[] = '1 = 0';
     }
 }
-if ($scope !== null) {
-    if (empty($scope)) {
-        $where[] = '1 = 0';
-    } else {
-        $ph = implode(',', array_fill(0, count($scope), '?'));
-        $where[] = "h.dept_id IN ($ph)";
-        $params  = array_merge($params, $scope);
-    }
-}
+// Every faculty may see every department's rooms — the hall list itself is
+// NOT dept-scoped. Dept scope still applies to seating/removing students
+// (handled in view.php / helpers) and to editing the rooms themselves.
 $where_sql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
 $halls = [];
@@ -351,7 +344,8 @@ require_once __DIR__ . '/../includes/header.php';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($halls as $i => $hl): ?>
+                    <?php foreach ($halls as $i => $hl):
+                        $own_dept = can_access_dept((int)$hl['dept_id']); ?>
                     <tr>
                         <td><?= $i + 1 ?></td>
                         <td>
@@ -395,7 +389,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-end">
                             <a href="<?= APP_URL ?>/hall-management/view.php?id=<?= $hl['id'] ?>"
                                class="btn btn-sm btn-outline-secondary" title="View seat layout"><i class="fas fa-eye"></i></a>
-                            <?php if ($can_create): ?>
+                            <?php if ($can_create && $own_dept): ?>
                             <button type="button" class="btn btn-sm btn-outline-success hm-copy-btn"
                                     title="Copy room with seated students to another exam date"
                                     data-bs-toggle="modal" data-bs-target="#copyHallModal"
@@ -406,11 +400,11 @@ require_once __DIR__ . '/../includes/header.php';
                                 <i class="fas fa-copy"></i>
                             </button>
                             <?php endif; ?>
-                            <?php if ($can_edit): ?>
+                            <?php if ($can_edit && $own_dept): ?>
                             <a href="<?= APP_URL ?>/hall-management/edit.php?id=<?= $hl['id'] ?>"
                                class="btn btn-sm btn-outline-primary" title="Edit"><i class="fas fa-edit"></i></a>
                             <?php endif; ?>
-                            <?php if ($can_delete): ?>
+                            <?php if ($can_delete && $own_dept): ?>
                             <form method="POST" action="<?= APP_URL ?>/hall-management/delete.php" class="d-inline"
                                   onsubmit="return confirm('Delete hall <?= h($hl['room_number']) ?>? This cannot be undone.');">
                                 <?= csrf_field() ?>
