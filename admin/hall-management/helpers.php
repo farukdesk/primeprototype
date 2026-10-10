@@ -1154,6 +1154,7 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
     // ── Subject-linked cards: students via their registrations ─────────
     if ($has_subject_col) {
         $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
+                       ac.dept_id, ac.program_id, s.batch_id,
                        d.name AS dept_name, p.program_name,
                        b.name AS batch_name, o.shift, cc.section,
                        cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
@@ -1184,6 +1185,7 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
                         WHERE cx.admit_card_id = ac.id AND cx.offer_subject_id IS NOT NULL)'
         : '1=1';
     $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name,
+                   ac.dept_id, ac.program_id, s.batch_id,
                    d.name AS dept_name, p.program_name,
                    b.name AS batch_name, s.shift, s.section,
                    cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
@@ -1216,6 +1218,48 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
            <=> [$b['dept_name'], (string)$b['program_name'], (string)$b['batch_name'], (string)$b['student_id']];
     });
     return $out;
+}
+
+/**
+ * Leftover (unseated) student groups on an exam date — fit hints for the
+ * hall view: hm_unseated_students() grouped by dept / program / batch /
+ * section / shift so a partially filled or empty room can suggest which
+ * batch's leftover students would fully fit its free seats. Dept-scope
+ * aware (only groups the current faculty may actually seat are returned).
+ *
+ * Returns rows sorted by student_count DESC:
+ * dept_id, dept_name, program_id, program_name, batch_id, batch_name,
+ * section, shift, student_count.
+ */
+function hm_unseated_group_counts(string $exam_date): array
+{
+    $groups = [];
+    foreach (hm_unseated_students($exam_date) as $r) {
+        $dept_id    = (int)($r['dept_id'] ?? 0);
+        $program_id = (int)($r['program_id'] ?? 0);
+        $batch_id   = (int)($r['batch_id'] ?? 0);
+        $section    = trim((string)($r['section'] ?? ''));
+        $shift      = trim((string)($r['shift'] ?? ''));
+        $key = $dept_id . '|' . $program_id . '|' . $batch_id . '|' . $section . '|' . $shift;
+        if (!isset($groups[$key])) {
+            $groups[$key] = [
+                'dept_id'       => $dept_id,
+                'dept_name'     => (string)($r['dept_name'] ?? ''),
+                'program_id'    => $program_id,
+                'program_name'  => (string)($r['program_name'] ?? ''),
+                'batch_id'      => $batch_id,
+                'batch_name'    => (string)($r['batch_name'] ?? ''),
+                'section'       => $section,
+                'shift'         => $shift,
+                'student_count' => 0,
+            ];
+        }
+        $groups[$key]['student_count']++;
+    }
+    $groups = array_values($groups);
+    usort($groups, static fn($a, $b) => [$b['student_count'], $a['dept_name'], (string)$a['batch_name']]
+                                    <=> [$a['student_count'], $b['dept_name'], (string)$b['batch_name']]);
+    return $groups;
 }
 
 /** Distinct time-slot labels on admit-card exams of a given date (scope aware). */
