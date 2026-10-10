@@ -245,6 +245,19 @@ foreach ($assignments as $a) {
 ksort($group_colors);
 $group_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_group($hall_id, $f_date) : [];
 
+// Course codes per seated student — used to label each column of the seat
+// layout with the course(s) actually seated in it.
+$student_courses = []; // student_id => [course_code => true]
+foreach ($group_courses as $rows) {
+    foreach ($rows as $crs) {
+        $cc = trim((string)($crs['course_code'] ?? ''));
+        if ($cc === '' || $cc === '—') continue;
+        foreach ((array)($crs['student_ids'] ?? []) as $sid) {
+            $student_courses[(int)$sid][$cc] = true;
+        }
+    }
+}
+
 // Students seated here whose department differs from the hall's own
 // department are marked distinctly in the layout and the assigned list.
 $other_dept_counts = []; // dept_id => number of seated students from that (non-hall) department
@@ -365,32 +378,24 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 <?php endif; ?>
 
-<div class="row g-4">
-    <div class="col-lg-4">
-        <div class="card" style="border-radius:12px;">
-            <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
-                <i class="fas fa-door-open me-2 text-primary"></i>Hall Details
-            </div>
-            <div class="card-body">
-                <table class="table table-sm mb-0" style="font-size:.9rem;">
-                    <tr><th class="text-muted" style="width:45%;">Room Number</th><td class="fw-semibold"><?= h($hall['room_number']) ?></td></tr>
-                    <tr><th class="text-muted">Department</th><td><?= h($hall['dept_name']) ?></td></tr>
-                    <tr><th class="text-muted">Exam Date &amp; Time</th><td><?= h(hm_slot_label($hall['exam_date'] ?? null, $hall['exam_time'] ?? null)) ?></td></tr>
-                    <tr><th class="text-muted">Columns</th><td><?= (int)$hall['num_columns'] ?></td></tr>
-                    <tr><th class="text-muted">Rows</th><td><?= (int)$hall['num_rows'] ?></td></tr>
-                    <tr><th class="text-muted">Total Seat Capacity</th><td><span class="badge bg-primary"><?= (int)$hall['total_capacity'] ?> seats</span></td></tr>
-                    <tr><th class="text-muted">Status</th>
-                        <td><?= (int)$hall['is_active'] === 1 ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>' ?></td></tr>
-                    <?php if (!empty($hall['notes'])): ?>
-                    <tr><th class="text-muted">Notes</th><td><?= h($hall['notes']) ?></td></tr>
-                    <?php endif; ?>
-                </table>
-            </div>
+<div class="card mb-4" style="border-radius:12px;">
+    <div class="card-body py-3">
+        <div class="d-flex align-items-center flex-wrap gap-4" style="font-size:.85rem;">
+            <span class="fw-semibold" style="font-size:1rem;"><i class="fas fa-door-open me-2 text-primary"></i><?= h($hall['room_number']) ?></span>
+            <span><span class="text-muted">Department:</span> <span class="fw-semibold"><?= h($hall['dept_name']) ?></span></span>
+            <span><span class="text-muted">Exam Date &amp; Time:</span> <span class="fw-semibold"><?= h(hm_slot_label($hall['exam_date'] ?? null, $hall['exam_time'] ?? null)) ?></span></span>
+            <span><span class="text-muted">Columns:</span> <span class="fw-semibold"><?= (int)$hall['num_columns'] ?></span></span>
+            <span><span class="text-muted">Rows:</span> <span class="fw-semibold"><?= (int)$hall['num_rows'] ?></span></span>
+            <span><span class="text-muted">Capacity:</span> <span class="badge bg-primary"><?= (int)$hall['total_capacity'] ?> seats</span></span>
+            <span><?= (int)$hall['is_active'] === 1 ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>' ?></span>
+            <?php if (!empty($hall['notes'])): ?>
+            <span><span class="text-muted">Notes:</span> <?= h($hall['notes']) ?></span>
+            <?php endif; ?>
         </div>
     </div>
+</div>
 
-    <div class="col-lg-8">
-        <div class="card" style="border-radius:12px;">
+<div class="card" style="border-radius:12px;">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center flex-wrap gap-2" style="border-radius:12px 12px 0 0;">
                 <span><i class="fas fa-th me-2 text-primary"></i>Seat Layout<?= $f_date !== '' ? ' — ' . h(date('d M Y', strtotime($f_date))) : '' ?></span>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -425,12 +430,18 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
                 <div class="d-flex gap-3 justify-content-center flex-wrap" style="overflow-x:auto;">
                     <?php foreach ($columns as $col):
-                        $col_group = null;
+                        $col_group   = null;
+                        $col_courses = [];
                         for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
                             $o = $assignments[(int)$col['col_no'] . ':' . $s] ?? null;
-                            if ($o) { $col_group = (int)($o['student_dept_id'] ?? 0) . '|' . (int)($o['student_batch_id'] ?? 0) . '|' . trim((string)($o['student_section'] ?? '')); break; }
+                            if (!$o) continue;
+                            if ($col_group === null) {
+                                $col_group = (int)($o['student_dept_id'] ?? 0) . '|' . (int)($o['student_batch_id'] ?? 0) . '|' . trim((string)($o['student_section'] ?? ''));
+                            }
+                            foreach (array_keys($student_courses[(int)$o['student_id']] ?? []) as $ccode) $col_courses[$ccode] = true;
                         }
                         $col_clr = $col_group !== null ? ($group_colors[$col_group] ?? null) : null;
+                        $col_label = $col_courses ? implode(', ', array_keys($col_courses)) : ($group_names[$col_group ?? ''] ?? 'No course');
                     ?>
                     <div class="text-center">
                         <div class="fw-semibold mb-2" style="font-size:.8rem;color:#475569;">
@@ -438,8 +449,8 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="text-muted" style="font-size:.7rem;"><?= (int)$col['seat_capacity'] ?> seats</div>
                             <?php if ($col_clr !== null): ?>
                             <div style="font-size:.65rem;margin-top:2px;">
-                                <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:<?= h($col_clr['bg']) ?>;border:1px solid <?= h($col_clr['border']) ?>;color:<?= h($col_clr['text']) ?>;">
-                                    <?= h($group_names[$col_group] ?? 'No batch') ?>
+                                <span title="Course(s) seated in this column" style="display:inline-block;padding:1px 8px;border-radius:10px;background:<?= h($col_clr['bg']) ?>;border:1px solid <?= h($col_clr['border']) ?>;color:<?= h($col_clr['text']) ?>;">
+                                    <?= h($col_label) ?>
                                 </span>
                             </div>
                             <?php endif; ?>
@@ -486,6 +497,54 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php endif; ?>
             </div>
         </div>
+
+        <?php if ($assignments && $group_courses): ?>
+        <div class="card mt-4" style="border-radius:12px;">
+            <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
+                <i class="fas fa-book-open me-2 text-primary"></i>Exam Schedule — <?= h(date('d M Y', strtotime($f_date))) ?>
+                <span class="text-muted fw-normal" style="font-size:.8rem;">— which exam each batch / section sits in this hall</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                        <thead class="table-light">
+                            <tr><th class="ps-3">Batch / Section</th><th>Course Code</th><th>Course Title</th><th>Course Teacher</th><th>Time Slot</th><th class="pe-3 text-center">Students Here</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($group_colors as $gk => $clr):
+                                $bs      = $group_bs[$gk] ?? '';
+                                $courses = $group_courses[$bs] ?? [];
+                                if (!$courses) {
+                                    // Fall back to every section of the same batch when
+                                    // no courses resolved for this exact section key.
+                                    $gbk = (int)strtok((string)$bs, '|');
+                                    foreach ($group_courses as $ogk => $rows) {
+                                        if ((int)strtok((string)$ogk, '|') === $gbk) $courses = array_merge($courses, $rows);
+                                    }
+                                }
+                                if (!$courses) $courses = [['course_code' => '—', 'course_title' => 'No admit-card exam found for this date', 'teachers' => '', 'time_slot' => '', 'student_count' => null]];
+                                foreach ($courses as $ci => $crs): ?>
+                            <tr>
+                                <?php if ($ci === 0): ?>
+                                <td class="ps-3" rowspan="<?= count($courses) ?>">
+                                    <span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:.75rem;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;color:<?= h($clr['text']) ?>;">
+                                        <?= h($group_names[$gk]) ?>
+                                    </span>
+                                </td>
+                                <?php endif; ?>
+                                <td class="fw-semibold"><?= h($crs['course_code']) ?></td>
+                                <td><?= h($crs['course_title']) ?></td>
+                                <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '<span class="text-muted">—</span>' ?></td>
+                                <td><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '<span class="text-muted">—</span>' ?></td>
+                                <td class="pe-3 text-center"><?php if (isset($crs['student_count']) && $crs['student_count'] !== null): ?><?php $sids = array_values(array_unique(array_map('intval', (array)($crs['student_ids'] ?? [])))); ?><?php if ($sids): ?><button type="button" class="badge bg-primary-subtle text-primary border hm-count-btn" style="font-size:.75rem;cursor:pointer;" data-students="<?= h(implode(',', $sids)) ?>" title="Click to highlight these students in the seat layout"><?= count($sids) ?></button><?php else: ?><span class="badge bg-primary-subtle text-primary border" style="font-size:.75rem;"><?= (int)$crs['student_count'] ?></span><?php endif; ?><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
+                            </tr>
+                            <?php endforeach; endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <?php if ($fit_hints): ?>
         <div class="card mt-4" style="border-radius:12px;border-left:4px solid #0ea5e9;">
@@ -550,56 +609,6 @@ require_once __DIR__ . '/../includes/header.php';
             <?= h(date('d M Y', strtotime($f_date))) ?> is already seated (no leftover students to suggest).
         </div>
         <?php endif; ?>
-
-        <?php if ($assignments && $group_courses): ?>
-        <div class="card mt-4" style="border-radius:12px;">
-            <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
-                <i class="fas fa-book-open me-2 text-primary"></i>Exam Schedule — <?= h(date('d M Y', strtotime($f_date))) ?>
-                <span class="text-muted fw-normal" style="font-size:.8rem;">— which exam each batch / section sits in this hall</span>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
-                        <thead class="table-light">
-                            <tr><th class="ps-3">Batch / Section</th><th>Course Code</th><th>Course Title</th><th>Course Teacher</th><th>Time Slot</th><th class="pe-3 text-center">Students Here</th></tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($group_colors as $gk => $clr):
-                                $bs      = $group_bs[$gk] ?? '';
-                                $courses = $group_courses[$bs] ?? [];
-                                if (!$courses) {
-                                    // Fall back to every section of the same batch when
-                                    // no courses resolved for this exact section key.
-                                    $gbk = (int)strtok((string)$bs, '|');
-                                    foreach ($group_courses as $ogk => $rows) {
-                                        if ((int)strtok((string)$ogk, '|') === $gbk) $courses = array_merge($courses, $rows);
-                                    }
-                                }
-                                if (!$courses) $courses = [['course_code' => '—', 'course_title' => 'No admit-card exam found for this date', 'teachers' => '', 'time_slot' => '', 'student_count' => null]];
-                                foreach ($courses as $ci => $crs): ?>
-                            <tr>
-                                <?php if ($ci === 0): ?>
-                                <td class="ps-3" rowspan="<?= count($courses) ?>">
-                                    <span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:.75rem;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;color:<?= h($clr['text']) ?>;">
-                                        <?= h($group_names[$gk]) ?>
-                                    </span>
-                                </td>
-                                <?php endif; ?>
-                                <td class="fw-semibold"><?= h($crs['course_code']) ?></td>
-                                <td><?= h($crs['course_title']) ?></td>
-                                <td><?= $crs['teachers'] !== '' ? h($crs['teachers']) : '<span class="text-muted">—</span>' ?></td>
-                                <td><?= $crs['time_slot'] !== '' ? h($crs['time_slot']) : '<span class="text-muted">—</span>' ?></td>
-                                <td class="pe-3 text-center"><?php if (isset($crs['student_count']) && $crs['student_count'] !== null): ?><?php $sids = array_values(array_unique(array_map('intval', (array)($crs['student_ids'] ?? [])))); ?><?php if ($sids): ?><button type="button" class="badge bg-primary-subtle text-primary border hm-count-btn" style="font-size:.75rem;cursor:pointer;" data-students="<?= h(implode(',', $sids)) ?>" title="Click to highlight these students in the seat layout"><?= count($sids) ?></button><?php else: ?><span class="badge bg-primary-subtle text-primary border" style="font-size:.75rem;"><?= (int)$crs['student_count'] ?></span><?php endif; ?><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
-                            </tr>
-                            <?php endforeach; endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
-    </div>
-</div>
 
 <?php if ($can_edit): ?>
 <div class="card mt-4" style="border-radius:12px;">
