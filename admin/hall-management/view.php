@@ -282,6 +282,7 @@ foreach ($columns as $col) {
     if ($col_free) $empty_cols++;
 }
 $fit_hints = [];
+$fit_col_state = [];  // col_no => ['free' => n, 'course' => course|null] for rule-aware fits
 $hall_slot_time = null; // the room's exam time ("HH:MM:SS") on the selected date
 if ($can_edit && $f_date !== '' && $free_seats > 0) {
     // Same room + same date + same time: prefer the time of students already
@@ -292,6 +293,28 @@ if ($can_edit && $f_date !== '' && $free_seats > 0) {
         if ($t !== '') $hall_slot_time = $t;
     }
     $fit_hints = hm_unseated_group_counts($f_date, $hall_slot_time);
+    if ($fit_hints) {
+        // Per-column free seats + the course currently seated in each column,
+        // so each suggestion is checked against the column rules (one course
+        // per column, no same course in adjacent columns) instead of the raw
+        // free-seat count.
+        $seated_course_map = hm_student_course_map(
+            array_map(static fn($r) => (int)$r['student_id'], $assignments), $f_date);
+        foreach ($columns as $col) {
+            $cno = (int)$col['col_no'];
+            $col_free = 0;
+            $col_course = null;
+            for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
+                $occ = $assignments[$cno . ':' . $s] ?? null;
+                if ($occ === null) {
+                    $col_free++;
+                } elseif ($col_course === null) {
+                    $col_course = $seated_course_map[(int)$occ['student_id']] ?? '';
+                }
+            }
+            $fit_col_state[$cno] = ['free' => $col_free, 'course' => $col_course];
+        }
+    }
 }
 
 // Course options for the filter: exams found on the selected date for the
@@ -563,40 +586,48 @@ require_once __DIR__ . '/../includes/header.php';
                 <i class="fas fa-lightbulb me-2 text-warning"></i>Seating Suggestions — <?= h(date('d M Y', strtotime($f_date))) ?><?= $hall_slot_time !== null ? ', ' . h(date('g:i A', strtotime($hall_slot_time))) : '' ?>
                 <span class="text-muted fw-normal" style="font-size:.8rem;">
                     — <?= $free_seats ?> free seat(s)<?= $empty_cols > 0 ? ' (' . $empty_cols . ' fully empty column' . ($empty_cols > 1 ? 's' : '') . ')' : '' ?> ·
-                    leftover (unseated) admit-card students who could sit here
+                    leftover (unseated) admit-card students who could sit here ·
+                    usable seats follow the column rules (one course per column, no same course side by side)
                 </span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive" style="max-height:280px;overflow-y:auto;">
                     <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                         <thead class="table-light" style="position:sticky;top:0;">
-                            <tr><th class="ps-3">Department</th><th>Program</th><th>Batch</th><th>Section</th><th>Shift</th><th class="text-center">Unseated</th><th class="text-center">Fit Here?</th><th class="text-end pe-3">Action</th></tr>
+                            <tr><th class="ps-3">Department</th><th>Program</th><th>Batch</th><th>Section</th><th>Shift</th><th>Course</th><th class="text-center">Unseated</th><th class="text-center">Fit Here?</th><th class="text-end pe-3">Action</th></tr>
                         </thead>
                         <tbody>
                             <?php foreach ($fit_hints as $fh):
-                                $fits_fully = (int)$fh['student_count'] <= $free_seats;
+                                $usable_seats = hm_course_fit_seats($fit_col_state, (string)($fh['course_code'] ?? ''));
+                                $fits_fully = $usable_seats > 0 && (int)$fh['student_count'] <= $usable_seats;
                                 $find_url = APP_URL . '/hall-management/view.php?id=' . $hall_id
                                     . '&preview=1&a_dept=' . (int)$fh['dept_id']
                                     . '&a_program=' . (int)$fh['program_id']
                                     . '&a_batch=' . (int)$fh['batch_id']
                                     . '&a_date=' . urlencode($f_date)
                                     . '&a_section=' . urlencode($fh['section'])
-                                    . '&a_shift=' . urlencode($fh['shift']); ?>
+                                    . '&a_shift=' . urlencode($fh['shift'])
+                                    . '&a_course=' . urlencode((string)($fh['course_code'] ?? '')); ?>
                             <tr<?= $fits_fully ? '' : ' class="text-muted"' ?>>
                                 <td class="ps-3"><?= h($fh['dept_name']) ?></td>
                                 <td><?= h($fh['program_name']) ?></td>
                                 <td class="fw-semibold"><?= $fh['batch_name'] !== '' ? h($fh['batch_name']) : '<span class="text-muted">No batch</span>' ?></td>
                                 <td><?= $fh['section'] !== '' ? h($fh['section']) : '—' ?></td>
                                 <td><?= $fh['shift'] !== '' ? h($fh['shift']) : '—' ?></td>
+                                <td class="fw-semibold"><?= ($fh['course_code'] ?? '') !== '' ? h($fh['course_code']) : '—' ?></td>
                                 <td class="text-center"><span class="badge bg-secondary"><?= (int)$fh['student_count'] ?></span></td>
                                 <td class="text-center">
                                     <?php if ($fits_fully): ?>
-                                    <span class="badge bg-success" title="All <?= (int)$fh['student_count'] ?> leftover student(s) of this group fit into the <?= $free_seats ?> free seat(s) of this room">
+                                    <span class="badge bg-success" title="All <?= (int)$fh['student_count'] ?> leftover student(s) of this course fit into the <?= $usable_seats ?> seat(s) this course may use under the column rules (one course per column, no same course in adjacent columns)">
                                         <i class="fas fa-check me-1"></i>Fits fully
                                     </span>
+                                    <?php elseif ($usable_seats > 0): ?>
+                                    <span class="badge bg-warning text-dark" title="Under the column rules (one course per column, no same course in adjacent columns) only <?= $usable_seats ?> of the <?= $free_seats ?> free seat(s) can take this course — <?= $usable_seats ?> of <?= (int)$fh['student_count'] ?> student(s) could be seated here">
+                                        Partial (<?= $usable_seats ?> of <?= (int)$fh['student_count'] ?>)
+                                    </span>
                                     <?php else: ?>
-                                    <span class="badge bg-warning text-dark" title="Only <?= $free_seats ?> of the <?= (int)$fh['student_count'] ?> leftover student(s) could be seated here">
-                                        Partial (<?= $free_seats ?> of <?= (int)$fh['student_count'] ?>)
+                                    <span class="badge bg-danger" title="No free seat can take this course under the column rules — every usable column already holds another course or sits next to a column of this course">
+                                        No fit
                                     </span>
                                     <?php endif; ?>
                                 </td>
