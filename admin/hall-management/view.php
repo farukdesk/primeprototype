@@ -210,19 +210,36 @@ if ($f_date === '' && $asg_dates) $f_date = (string)$asg_dates[0];
 $assignments  = $f_date !== '' ? hm_assignments($hall_id, $f_date) : [];
 
 // Batch+section colours for the seat layout + per-group exam course details.
-// Two sections of the same batch get different colours so sections are
-// highlighted in the layout; teachers resolve per section.
+// Groups are keyed by department AND batch AND section, so students of
+// different departments (e.g. same-named batches of two departments) are
+// always highlighted with different colours in the layout.
+$dept_names = [];
+foreach (hm_departments(true) as $dn) $dept_names[(int)$dn['id']] = (string)$dn['name'];
+$hall_dept_id = (int)$hall['dept_id'];
+
 $batch_palette = hm_batch_palette();
-$group_colors  = [];   // "batch_id|section" => palette entry
-$group_names   = [];   // "batch_id|section" => display label (batch — Sec X)
+$group_colors  = [];   // "dept_id|batch_id|section" => palette entry
+$group_names   = [];   // "dept_id|batch_id|section" => display label
+$group_bs      = [];   // colour key => "batch_id|section" (exam-course lookup key)
+$seat_depts    = [];
+foreach ($assignments as $a) $seat_depts[(int)($a['student_dept_id'] ?? 0)] = true;
+$multi_dept = count($seat_depts) > 1;
 foreach ($assignments as $a) {
+    $dk  = (int)($a['student_dept_id'] ?? 0);
     $bk  = (int)($a['student_batch_id'] ?? 0);
     $sec = trim((string)($a['student_section'] ?? ''));
-    $gk  = $bk . '|' . $sec;
+    $gk  = $dk . '|' . $bk . '|' . $sec;
     if (!isset($group_colors[$gk])) {
         $group_colors[$gk] = $batch_palette[count($group_colors) % count($batch_palette)];
         $bn = $a['batch_name'] !== null && $a['batch_name'] !== '' ? (string)$a['batch_name'] : 'No batch';
-        $group_names[$gk] = $bn . ($sec !== '' ? ' — Sec ' . $sec : '');
+        $label = $bn . ($sec !== '' ? ' — Sec ' . $sec : '');
+        // Name the department when the hall mixes departments or the group
+        // belongs to another department than the hall's own.
+        if ($multi_dept || $dk !== $hall_dept_id) {
+            $label .= ' · ' . ($dept_names[$dk] ?? 'Unknown dept');
+        }
+        $group_names[$gk] = $label;
+        $group_bs[$gk]    = $bk . '|' . $sec;
     }
 }
 ksort($group_colors);
@@ -230,9 +247,6 @@ $group_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_group($ha
 
 // Students seated here whose department differs from the hall's own
 // department are marked distinctly in the layout and the assigned list.
-$dept_names = [];
-foreach (hm_departments(true) as $dn) $dept_names[(int)$dn['id']] = (string)$dn['name'];
-$hall_dept_id   = (int)$hall['dept_id'];
 $other_dept_counts = []; // dept_id => number of seated students from that (non-hall) department
 foreach ($assignments as $a) {
     $a_dept_id = (int)($a['student_dept_id'] ?? 0);
@@ -240,6 +254,21 @@ foreach ($assignments as $a) {
         $other_dept_counts[$a_dept_id] = ($other_dept_counts[$a_dept_id] ?? 0) + 1;
     }
 }
+
+// Fit suggestions: when the room still has free seats on the selected date,
+// show which leftover (unseated) admit-card groups could fit here — and
+// whether a group fits FULLY into the remaining free seats.
+$free_seats = max(0, (int)$hall['total_capacity'] - count($assignments));
+$empty_cols = 0;
+foreach ($columns as $col) {
+    $cno = (int)$col['col_no'];
+    $col_free = true;
+    for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
+        if (isset($assignments[$cno . ':' . $s])) { $col_free = false; break; }
+    }
+    if ($col_free) $empty_cols++;
+}
+$fit_hints = ($can_edit && $f_date !== '' && $free_seats > 0) ? hm_unseated_group_counts($f_date) : [];
 
 // Course options for the filter: exams found on the selected date for the
 // chosen dept / program (+ batch / shift). Lets the user narrow students
@@ -399,7 +428,7 @@ require_once __DIR__ . '/../includes/header.php';
                         $col_group = null;
                         for ($s = 1; $s <= (int)$col['seat_capacity']; $s++) {
                             $o = $assignments[(int)$col['col_no'] . ':' . $s] ?? null;
-                            if ($o) { $col_group = (int)($o['student_batch_id'] ?? 0) . '|' . trim((string)($o['student_section'] ?? '')); break; }
+                            if ($o) { $col_group = (int)($o['student_dept_id'] ?? 0) . '|' . (int)($o['student_batch_id'] ?? 0) . '|' . trim((string)($o['student_section'] ?? '')); break; }
                         }
                         $col_clr = $col_group !== null ? ($group_colors[$col_group] ?? null) : null;
                     ?>
@@ -419,7 +448,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php for ($s = 1; $s <= (int)$col['seat_capacity']; $s++):
                                 $occ = $assignments[(int)$col['col_no'] . ':' . $s] ?? null; ?>
                             <?php if ($occ):
-                                $occ_gk  = (int)($occ['student_batch_id'] ?? 0) . '|' . trim((string)($occ['student_section'] ?? ''));
+                                $occ_gk  = (int)($occ['student_dept_id'] ?? 0) . '|' . (int)($occ['student_batch_id'] ?? 0) . '|' . trim((string)($occ['student_section'] ?? ''));
                                 $clr     = $group_colors[$occ_gk] ?? $batch_palette[0];
                                 $occ_sec = trim((string)($occ['student_section'] ?? ''));
                                 $occ_other = (int)($occ['student_dept_id'] ?? 0) !== $hall_dept_id;
@@ -458,6 +487,70 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
         </div>
 
+        <?php if ($fit_hints): ?>
+        <div class="card mt-4" style="border-radius:12px;border-left:4px solid #0ea5e9;">
+            <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
+                <i class="fas fa-lightbulb me-2 text-warning"></i>Seating Suggestions — <?= h(date('d M Y', strtotime($f_date))) ?>
+                <span class="text-muted fw-normal" style="font-size:.8rem;">
+                    — <?= $free_seats ?> free seat(s)<?= $empty_cols > 0 ? ' (' . $empty_cols . ' fully empty column' . ($empty_cols > 1 ? 's' : '') . ')' : '' ?> ·
+                    leftover (unseated) admit-card students who could sit here
+                </span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height:280px;overflow-y:auto;">
+                    <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+                        <thead class="table-light" style="position:sticky;top:0;">
+                            <tr><th class="ps-3">Department</th><th>Program</th><th>Batch</th><th>Section</th><th>Shift</th><th class="text-center">Unseated</th><th class="text-center">Fit Here?</th><th class="text-end pe-3">Action</th></tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($fit_hints as $fh):
+                                $fits_fully = (int)$fh['student_count'] <= $free_seats;
+                                $find_url = APP_URL . '/hall-management/view.php?id=' . $hall_id
+                                    . '&preview=1&a_dept=' . (int)$fh['dept_id']
+                                    . '&a_program=' . (int)$fh['program_id']
+                                    . '&a_batch=' . (int)$fh['batch_id']
+                                    . '&a_date=' . urlencode($f_date)
+                                    . '&a_section=' . urlencode($fh['section'])
+                                    . '&a_shift=' . urlencode($fh['shift']); ?>
+                            <tr<?= $fits_fully ? '' : ' class="text-muted"' ?>>
+                                <td class="ps-3"><?= h($fh['dept_name']) ?></td>
+                                <td><?= h($fh['program_name']) ?></td>
+                                <td class="fw-semibold"><?= $fh['batch_name'] !== '' ? h($fh['batch_name']) : '<span class="text-muted">No batch</span>' ?></td>
+                                <td><?= $fh['section'] !== '' ? h($fh['section']) : '—' ?></td>
+                                <td><?= $fh['shift'] !== '' ? h($fh['shift']) : '—' ?></td>
+                                <td class="text-center"><span class="badge bg-secondary"><?= (int)$fh['student_count'] ?></span></td>
+                                <td class="text-center">
+                                    <?php if ($fits_fully): ?>
+                                    <span class="badge bg-success" title="All <?= (int)$fh['student_count'] ?> leftover student(s) of this group fit into the <?= $free_seats ?> free seat(s) of this room">
+                                        <i class="fas fa-check me-1"></i>Fits fully
+                                    </span>
+                                    <?php else: ?>
+                                    <span class="badge bg-warning text-dark" title="Only <?= $free_seats ?> of the <?= (int)$fh['student_count'] ?> leftover student(s) could be seated here">
+                                        Partial (<?= $free_seats ?> of <?= (int)$fh['student_count'] ?>)
+                                    </span>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="text-end pe-3">
+                                    <a href="<?= h($find_url) ?>#hmAssignFilter" class="btn btn-sm btn-outline-primary py-0" style="border-radius:6px;font-size:.75rem;"
+                                       title="Open these students in the Assign Students panel below">
+                                        <i class="fas fa-search me-1"></i>Find Students
+                                    </a>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <?php elseif ($can_edit && $f_date !== '' && $free_seats > 0): ?>
+        <div class="alert alert-light border mt-4 mb-0" style="font-size:.85rem;border-radius:12px;">
+            <i class="fas fa-lightbulb me-2 text-warning"></i>
+            <strong><?= $free_seats ?> free seat(s)</strong> in this room — every admit-card student of
+            <?= h(date('d M Y', strtotime($f_date))) ?> is already seated (no leftover students to suggest).
+        </div>
+        <?php endif; ?>
+
         <?php if ($assignments && $group_courses): ?>
         <div class="card mt-4" style="border-radius:12px;">
             <div class="card-header bg-white fw-semibold" style="border-radius:12px 12px 0 0;">
@@ -472,11 +565,12 @@ require_once __DIR__ . '/../includes/header.php';
                         </thead>
                         <tbody>
                             <?php foreach ($group_colors as $gk => $clr):
-                                $courses = $group_courses[$gk] ?? [];
+                                $bs      = $group_bs[$gk] ?? '';
+                                $courses = $group_courses[$bs] ?? [];
                                 if (!$courses) {
                                     // Fall back to every section of the same batch when
                                     // no courses resolved for this exact section key.
-                                    $gbk = (int)strtok((string)$gk, '|');
+                                    $gbk = (int)strtok((string)$bs, '|');
                                     foreach ($group_courses as $ogk => $rows) {
                                         if ((int)strtok((string)$ogk, '|') === $gbk) $courses = array_merge($courses, $rows);
                                     }
