@@ -10,15 +10,28 @@ $departments = hm_departments();
 $errors = [];
 $old    = [
     'dept_id'     => (int)($_POST['dept_id'] ?? 0),
-    'room_number' => trim($_POST['room_number'] ?? ''),
-    'exam_date'   => trim($_POST['exam_date'] ?? ''),
-    'exam_time'   => trim($_POST['exam_time'] ?? ''),
+    'room_number' => trim($_POST['room_number'] ?? $_GET['room_number'] ?? ''),
+    'exam_date'   => trim($_POST['exam_date'] ?? $_GET['exam_date'] ?? ''),
+    'exam_time'   => trim($_POST['exam_time'] ?? $_GET['exam_time'] ?? ''),
     'num_columns' => (int)($_POST['num_columns'] ?? 0),
     'num_rows'    => (int)($_POST['num_rows'] ?? 0),
     'notes'       => trim($_POST['notes'] ?? ''),
     'is_active'   => isset($_POST['is_active']) ? 1 : 1,
 ];
+if ($old['exam_date'] !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $old['exam_date'])) $old['exam_date'] = '';
+if ($old['exam_time'] !== '' && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $old['exam_time'])) $old['exam_time'] = '';
 $old_caps = array_values(array_map('intval', (array)($_POST['col_capacity'] ?? [])));
+
+// Room Finder "Book" shortcut: prefill the layout from an existing booking
+// of the same room so only the department has to be picked.
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && (int)($_GET['from_hall_id'] ?? 0) > 0) {
+    $src = hm_get_hall((int)$_GET['from_hall_id'], false);
+    if ($src) {
+        $old['num_columns'] = (int)$src['num_columns'];
+        $old['num_rows']    = (int)$src['num_rows'];
+        $old_caps = array_map(static fn($c) => (int)$c['seat_capacity'], hm_hall_columns((int)$src['id']));
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
