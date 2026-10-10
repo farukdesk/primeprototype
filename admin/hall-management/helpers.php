@@ -1033,6 +1033,20 @@ function hm_batch_palette(): array
 }
 
 /**
+ * Parse the start time out of an admit-card time-slot label
+ * (e.g. "1:00 PM - 3:00 PM" → "13:00:00"). NULL when unparseable.
+ */
+function hm_slot_start_time(string $slot): ?string
+{
+    $slot = trim($slot);
+    if ($slot === '') return null;
+    $parts = preg_split('/\s*(?:-|–|—|\bto\b)\s*/iu', $slot);
+    $start = trim((string)($parts[0] ?? ''));
+    $ts    = $start !== '' ? strtotime($start) : false;
+    return $ts !== false ? date('H:i:s', $ts) : null;
+}
+
+/**
  * Derive the exam time for a hall on a date from the seated students'
  * admit-card course time slots (e.g. "1:00 PM - 3:00 PM" → "13:00:00").
  * The earliest start time wins; returns NULL when no slot can be parsed.
@@ -1042,12 +1056,8 @@ function hm_derive_exam_time(int $hall_id, string $exam_date): ?string
     $times = [];
     foreach (hm_exam_courses_by_batch($hall_id, $exam_date) as $rows) {
         foreach ($rows as $r) {
-            $slot = trim((string)($r['time_slot'] ?? ''));
-            if ($slot === '') continue;
-            $parts = preg_split('/\s*(?:-|–|—|\bto\b)\s*/iu', $slot);
-            $start = trim((string)($parts[0] ?? ''));
-            $ts    = $start !== '' ? strtotime($start) : false;
-            if ($ts !== false) $times[] = date('H:i:s', $ts);
+            $t = hm_slot_start_time((string)($r['time_slot'] ?? ''));
+            if ($t !== null) $times[] = $t;
         }
     }
     if (!$times) return null;
@@ -1224,17 +1234,26 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
  * Leftover (unseated) student groups on an exam date — fit hints for the
  * hall view: hm_unseated_students() grouped by dept / program / batch /
  * section / shift so a partially filled or empty room can suggest which
- * batch's leftover students would fully fit its free seats. Dept-scope
- * aware (only groups the current faculty may actually seat are returned).
+ * batch's leftover students would fully fit its free seats. When the
+ * room's exam time ($exam_time, "HH:MM:SS") is known, only groups whose
+ * admit-card time slot starts at that same time are suggested — a room
+ * booked for one date + time must not suggest students sitting at another
+ * time. Dept-scope aware (only groups the current faculty may actually
+ * seat are returned).
  *
  * Returns rows sorted by student_count DESC:
  * dept_id, dept_name, program_id, program_name, batch_id, batch_name,
  * section, shift, student_count.
  */
-function hm_unseated_group_counts(string $exam_date): array
+function hm_unseated_group_counts(string $exam_date, ?string $exam_time = null): array
 {
+    $want_time = $exam_time !== null && $exam_time !== '' ? substr($exam_time, 0, 5) : null;
     $groups = [];
     foreach (hm_unseated_students($exam_date) as $r) {
+        if ($want_time !== null) {
+            $slot_start = hm_slot_start_time((string)($r['time_slot'] ?? ''));
+            if ($slot_start === null || substr($slot_start, 0, 5) !== $want_time) continue;
+        }
         $dept_id    = (int)($r['dept_id'] ?? 0);
         $program_id = (int)($r['program_id'] ?? 0);
         $batch_id   = (int)($r['batch_id'] ?? 0);
