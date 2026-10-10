@@ -233,9 +233,12 @@ $group_courses = ($f_date !== '' && $assignments) ? hm_exam_courses_by_group($ha
 $dept_names = [];
 foreach (hm_departments(true) as $dn) $dept_names[(int)$dn['id']] = (string)$dn['name'];
 $hall_dept_id   = (int)$hall['dept_id'];
-$other_dept_cnt = 0;
+$other_dept_counts = []; // dept_id => number of seated students from that (non-hall) department
 foreach ($assignments as $a) {
-    if ((int)($a['student_dept_id'] ?? 0) !== $hall_dept_id) $other_dept_cnt++;
+    $a_dept_id = (int)($a['student_dept_id'] ?? 0);
+    if ($a_dept_id !== $hall_dept_id) {
+        $other_dept_counts[$a_dept_id] = ($other_dept_counts[$a_dept_id] ?? 0) + 1;
+    }
 }
 
 // Course options for the filter: exams found on the selected date for the
@@ -445,9 +448,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:<?= h($clr['bg']) ?>;border:1px solid <?= h($clr['border']) ?>;border-radius:3px;"></span> <?= h($group_names[$gk]) ?></span>
                     <?php endforeach; ?>
                     <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:3px;"></span> Free (<?= max(0, (int)$hall['total_capacity'] - count($assignments)) ?>)</span>
-                    <?php if ($other_dept_cnt > 0): ?>
-                    <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#fff;border:2px dashed #dc2626;border-radius:3px;"></span> <span class="text-danger fw-semibold">Other department student (<?= $other_dept_cnt ?>)</span></span>
-                    <?php endif; ?>
+                    <?php foreach ($other_dept_counts as $od_id => $od_cnt): ?>
+                    <span class="me-3"><span style="display:inline-block;width:12px;height:12px;background:#fff;border:2px dashed #dc2626;border-radius:3px;"></span> <span class="text-danger fw-semibold"><?= h($dept_names[$od_id] ?? 'Unknown dept') ?> (<?= (int)$od_cnt ?>)</span></span>
+                    <?php endforeach; ?>
                     <span>Assigned: <?= count($assignments) ?></span>
                 </div>
                 <?php endif; ?>
