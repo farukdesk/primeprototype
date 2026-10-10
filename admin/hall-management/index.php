@@ -206,6 +206,10 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/hall-management/finder.php?exam_date=<?= h($filter_date) ?><?= $filter_time !== '' ? '&exam_time=' . h(substr($filter_time, 0, 5)) : '' ?>"
+           class="btn btn-outline-success" style="border-radius:10px;" title="Find empty rooms (any department) for a date &amp; time">
+            <i class="fas fa-search-location me-1"></i> Room Finder
+        </a>
         <a href="<?= APP_URL ?>/hall-management/unseated.php?exam_date=<?= h($filter_date) ?><?= $filter_dept > 0 ? '&dept_id=' . $filter_dept : '' ?>"
            class="btn btn-outline-warning" style="border-radius:10px;" title="Students with an admit card on this date but no seat yet">
             <i class="fas fa-user-clock me-1"></i> Unseated Students
