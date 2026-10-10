@@ -12,7 +12,7 @@ require_access('hall-management');
 require_once __DIR__ . '/helpers.php';
 
 $hall_id = (int)($_GET['id'] ?? 0);
-$hall    = $hall_id > 0 ? hm_get_hall($hall_id) : null;
+$hall    = $hall_id > 0 ? hm_get_hall($hall_id, false) : null;
 if (!$hall) {
     flash_set('error', 'Hall not found or you do not have permission to access it.');
     redirect(APP_URL . '/hall-management/index.php');

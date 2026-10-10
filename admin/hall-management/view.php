@@ -5,7 +5,10 @@ require_once __DIR__ . '/helpers.php';
 
 hm_ensure_schedule_columns();
 $hall_id = (int)($_GET['id'] ?? 0);
-$hall    = $hall_id > 0 ? hm_get_hall($hall_id) : null;
+// Every faculty may VIEW any department's room (seat layout, empty seats).
+// Dept scope is enforced per action: seating students (own dept only) and
+// removing students (own-dept students only) below.
+$hall    = $hall_id > 0 ? hm_get_hall($hall_id, false) : null;
 if (!$hall) {
     flash_set('error', 'Hall not found or you do not have permission to access it.');
     redirect(APP_URL . '/hall-management/index.php');
@@ -14,6 +17,7 @@ if (!$hall) {
 $page_title = 'Hall – ' . $hall['room_number'];
 $columns    = hm_hall_columns($hall_id);
 $can_edit   = is_super_admin() || can_access('hall-management', 'can_edit');
+$own_hall_dept = can_access_dept((int)$hall['dept_id']);
 
 // ── Assignment filters (students come from generated admit cards) ──────
 $f_dept    = (int)($_GET['a_dept'] ?? 0);
@@ -143,20 +147,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
 
     if ($action === 'unassign') {
         $aid = (int)($_POST['assignment_id'] ?? 0);
-        $st  = db()->prepare('DELETE FROM hm_hall_assignments WHERE id = ? AND hall_id = ?');
-        $st->execute([$aid, $hall_id]);
-        hm_sync_hall_schedule($hall_id);
-        flash_set('success', $st->rowCount() ? 'Seat assignment removed.' : 'Assignment not found.');
+        // A faculty may remove ONLY students of their own department(s),
+        // no matter whose department the room belongs to.
+        $chk = db()->prepare(
+            'SELECT s.dept_id FROM hm_hall_assignments a JOIN students s ON s.id = a.student_id
+              WHERE a.id = ? AND a.hall_id = ?'
+        );
+        $chk->execute([$aid, $hall_id]);
+        $stu_dept = $chk->fetchColumn();
+        if ($stu_dept === false) {
+            flash_set('error', 'Assignment not found.');
+        } elseif (!can_access_dept((int)$stu_dept)) {
+            flash_set('error', 'You can only remove students of your own department.');
+        } else {
+            $st = db()->prepare('DELETE FROM hm_hall_assignments WHERE id = ? AND hall_id = ?');
+            $st->execute([$aid, $hall_id]);
+            hm_sync_hall_schedule($hall_id);
+            flash_set('success', $st->rowCount() ? 'Seat assignment removed.' : 'Assignment not found.');
+        }
         redirect($ret . ($f_date !== '' ? '&a_date=' . urlencode($f_date) : ''));
     }
 
     if ($action === 'clear_date') {
         $p_date = trim($_POST['exam_date'] ?? '');
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
-            $st = db()->prepare('DELETE FROM hm_hall_assignments WHERE hall_id = ? AND exam_date = ?');
-            $st->execute([$hall_id, $p_date]);
-            hm_sync_hall_schedule($hall_id);
-            flash_set('success', $st->rowCount() . ' assignment(s) cleared for ' . $p_date . '.');
+            // Dept-scoped users only clear seats of their own department's
+            // students; other departments' assignments are left untouched.
+            $scope = get_dept_scope();
+            if ($scope === null) {
+                $st = db()->prepare('DELETE FROM hm_hall_assignments WHERE hall_id = ? AND exam_date = ?');
+                $st->execute([$hall_id, $p_date]);
+            } elseif (empty($scope)) {
+                $st = null;
+            } else {
+                $ph = implode(',', array_fill(0, count($scope), '?'));
+                $st = db()->prepare(
+                    "DELETE a FROM hm_hall_assignments a JOIN students s ON s.id = a.student_id
+                      WHERE a.hall_id = ? AND a.exam_date = ? AND s.dept_id IN ($ph)"
+                );
+                $st->execute(array_merge([$hall_id, $p_date], $scope));
+            }
+            if ($st !== null) {
+                hm_sync_hall_schedule($hall_id);
+                flash_set('success', $st->rowCount() . ' assignment(s) cleared for ' . $p_date
+                    . ($scope !== null ? ' (your department\'s students only).' : '.'));
+            } else {
+                flash_set('error', 'You do not have permission to clear assignments.');
+            }
         }
         redirect($ret);
     }
@@ -216,7 +253,7 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active"><?= h($hall['room_number']) ?></li>
         </ol>
     </nav>
-    <?php if ($can_edit): ?>
+    <?php if ($can_edit && $own_hall_dept): ?>
     <a href="<?= APP_URL ?>/hall-management/edit.php?id=<?= $hall_id ?>" class="btn btn-sm btn-primary" style="border-radius:8px;">
         <i class="fas fa-edit me-1"></i> Edit Hall
     </a>
@@ -684,6 +721,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= h($a['section'] ?? '') ?></td>
                         <td><?= h($a['shift'] ?? '') ?></td>
                         <td class="text-end pe-3">
+                            <?php if (can_access_dept((int)($a['student_dept_id'] ?? 0))): ?>
                             <form method="post" class="d-inline mb-0">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="unassign">
@@ -693,6 +731,9 @@ require_once __DIR__ . '/../includes/header.php';
                                     <i class="fas fa-times"></i>
                                 </button>
                             </form>
+                            <?php else: ?>
+                            <span class="text-muted" style="font-size:.72rem;" title="Only this student's own department can remove them">—</span>
+                            <?php endif; ?>
                         </td>
                     </tr>
                     <?php endforeach; ?>
