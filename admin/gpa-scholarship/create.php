@@ -254,16 +254,19 @@ require_once __DIR__ . '/../includes/header.php';
 </form>
 
 <script>
+const tierCounters = { gpa: 0, attendance: 0 };
+
 function tierRow(metric, data = {}) {
+    const idx = tierCounters[metric]++;
     const wrap = document.createElement('div');
     wrap.className = 'border rounded p-2 mb-2';
     wrap.innerHTML = `
       <div class="row g-2 align-items-end">
-        <div class="col-md-3"><label class="form-label small">Label</label><input name="${metric}_tiers[][label]" class="form-control form-control-sm" value="${data.label || ''}"></div>
-        <div class="col-md-2"><label class="form-label small">Min</label><input type="number" step="0.01" name="${metric}_tiers[][min_value]" class="form-control form-control-sm" value="${data.min_value || ''}" required></div>
-        <div class="col-md-2"><label class="form-label small">Max</label><input type="number" step="0.01" name="${metric}_tiers[][max_value]" class="form-control form-control-sm" value="${data.max_value || ''}" required></div>
-        <div class="col-md-3"><label class="form-label small">Scholarship %</label><input type="number" step="0.01" name="${metric}_tiers[][scholarship_percent]" class="form-control form-control-sm" value="${data.scholarship_percent || ''}" required></div>
-        <div class="col-md-1"><label class="form-label small">Prio</label><input type="number" min="1" name="${metric}_tiers[][priority]" class="form-control form-control-sm" value="${data.priority || '1'}" required></div>
+        <div class="col-md-3"><label class="form-label small">Label</label><input name="${metric}_tiers[${idx}][label]" class="form-control form-control-sm" value="${data.label || ''}"></div>
+        <div class="col-md-2"><label class="form-label small">Min</label><input type="number" step="0.01" name="${metric}_tiers[${idx}][min_value]" class="form-control form-control-sm" value="${data.min_value || ''}" required></div>
+        <div class="col-md-2"><label class="form-label small">Max</label><input type="number" step="0.01" name="${metric}_tiers[${idx}][max_value]" class="form-control form-control-sm" value="${data.max_value || ''}" required></div>
+        <div class="col-md-3"><label class="form-label small">Scholarship %</label><input type="number" step="0.01" name="${metric}_tiers[${idx}][scholarship_percent]" class="form-control form-control-sm" value="${data.scholarship_percent || ''}" required></div>
+        <div class="col-md-1"><label class="form-label small">Prio</label><input type="number" min="1" name="${metric}_tiers[${idx}][priority]" class="form-control form-control-sm" value="${data.priority || '1'}" required></div>
         <div class="col-md-1"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.border').remove()">×</button></div>
       </div>`;
     return wrap;
