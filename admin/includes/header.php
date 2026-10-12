@@ -322,7 +322,8 @@ if (is_portal_student()) {
     $is_seo_active      = strpos($current_path, '/seo/') !== false;
     $is_reports_active    = strpos($current_path, '/accounting/reports/') !== false;
     $is_accounting_active = strpos($current_path, '/accounting/') !== false && !$is_reports_active;
-    $is_scholarship_active = strpos($current_path, '/scholarship/') !== false;
+    $is_scholarship_active = strpos($current_path, '/scholarship/') !== false
+                          || strpos($current_path, '/gpa-scholarship/') !== false;
     $is_vc_approval_active = strpos($current_path, '/vc-approval/') !== false;
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
@@ -1534,7 +1535,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Scholarship ── -->
-    <?php if (is_super_admin() || can_access('scholarship') || can_access('scholarship-policies')): ?>
+    <?php if (is_super_admin() || can_access('scholarship') || can_access('scholarship-policies') || can_access('gpa-scholarship')): ?>
     <button class="nav-group-toggle <?= $is_scholarship_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-scholarship"
             aria-expanded="<?= $is_scholarship_active ? 'true' : 'false' ?>">
@@ -1565,6 +1566,14 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/scholarship/run-merit.php"
                    class="<?= strpos($current_path, '/scholarship/run-merit') !== false ? 'active' : '' ?>">
                     <i class="fas fa-play-circle"></i> Run Merit
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('gpa-scholarship')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/gpa-scholarship/index.php"
+                   class="<?= strpos($current_path, '/gpa-scholarship/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-award"></i> GPA Scholarship
                 </a>
             </li>
             <?php endif; ?>
