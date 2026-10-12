@@ -206,6 +206,10 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/hall-management/problems.php?exam_date=<?= h($filter_date) ?><?= $filter_dept > 0 ? '&dept_id=' . $filter_dept : '' ?>"
+           class="btn btn-outline-danger" style="border-radius:10px;" title="Find hall scheduling and seating conflicts">
+            <i class="fas fa-exclamation-triangle me-1"></i> Problem Report
+        </a>
         <a href="<?= APP_URL ?>/hall-management/finder.php?exam_date=<?= h($filter_date) ?><?= $filter_time !== '' ? '&exam_time=' . h(substr($filter_time, 0, 5)) : '' ?>"
            class="btn btn-outline-success" style="border-radius:10px;" title="Find empty rooms (any department) for a date &amp; time">
             <i class="fas fa-search-location me-1"></i> Room Finder

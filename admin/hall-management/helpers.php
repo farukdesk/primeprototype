@@ -1305,3 +1305,298 @@ function hm_time_slot_options(string $exam_date): array
         return [];
     }
 }
+
+/**
+ * Hall Management problem report for a date.
+ *
+ * Detects likely scheduling / seating errors:
+ * - Same student has multiple courses at the same date+time.
+ * - Students seated in multiple halls on the same date.
+ * - Seated students with no active admit-card exam on that date.
+ * - Hall booking time mismatches seated students' admit-card start times.
+ * - Halls mixing multiple admit-card start times on the same date.
+ * - Inactive students present in seat assignments.
+ */
+function hm_problem_report(string $exam_date, array $filters = []): array
+{
+    hm_ensure_schedule_columns();
+    hm_ensure_assignments_table();
+
+    $out = [
+        'exam_clashes'       => [],
+        'missing_time_slots' => [],
+        'double_seated'      => [],
+        'no_exam_assignment' => [],
+        'hall_time_mismatch' => [],
+        'hall_mixed_times'   => [],
+        'inactive_assigned'  => [],
+    ];
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $exam_date)) return $out;
+
+    $db      = db();
+    $dept_id = (int)($filters['dept_id'] ?? 0);
+    $scope   = get_dept_scope();
+    if ($scope !== null && empty($scope)) return $out;
+
+    $has_subject_col = false;
+    try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
+
+    // ── Collect student exam rows (active admit cards only) ───────────────
+    $schedule_rows = [];
+    $seen          = [];
+    $push_rows = static function (array $rows) use (&$schedule_rows, &$seen): void {
+        foreach ($rows as $r) {
+            $sid    = (int)($r['sid'] ?? 0);
+            $course = strtoupper(trim((string)($r['course_code'] ?? '')));
+            $slot   = trim((string)($r['time_slot'] ?? ''));
+            if ($sid <= 0 || $course === '') continue;
+            $key = $sid . '|' . $course . '|' . $slot;
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $r['course_code'] = $course;
+            $r['time_slot']   = $slot;
+            $schedule_rows[]  = $r;
+        }
+    };
+
+    if ($has_subject_col) {
+        $sql = "SELECT DISTINCT s.id AS sid, s.student_id, s.full_name, d.name AS dept_name,
+                       cc.course_code, cc.time_slot
+                  FROM ac_admit_cards ac
+                  JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+                  JOIN co_registrations r ON r.offer_subject_id = cc.offer_subject_id
+                  JOIN students s ON s.id = r.student_id AND s.status = 'Active'
+             LEFT JOIN dept_departments d ON d.id = s.dept_id
+                 WHERE ac.is_active = 1
+                   AND cc.exam_date = ?
+                   AND cc.offer_subject_id IS NOT NULL";
+        $params = [$exam_date];
+        if ($dept_id > 0) {
+            $sql .= ' AND s.dept_id = ?';
+            $params[] = $dept_id;
+        }
+        if ($scope !== null) {
+            $ph = implode(',', array_fill(0, count($scope), '?'));
+            $sql .= " AND s.dept_id IN ($ph)";
+            $params = array_merge($params, $scope);
+        }
+        try {
+            $st = $db->prepare($sql);
+            $st->execute($params);
+            $push_rows($st->fetchAll());
+        } catch (Throwable $e) {}
+    }
+
+    $legacy_cond = $has_subject_col ? 'cc.offer_subject_id IS NULL' : '1=1';
+    $sql = "SELECT DISTINCT s.id AS sid, s.student_id, s.full_name, d.name AS dept_name,
+                   cc.course_code, cc.time_slot
+              FROM ac_admit_cards ac
+              JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
+              JOIN students s ON s.dept_id = ac.dept_id
+                             AND s.program_id = ac.program_id
+                             AND (ac.batch_id IS NULL OR s.batch_id = ac.batch_id)
+                             AND s.status = 'Active'
+         LEFT JOIN dept_departments d ON d.id = s.dept_id
+             WHERE ac.is_active = 1
+               AND cc.exam_date = ?
+               AND $legacy_cond";
+    $params = [$exam_date];
+    if ($dept_id > 0) {
+        $sql .= ' AND s.dept_id = ?';
+        $params[] = $dept_id;
+    }
+    if ($scope !== null) {
+        $ph = implode(',', array_fill(0, count($scope), '?'));
+        $sql .= " AND s.dept_id IN ($ph)";
+        $params = array_merge($params, $scope);
+    }
+    try {
+        $st = $db->prepare($sql);
+        $st->execute($params);
+        $push_rows($st->fetchAll());
+    } catch (Throwable $e) {}
+
+    // ── Build per-student schedule maps ───────────────────────────────────
+    $sched = []; // sid => ['student_id','full_name','dept_name','slots'=>[], 'start_times'=>[]]
+    foreach ($schedule_rows as $r) {
+        $sid = (int)$r['sid'];
+        if (!isset($sched[$sid])) {
+            $sched[$sid] = [
+                'student_id'   => (string)$r['student_id'],
+                'full_name'    => (string)$r['full_name'],
+                'dept_name'    => (string)($r['dept_name'] ?? ''),
+                'slots'        => [],
+                'start_times'  => [],
+                'missing_time' => [],
+            ];
+        }
+        $slot   = (string)$r['time_slot'];
+        $course = (string)$r['course_code'];
+        $sched[$sid]['slots'][$slot][$course] = true;
+        if ($slot === '') {
+            $sched[$sid]['missing_time'][$course] = true;
+        } else {
+            $start = hm_slot_start_time($slot);
+            if ($start !== null) $sched[$sid]['start_times'][substr($start, 0, 5)] = true;
+        }
+    }
+
+    foreach ($sched as $sid => $info) {
+        foreach ($info['slots'] as $slot => $courses) {
+            if (count($courses) <= 1) continue;
+            $cc = array_keys($courses);
+            sort($cc);
+            $out['exam_clashes'][] = [
+                'sid'         => $sid,
+                'student_id'  => $info['student_id'],
+                'full_name'   => $info['full_name'],
+                'dept_name'   => $info['dept_name'],
+                'time_slot'   => $slot,
+                'clash_count' => count($cc),
+                'courses'     => implode(', ', $cc),
+            ];
+        }
+        if (!empty($info['missing_time'])) {
+            $cc = array_keys($info['missing_time']);
+            sort($cc);
+            $out['missing_time_slots'][] = [
+                'sid'        => $sid,
+                'student_id' => $info['student_id'],
+                'full_name'  => $info['full_name'],
+                'dept_name'  => $info['dept_name'],
+                'courses'    => implode(', ', $cc),
+                'count'      => count($cc),
+            ];
+        }
+    }
+
+    // ── Inspect seat assignments for the selected date ────────────────────
+    $sql = "SELECT a.hall_id, a.student_id, a.col_no, a.seat_no,
+                   h.room_number, h.exam_time, h.dept_id AS hall_dept_id,
+                   s.student_id AS student_code, s.full_name, s.status,
+                   d.name AS dept_name
+              FROM hm_hall_assignments a
+              JOIN hm_halls h ON h.id = a.hall_id
+              JOIN students s ON s.id = a.student_id
+         LEFT JOIN dept_departments d ON d.id = s.dept_id
+             WHERE a.exam_date = ?";
+    $params = [$exam_date];
+    if ($dept_id > 0) {
+        $sql .= ' AND h.dept_id = ?';
+        $params[] = $dept_id;
+    }
+    if ($scope !== null) {
+        $ph = implode(',', array_fill(0, count($scope), '?'));
+        $sql .= " AND s.dept_id IN ($ph)";
+        $params = array_merge($params, $scope);
+    }
+    $sql .= ' ORDER BY h.room_number ASC, a.col_no ASC, a.seat_no ASC';
+
+    $assignments = [];
+    try {
+        $st = $db->prepare($sql);
+        $st->execute($params);
+        $assignments = $st->fetchAll();
+    } catch (Throwable $e) {
+        $assignments = [];
+    }
+
+    $by_student = [];
+    $hall_times = []; // hall_id => ['room_number','times'=>[], 'students'=>[]]
+    foreach ($assignments as $a) {
+        $sid = (int)$a['student_id'];
+        $hid = (int)$a['hall_id'];
+        $by_student[$sid][] = $a;
+
+        if (!isset($hall_times[$hid])) {
+            $hall_times[$hid] = [
+                'room_number' => (string)$a['room_number'],
+                'hall_time'   => (string)($a['exam_time'] ?? ''),
+                'times'       => [],
+                'students'    => [],
+            ];
+        }
+        $hall_times[$hid]['students'][$sid] = true;
+
+        $student_times = isset($sched[$sid]) ? array_keys($sched[$sid]['start_times']) : [];
+        foreach ($student_times as $t) $hall_times[$hid]['times'][$t] = true;
+
+        if ((string)($a['status'] ?? '') !== 'Active') {
+            $out['inactive_assigned'][] = [
+                'student_id' => (string)$a['student_code'],
+                'full_name'  => (string)$a['full_name'],
+                'status'     => (string)$a['status'],
+                'dept_name'  => (string)($a['dept_name'] ?? ''),
+                'room_number'=> (string)$a['room_number'],
+                'seat'       => 'C' . (int)$a['col_no'] . '-S' . (int)$a['seat_no'],
+            ];
+        }
+
+        if (!isset($sched[$sid])) {
+            $out['no_exam_assignment'][] = [
+                'student_id'  => (string)$a['student_code'],
+                'full_name'   => (string)$a['full_name'],
+                'dept_name'   => (string)($a['dept_name'] ?? ''),
+                'room_number' => (string)$a['room_number'],
+                'seat'        => 'C' . (int)$a['col_no'] . '-S' . (int)$a['seat_no'],
+            ];
+            continue;
+        }
+
+        $hall_time_hm = trim((string)($a['exam_time'] ?? ''));
+        if ($hall_time_hm !== '') {
+            $hall_time_hm = substr($hall_time_hm, 0, 5);
+            if ($student_times && !in_array($hall_time_hm, $student_times, true)) {
+                $out['hall_time_mismatch'][] = [
+                    'student_id'      => (string)$a['student_code'],
+                    'full_name'       => (string)$a['full_name'],
+                    'dept_name'       => (string)($a['dept_name'] ?? ''),
+                    'room_number'     => (string)$a['room_number'],
+                    'hall_exam_time'  => $hall_time_hm,
+                    'student_starts'  => implode(', ', $student_times),
+                    'seat'            => 'C' . (int)$a['col_no'] . '-S' . (int)$a['seat_no'],
+                ];
+            }
+        }
+    }
+
+    foreach ($by_student as $sid => $rows) {
+        if (count($rows) <= 1) continue;
+        $seats = [];
+        $rooms = [];
+        foreach ($rows as $r) {
+            $rooms[(string)$r['room_number']] = true;
+            $seats[] = (string)$r['room_number'] . ' (C' . (int)$r['col_no'] . '-S' . (int)$r['seat_no'] . ')';
+        }
+        sort($seats);
+        $one = $rows[0];
+        $out['double_seated'][] = [
+            'student_id' => (string)$one['student_code'],
+            'full_name'  => (string)$one['full_name'],
+            'dept_name'  => (string)($one['dept_name'] ?? ''),
+            'seat_count' => count($rows),
+            'room_count' => count($rooms),
+            'seats'      => implode('; ', $seats),
+        ];
+    }
+
+    foreach ($hall_times as $hid => $hr) {
+        $times = array_keys($hr['times']);
+        sort($times);
+        if (count($times) <= 1) continue;
+        $out['hall_mixed_times'][] = [
+            'hall_id'       => $hid,
+            'room_number'   => (string)$hr['room_number'],
+            'hall_exam_time'=> (string)$hr['hall_time'],
+            'times'         => implode(', ', $times),
+            'time_count'    => count($times),
+            'student_count' => count($hr['students']),
+        ];
+    }
+
+    foreach ($out as $k => $rows) {
+        usort($rows, static fn($a, $b) => strcmp((string)($a['student_id'] ?? $a['room_number'] ?? ''), (string)($b['student_id'] ?? $b['room_number'] ?? '')));
+        $out[$k] = $rows;
+    }
+    return $out;
+}
