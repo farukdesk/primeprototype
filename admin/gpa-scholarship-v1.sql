@@ -1,8 +1,8 @@
 -- ---------------------------------------------------------------------------
 -- GPA Scholarship module
 -- ---------------------------------------------------------------------------
--- Configurable GPA + Attendance scholarship setup that evaluates published
--- result_exams and writes idempotent, module-owned scholarship rows against
+-- Configurable GPA + Attendance scholarship setup that evaluates invigilation
+-- exams (ei_exams) and writes idempotent, module-owned scholarship rows against
 -- target sfp_semester_fees rows.
 --
 -- NOTE: *.sql is gitignored in this repository. Commit with: git add -f
@@ -12,7 +12,7 @@
 INSERT INTO modules (name, slug, description, icon, sort_order, is_active, can_view, can_create, can_edit, can_delete)
 SELECT 'GPA Scholarship',
        'gpa-scholarship',
-       'Published-exam GPA scholarship setup with attendance rules and idempotent semester fee application.',
+       'Invigilation-exam GPA scholarship setup with attendance rules and idempotent semester fee application.',
        'fas fa-award',
        0,
        1,
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS `gpa_scholarship_configs` (
   KEY `idx_gps_exam` (`exam_id`),
   KEY `idx_gps_scope` (`dept_id`,`program_id`,`batch_id`),
   KEY `idx_gps_active` (`is_active`),
-  CONSTRAINT `fk_gps_exam` FOREIGN KEY (`exam_id`) REFERENCES `result_exams` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_gps_exam` FOREIGN KEY (`exam_id`) REFERENCES `ei_exams` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_gps_dept` FOREIGN KEY (`dept_id`) REFERENCES `dept_departments` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_gps_program` FOREIGN KEY (`program_id`) REFERENCES `dept_academic_programs` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_gps_batch` FOREIGN KEY (`batch_id`) REFERENCES `student_batches` (`id`) ON DELETE SET NULL
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS `gpa_scholarship_awards` (
   KEY `idx_gpsa_student` (`student_id`),
   KEY `idx_gpsa_target_sf` (`target_sf_id`),
   CONSTRAINT `fk_gpsa_config` FOREIGN KEY (`config_id`) REFERENCES `gpa_scholarship_configs` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_gpsa_exam` FOREIGN KEY (`exam_id`) REFERENCES `result_exams` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_gpsa_exam` FOREIGN KEY (`exam_id`) REFERENCES `ei_exams` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_gpsa_student` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_gpsa_package` FOREIGN KEY (`package_id`) REFERENCES `sfp_packages` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_gpsa_target_sf` FOREIGN KEY (`target_sf_id`) REFERENCES `sfp_semester_fees` (`id`) ON DELETE SET NULL,

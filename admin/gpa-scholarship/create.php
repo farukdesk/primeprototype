@@ -36,9 +36,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset(gs_attendance_missing_policy_options()[$attendance_missing_policy])) $errors[] = 'Invalid attendance missing policy.';
 
     $exam = gs_get_exam($exam_id);
-    if (!$exam || (int)$exam['is_published'] !== 1) {
-        $errors[] = 'Selected exam is not published.';
-    } elseif ((int)$exam['dept_id'] !== $dept_id) {
+    if (!$exam) {
+        $errors[] = 'Selected exam is invalid or inaccessible.';
+    } elseif (!empty($exam['dept_id']) && (int)$exam['dept_id'] !== $dept_id) {
         $errors[] = 'Selected department does not match the selected exam.';
     }
 
@@ -143,7 +143,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" name="name" class="form-control" value="<?= h(old('name', '')) ?>" required>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label">Published exam <span class="text-danger">*</span></label>
+                    <label class="form-label">Invigilation exam <span class="text-danger">*</span></label>
                     <select name="exam_id" id="gs-exam" class="form-select" required>
                         <option value="">Select exam</option>
                         <?php foreach ($exam_options as $ex): ?>
