@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS `gpa_scholarship_configs` (
   `program_id` int(10) UNSIGNED DEFAULT NULL,
   `batch_id` int(10) UNSIGNED DEFAULT NULL,
   `require_merit_payment_type` tinyint(1) NOT NULL DEFAULT 1,
-  `combine_mode` enum('gpa_only','attendance_only','min','max') NOT NULL DEFAULT 'gpa_only',
+  `combine_mode` enum('gpa_only','gpa_then_attendance','attendance_only','min','max') NOT NULL DEFAULT 'gpa_only',
   `require_gpa_tier` tinyint(1) NOT NULL DEFAULT 1,
   `require_attendance_tier` tinyint(1) NOT NULL DEFAULT 0,
   `attendance_missing_policy` enum('exclude','ignore') NOT NULL DEFAULT 'exclude',

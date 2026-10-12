@@ -274,8 +274,11 @@ function addTier(metric, data = null) {
 }
 
 (function initTiers(){
-    addTier('gpa', {min_value:'3.90', max_value:'4.00', scholarship_percent:'100', priority:'1'});
-    addTier('gpa', {min_value:'3.80', max_value:'3.89', scholarship_percent:'80', priority:'2'});
+    addTier('gpa', {label:'A', min_value:'3.90', max_value:'4.00', scholarship_percent:'100', priority:'1'});
+    addTier('gpa', {label:'B', min_value:'3.80', max_value:'3.89', scholarship_percent:'80', priority:'2'});
+    addTier('gpa', {label:'C', min_value:'3.70', max_value:'3.79', scholarship_percent:'70', priority:'3'});
+    addTier('gpa', {label:'D', min_value:'3.50', max_value:'3.69', scholarship_percent:'60', priority:'4'});
+    addTier('gpa', {label:'E', min_value:'3.00', max_value:'3.49', scholarship_percent:'55', priority:'5'});
     addTier('attendance', {min_value:'75', max_value:'100', scholarship_percent:'10', priority:'1'});
 })();
 
