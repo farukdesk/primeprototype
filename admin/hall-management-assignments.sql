@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS `hm_hall_assignments` (
   `batch_id`      INT(10) UNSIGNED DEFAULT NULL COMMENT 'Selection context',
   `section`       VARCHAR(100) DEFAULT NULL COMMENT 'Selection context',
   `shift`         VARCHAR(25)  DEFAULT NULL COMMENT 'Selection context (Day / Evening / Morning)',
+  `course_code`   VARCHAR(100) DEFAULT NULL COMMENT 'Exam course code at assignment time',
+  `time_slot`     VARCHAR(100) DEFAULT NULL COMMENT 'Exam time slot label at assignment time',
   `assigned_by`   INT(10) UNSIGNED DEFAULT NULL COMMENT 'users.id',
   `created_at`    TIMESTAMP NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),

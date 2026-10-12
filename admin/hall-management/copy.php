@@ -19,12 +19,17 @@ if (!$hall) {
     flash_set('error', 'Hall not found or you do not have permission to copy it.');
     redirect(APP_URL . '/hall-management/index.php');
 }
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $new_date)) {
+if (!hm_is_valid_exam_date($new_date)) {
     flash_set('error', 'Please pick a valid exam date for the copy.');
     redirect(APP_URL . '/hall-management/index.php');
 }
-if ($new_time !== '' && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $new_time)) {
-    $new_time = '';
+if ($new_time !== '') {
+    $parsed_new_time = hm_parse_clock_time($new_time);
+    if ($parsed_new_time === null) {
+        flash_set('error', 'Please provide a valid exam time for the copy.');
+        redirect(APP_URL . '/hall-management/index.php');
+    }
+    $new_time = (string)$parsed_new_time[1];
 }
 
 // Source date for the seat assignments to copy: the hall's scheduled exam
@@ -59,11 +64,16 @@ if ($new_time !== '' && hm_room_slot_taken($hall['room_number'], $new_date, $new
 $busy = [];
 try {
     $st = db()->prepare(
-        "SELECT student_id, COALESCE(shift, '') AS shift FROM hm_hall_assignments WHERE exam_date = ?"
+        "SELECT student_id, COALESCE(shift, '') AS shift, time_slot FROM hm_hall_assignments WHERE exam_date = ?"
     );
     $st->execute([$new_date]);
     foreach ($st->fetchAll() as $r) {
-        $busy[(int)$r['student_id']][] = (string)$r['shift'];
+        $slot = hm_parse_time_slot_interval((string)($r['time_slot'] ?? ''));
+        if (!($slot['ok'] ?? false)) continue;
+        $busy[(int)$r['student_id']][] = [
+            'shift' => (string)$r['shift'],
+            'slot'  => $slot,
+        ];
     }
 } catch (Throwable $e) {
     $busy = [];
@@ -105,18 +115,24 @@ try {
     $skipped = 0;
     $ins = db()->prepare(
         'INSERT INTO hm_hall_assignments
-                (hall_id, exam_date, student_id, col_no, seat_no, dept_id, program_id, batch_id, section, shift, assigned_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+               (hall_id, exam_date, student_id, col_no, seat_no, dept_id, program_id, batch_id, section, shift, course_code, time_slot, assigned_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     foreach ($src_assignments as $a) {
         $sid   = (int)$a['student_id'];
         $shift = (string)($a['shift'] ?? '');
+        $slot  = hm_parse_time_slot_interval((string)($a['time_slot'] ?? ''));
+        if (!($slot['ok'] ?? false)) { $skipped++; continue; }
         if (isset($busy[$sid])) {
-            // Busy when any existing seat is for the same shift, or either
-            // side has no shift recorded (mirrors hm_busy_student_ids()).
             $conflict = false;
-            foreach ($busy[$sid] as $bshift) {
-                if ($shift === '' || $bshift === '' || $bshift === $shift) { $conflict = true; break; }
+            foreach ($busy[$sid] as $b) {
+                $bshift = (string)($b['shift'] ?? '');
+                $bslot  = (array)($b['slot'] ?? []);
+                if ($shift !== '' && $bshift !== '' && $shift !== $bshift) continue;
+                if (hm_intervals_overlap($slot['start_sec'], $slot['end_sec'], (int)$bslot['start_sec'], (int)$bslot['end_sec'])) {
+                    $conflict = true;
+                    break;
+                }
             }
             if ($conflict) { $skipped++; continue; }
         }
@@ -128,6 +144,8 @@ try {
             $a['batch_id'] !== null ? (int)$a['batch_id'] : null,
             $a['section'] !== null && $a['section'] !== '' ? $a['section'] : null,
             $shift !== '' ? $shift : null,
+            $a['course_code'] !== null && $a['course_code'] !== '' ? $a['course_code'] : null,
+            $a['time_slot'] !== null && $a['time_slot'] !== '' ? $a['time_slot'] : null,
             (int)(auth_user()['id'] ?? 0) ?: null,
         ]);
         $copied++;

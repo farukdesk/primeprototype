@@ -142,6 +142,85 @@ function hm_slot_label(?string $exam_date, ?string $exam_time): string
     return $label;
 }
 
+/** Strict YYYY-MM-DD validation (format + real calendar date). */
+function hm_is_valid_exam_date(string $date): bool
+{
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) return false;
+    [$y, $m, $d] = array_map('intval', explode('-', $date));
+    return checkdate($m, $d, $y);
+}
+
+/**
+ * Parse a clock value ("HH:MM[:SS]" or "h:MM[:SS] AM/PM").
+ * Returns [seconds-from-midnight, "HH:MM:SS"] or null.
+ */
+function hm_parse_clock_time(string $raw): ?array
+{
+    $raw = trim($raw);
+    if ($raw === '') return null;
+    $raw = preg_replace('/\s+/', ' ', $raw);
+
+    if (preg_match('/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/', $raw, $m)) {
+        $h = (int)$m[1];
+        $i = (int)$m[2];
+        $s = isset($m[3]) ? (int)$m[3] : 0;
+        return [$h * 3600 + $i * 60 + $s, sprintf('%02d:%02d:%02d', $h, $i, $s)];
+    }
+    if (preg_match('/^(1[0-2]|0?[1-9]):([0-5]\d)(?::([0-5]\d))?\s*([APap][Mm])$/', $raw, $m)) {
+        $h = (int)$m[1];
+        $i = (int)$m[2];
+        $s = isset($m[3]) ? (int)$m[3] : 0;
+        $ampm = strtoupper($m[4]);
+        if ($h === 12) $h = 0;
+        if ($ampm === 'PM') $h += 12;
+        return [$h * 3600 + $i * 60 + $s, sprintf('%02d:%02d:%02d', $h, $i, $s)];
+    }
+    return null;
+}
+
+/**
+ * Parse an admit-card slot label like "1:00 PM - 3:00 PM".
+ * Returns:
+ * ['ok'=>bool, 'start_sec'=>int, 'end_sec'=>int, 'start'=>'HH:MM:SS', 'end'=>'HH:MM:SS', 'error'=>string]
+ */
+function hm_parse_time_slot_interval(string $slot): array
+{
+    $slot = trim($slot);
+    if ($slot === '') return ['ok' => false, 'error' => 'Time slot is missing.'];
+
+    $parts = preg_split('/\s*(?:-|–|—|\bto\b)\s*/iu', $slot, -1, PREG_SPLIT_NO_EMPTY);
+    if (count($parts) !== 2) {
+        return ['ok' => false, 'error' => 'Time slot must contain exactly one range separator (e.g. "10:00 AM - 12:00 PM").'];
+    }
+    $start_has_ampm = preg_match('/[APap][Mm]\s*$/', (string)$parts[0]) === 1;
+    $end_has_ampm   = preg_match('/[APap][Mm]\s*$/', (string)$parts[1]) === 1;
+    if ($start_has_ampm xor $end_has_ampm) {
+        return ['ok' => false, 'error' => 'Ambiguous AM/PM time slot. Use AM/PM on both start and end times (or use 24-hour time for both).'];
+    }
+    $start = hm_parse_clock_time((string)$parts[0]);
+    $end   = hm_parse_clock_time((string)$parts[1]);
+    if ($start === null || $end === null) {
+        return ['ok' => false, 'error' => 'Time slot format is invalid or ambiguous. Use an unambiguous 24-hour time or AM/PM format.'];
+    }
+    if ($end[0] <= $start[0]) {
+        return ['ok' => false, 'error' => 'Exam end time must be later than start time for the same date.'];
+    }
+
+    return [
+        'ok' => true,
+        'start_sec' => (int)$start[0],
+        'end_sec'   => (int)$end[0],
+        'start'     => (string)$start[1],
+        'end'       => (string)$end[1],
+    ];
+}
+
+/** True when two [start,end) exam intervals overlap. */
+function hm_intervals_overlap(int $a_start, int $a_end, int $b_start, int $b_end): bool
+{
+    return $a_start < $b_end && $b_start < $a_end;
+}
+
 /* ========================================================================
  * Student seat assignments (students come from generated admit cards)
  * ======================================================================== */
@@ -169,6 +248,8 @@ function hm_ensure_assignments_table(): void
               `batch_id`    INT(10) UNSIGNED DEFAULT NULL,
               `section`     VARCHAR(100) DEFAULT NULL,
               `shift`       VARCHAR(25)  DEFAULT NULL,
+              `course_code` VARCHAR(100) DEFAULT NULL,
+              `time_slot`   VARCHAR(100) DEFAULT NULL,
               `assigned_by` INT(10) UNSIGNED DEFAULT NULL,
               `created_at`  TIMESTAMP NOT NULL DEFAULT current_timestamp(),
               PRIMARY KEY (`id`),
@@ -181,6 +262,14 @@ function hm_ensure_assignments_table(): void
                   REFERENCES `students` (`id`) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+        $has_course = db()->query("SHOW COLUMNS FROM hm_hall_assignments LIKE 'course_code'")->fetch();
+        if (!$has_course) {
+            db()->exec('ALTER TABLE hm_hall_assignments ADD COLUMN course_code VARCHAR(100) DEFAULT NULL AFTER shift');
+        }
+        $has_slot = db()->query("SHOW COLUMNS FROM hm_hall_assignments LIKE 'time_slot'")->fetch();
+        if (!$has_slot) {
+            db()->exec('ALTER TABLE hm_hall_assignments ADD COLUMN time_slot VARCHAR(100) DEFAULT NULL AFTER course_code');
+        }
     } catch (Throwable $e) {
         // table probably exists with an older definition — queries will tell
     }
@@ -290,7 +379,7 @@ function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, st
  * for that date is the given course.
  *
  * Returns rows: id, student_id, full_name, batch_name, shift, section,
- * course_code (the exam course the student sits on that date).
+ * course_code + time_slot (the exam course + slot the student sits on that date).
  */
 function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $section, string $shift, string $course_code = ''): array
 {
@@ -307,7 +396,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
     // ── Subject-linked cards: students via their registrations ─────────
     if ($has_subject_col) {
         $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name, s.batch_id,
-                       b.name AS batch_name, o.shift, cc.section, cc.course_code
+                       b.name AS batch_name, o.shift, cc.section, cc.course_code, cc.time_slot
                   FROM ac_admit_cards ac
                   JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
                   JOIN co_offer_subjects cos ON cos.id = cc.offer_subject_id
@@ -331,7 +420,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
                         WHERE cx.admit_card_id = ac.id AND cx.offer_subject_id IS NOT NULL)'
         : '1=1';
     $sql = "SELECT DISTINCT s.id, s.student_id, s.full_name, s.batch_id,
-                   b.name AS batch_name, s.shift, s.section, cc.course_code
+                   b.name AS batch_name, s.shift, s.section, cc.course_code, cc.time_slot
               FROM ac_admit_cards ac
               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
               JOIN students s ON s.dept_id = ac.dept_id
@@ -496,31 +585,124 @@ function hm_student_course_map(array $student_ids, string $exam_date): array
     return $map;
 }
 
+/** Existing seat rows of one student on an exam date (optionally excluding one hall). */
+function hm_student_assignments_on_date(int $student_id, string $exam_date, int $exclude_hall_id = 0): array
+{
+    hm_ensure_assignments_table();
+    $sql = "SELECT a.hall_id, a.col_no, a.seat_no, a.course_code, a.time_slot, h.room_number
+              FROM hm_hall_assignments a
+              JOIN hm_halls h ON h.id = a.hall_id
+             WHERE a.exam_date = ? AND a.student_id = ?";
+    $params = [$exam_date, $student_id];
+    if ($exclude_hall_id > 0) { $sql .= ' AND a.hall_id <> ?'; $params[] = $exclude_hall_id; }
+    $st = db()->prepare($sql);
+    $st->execute($params);
+    return $st->fetchAll();
+}
+
+/** Existing seat rows in the same room/date but another hall row. */
+function hm_room_assignments_on_date(int $hall_id, string $exam_date): array
+{
+    hm_ensure_assignments_table();
+    $room_q = db()->prepare('SELECT room_number FROM hm_halls WHERE id = ?');
+    $room_q->execute([$hall_id]);
+    $room_number = (string)($room_q->fetchColumn() ?: '');
+    if ($room_number === '') return [];
+
+    $st = db()->prepare(
+        "SELECT a.hall_id, a.student_id, a.col_no, a.seat_no, a.course_code, a.time_slot, h.room_number
+           FROM hm_hall_assignments a
+           JOIN hm_halls h ON h.id = a.hall_id
+          WHERE a.exam_date = ? AND h.room_number = ? AND a.hall_id <> ?"
+    );
+    $st->execute([$exam_date, $room_number, $hall_id]);
+    return $st->fetchAll();
+}
+
+/** Build a readable slot label from parsed interval data. */
+function hm_interval_label(array $interval): string
+{
+    return date('g:i A', strtotime((string)$interval['start'])) . ' - ' . date('g:i A', strtotime((string)$interval['end']));
+}
+
 /**
  * Auto-assign students to seats column by column (front to back), keeping
  * ONE course per column and alternating courses between adjacent columns:
  * two neighbouring columns never hold the same exam course. If only the
  * neighbouring column's course remains, the column is left empty (the gap
  * lets the course be seated again in the column after it).
- * Returns [assigned_count, skipped_already_seated, left_over].
+ * Returns [assigned_count, skipped_count, left_over, issue_messages].
  */
 function hm_assign_students(int $hall_id, string $exam_date, array $students, array $ctx): array
 {
     hm_ensure_assignments_table();
     $taken = hm_assignments($hall_id, $exam_date);
-    $busy  = array_flip(hm_busy_student_ids($exam_date, (string)($ctx['shift'] ?? '')));
+    $issues = [];
 
     // Course of each student already seated in this hall (for column locks)
     $seated_ids  = array_map(static fn($r) => (int)$r['student_id'], $taken);
     $course_map  = hm_student_course_map($seated_ids, $exam_date);
+    $room_rows   = hm_room_assignments_on_date($hall_id, $exam_date);
+    $room_slots  = [];
+    foreach ($room_rows as $rr) {
+        $slot = hm_parse_time_slot_interval((string)($rr['time_slot'] ?? ''));
+        if (!($slot['ok'] ?? false)) continue;
+        $room_slots[] = ['row' => $rr, 'slot' => $slot];
+    }
 
     // Group the waiting students by their exam course
     $groups  = [];   // course key => list of student rows
     $skipped = 0;
     foreach ($students as $stu) {
         $sid = (int)$stu['id'];
-        if (isset($busy[$sid])) { $skipped++; continue; }
+        $sname = trim((string)($stu['full_name'] ?? 'Student'));
+        $scode = trim((string)($stu['student_id'] ?? ''));
+        $slot  = hm_parse_time_slot_interval((string)($stu['time_slot'] ?? ''));
+        if (!($slot['ok'] ?? false)) {
+            $issues[] = $sname . ($scode !== '' ? ' (' . $scode . ')' : '')
+                . ' was skipped — invalid exam slot "' . (string)($stu['time_slot'] ?? '') . '" for course '
+                . ((string)($stu['course_code'] ?? '') !== '' ? '"' . (string)$stu['course_code'] . '"' : '"unknown"')
+                . ' (' . ($slot['error'] ?? 'invalid time slot') . ').';
+            $skipped++;
+            continue;
+        }
+
+        $student_conflict = false;
+        foreach (hm_student_assignments_on_date($sid, $exam_date) as $ex) {
+            if ((int)$ex['hall_id'] === $hall_id) {
+                $issues[] = $sname . ($scode !== '' ? ' (' . $scode . ')' : '')
+                    . ' is already seated in this hall on ' . date('d M Y', strtotime($exam_date))
+                    . ' (C' . (int)$ex['col_no'] . '-S' . (int)$ex['seat_no'] . ').';
+                $student_conflict = true;
+                break;
+            }
+            $eslot = hm_parse_time_slot_interval((string)($ex['time_slot'] ?? ''));
+            if (!($eslot['ok'] ?? false)) continue;
+            if (!hm_intervals_overlap($slot['start_sec'], $slot['end_sec'], $eslot['start_sec'], $eslot['end_sec'])) continue;
+            $issues[] = $sname . ($scode !== '' ? ' (' . $scode . ')' : '')
+                . ' conflicts with an existing seat in Room ' . (string)$ex['room_number']
+                . ' (C' . (int)$ex['col_no'] . '-S' . (int)$ex['seat_no'] . ') on '
+                . date('d M Y', strtotime($exam_date)) . ' at ' . hm_interval_label($eslot) . '.';
+            $student_conflict = true;
+            break;
+        }
+        if ($student_conflict) { $skipped++; continue; }
+
+        $hall_conflict = false;
+        foreach ($room_slots as $rr) {
+            $eslot = $rr['slot'];
+            if (!hm_intervals_overlap($slot['start_sec'], $slot['end_sec'], $eslot['start_sec'], $eslot['end_sec'])) continue;
+            $row = $rr['row'];
+            $issues[] = 'Room ' . (string)$row['room_number'] . ' already has an overlapping exam slot on '
+                . date('d M Y', strtotime($exam_date)) . ' (' . hm_interval_label($eslot) . ') '
+                . 'in Hall #' . (int)$row['hall_id'] . '.';
+            $hall_conflict = true;
+            break;
+        }
+        if ($hall_conflict) { $skipped++; continue; }
+
         $ck = strtoupper(trim((string)($stu['course_code'] ?? '')));
+        $stu['_slot_interval'] = $slot;
         $groups[$ck][] = $stu;
     }
 
@@ -544,8 +726,8 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
     $ins = db()->prepare(
         'INSERT INTO hm_hall_assignments
             (hall_id, exam_date, student_id, col_no, seat_no,
-             dept_id, program_id, batch_id, section, shift, assigned_by)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+             dept_id, program_id, batch_id, section, shift, course_code, time_slot, assigned_by)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
 
     $assigned    = 0;
@@ -593,6 +775,8 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
                     ((int)($stu['batch_id'] ?? 0)) ?: (($ctx['batch_id'] ?? null) ?: null),
                     ($ctx['section'] ?? '') !== '' ? $ctx['section'] : null,
                     ($ctx['shift'] ?? '') !== '' ? $ctx['shift'] : null,
+                    ($stu['course_code'] ?? '') !== '' ? (string)$stu['course_code'] : null,
+                    ($stu['time_slot'] ?? '') !== '' ? (string)$stu['time_slot'] : null,
                     auth_user()['id'] ?? null,
                 ]);
                 $assigned++;
@@ -605,16 +789,15 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
 
     $left = 0;
     foreach ($groups as $list) $left += count($list);
-    return [$assigned, $skipped, $left];
+    return [$assigned, $skipped, $left, $issues];
 }
 
 /**
  * Manually seat ONE student on a specific column/seat of a hall.
  *
- * Hard checks (never overridable): the seat exists and is free, the
- * student is active, dept-accessible and not already seated in THIS hall
- * on that date. Soft rule conflicts (mixed courses in a column, same
- * course in an adjacent column, already seated in another hall) are
+ * Hard checks (never overridable): seat exists and is free, student is
+ * active/accessible, and no student/hall time overlap conflict exists.
+ * Soft rule conflicts (mixed courses in a column, same course in an adjacent column) are
  * returned as warnings; passing $force = true seats the student anyway.
  * Returns [bool ok, string message, string[] warnings] — a false result
  * with non-empty warnings means user confirmation is required.
@@ -648,6 +831,36 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
     $taken = hm_assignments($hall_id, $exam_date);
     if (isset($taken[$col_no . ':' . $seat_no])) {
         return [false, 'Seat C' . $col_no . '-S' . $seat_no . ' is already occupied.', []];
+    }
+
+    $slot_text = trim((string)($ctx['time_slot'] ?? ''));
+    $slot = hm_parse_time_slot_interval($slot_text);
+    if (!($slot['ok'] ?? false)) {
+        return [false, 'Could not assign ' . h($stu['full_name']) . ' (' . h($stu['student_id'])
+            . ') because the exam time slot is invalid: ' . ($slot['error'] ?? 'invalid slot') . '.', []];
+    }
+    $course_code = strtoupper(trim((string)($ctx['course_code'] ?? '')));
+    if ($course_code === '') $course_code = strtoupper(trim((string)($stu['course_code'] ?? '')));
+
+    foreach (hm_student_assignments_on_date($student_id, $exam_date) as $seated) {
+        if ((int)$seated['hall_id'] === $hall_id) {
+            return [false, h($stu['full_name']) . ' (' . h($stu['student_id']) . ') is already seated in this hall on this date (C'
+                . (int)$seated['col_no'] . '-S' . (int)$seated['seat_no'] . ').', []];
+        }
+        $eslot = hm_parse_time_slot_interval((string)($seated['time_slot'] ?? ''));
+        if (!($eslot['ok'] ?? false)) continue;
+        if (!hm_intervals_overlap($slot['start_sec'], $slot['end_sec'], $eslot['start_sec'], $eslot['end_sec'])) continue;
+        return [false, h($stu['full_name']) . ' (' . h($stu['student_id']) . ') already has an overlapping exam seat in Room '
+            . h((string)$seated['room_number']) . ' (C' . (int)$seated['col_no'] . '-S' . (int)$seated['seat_no']
+            . ') on ' . h(date('d M Y', strtotime($exam_date))) . ' at ' . h(hm_interval_label($eslot)) . '.', []];
+    }
+    foreach (hm_room_assignments_on_date($hall_id, $exam_date) as $row) {
+        $eslot = hm_parse_time_slot_interval((string)($row['time_slot'] ?? ''));
+        if (!($eslot['ok'] ?? false)) continue;
+        if (!hm_intervals_overlap($slot['start_sec'], $slot['end_sec'], $eslot['start_sec'], $eslot['end_sec'])) continue;
+        return [false, 'Room ' . h((string)$row['room_number']) . ' already has an overlapping slot ('
+            . h(hm_interval_label($eslot)) . ') in Hall #' . (int)$row['hall_id']
+            . ' on ' . h(date('d M Y', strtotime($exam_date))) . '.', []];
     }
 
     // ── Rule conflicts: manual seating MAY override them after a confirm ──
@@ -685,26 +898,6 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
         }
     }
 
-    // 3) Student should not already hold a seat on this date (same shift logic as auto-assign)
-    $shift = (string)($ctx['shift'] ?? '');
-    try {
-        $sql    = 'SELECT a.hall_id, a.col_no, a.seat_no, hl.room_number
-                     FROM hm_hall_assignments a JOIN hm_halls hl ON hl.id = a.hall_id
-                    WHERE a.exam_date = ? AND a.student_id = ?';
-        $params = [$exam_date, $student_id];
-        if ($shift !== '') { $sql .= " AND (a.shift = ? OR a.shift IS NULL OR a.shift = '')"; $params[] = $shift; }
-        $bq = $db->prepare($sql);
-        $bq->execute($params);
-        foreach ($bq->fetchAll() as $seated) {
-            if ((int)$seated['hall_id'] === $hall_id) {
-                return [false, h($stu['full_name']) . ' is already seated in this hall on this date (C'
-                             . (int)$seated['col_no'] . '-S' . (int)$seated['seat_no'] . ').', []];
-            }
-            $warnings[] = 'Already seated in Room ' . $seated['room_number'] . ' (C' . (int)$seated['col_no']
-                        . '-S' . (int)$seated['seat_no'] . ') on this date — the student would hold two seats.';
-        }
-    } catch (Throwable $e) {}
-
     if ($warnings && !$force) {
         return [false, '', $warnings];
     }
@@ -713,8 +906,8 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
         $db->prepare(
             'INSERT INTO hm_hall_assignments
                 (hall_id, exam_date, student_id, col_no, seat_no,
-                 dept_id, program_id, batch_id, section, shift, assigned_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+                 dept_id, program_id, batch_id, section, shift, course_code, time_slot, assigned_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $hall_id, $exam_date, $student_id, $col_no, $seat_no,
             ($ctx['dept_id'] ?? null) ?: null,
@@ -722,6 +915,8 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
             $stu_batch ?: (($ctx['batch_id'] ?? null) ?: null),
             ($ctx['section'] ?? '') !== '' ? $ctx['section'] : null,
             ($ctx['shift'] ?? '') !== '' ? $ctx['shift'] : null,
+            $course_code !== '' ? $course_code : null,
+            $slot_text !== '' ? $slot_text : null,
             auth_user()['id'] ?? null,
         ]);
     } catch (Throwable $e) {
@@ -1038,12 +1233,8 @@ function hm_batch_palette(): array
  */
 function hm_slot_start_time(string $slot): ?string
 {
-    $slot = trim($slot);
-    if ($slot === '') return null;
-    $parts = preg_split('/\s*(?:-|–|—|\bto\b)\s*/iu', $slot);
-    $start = trim((string)($parts[0] ?? ''));
-    $ts    = $start !== '' ? strtotime($start) : false;
-    return $ts !== false ? date('H:i:s', $ts) : null;
+    $parsed = hm_parse_time_slot_interval($slot);
+    return ($parsed['ok'] ?? false) ? (string)$parsed['start'] : null;
 }
 
 /**
