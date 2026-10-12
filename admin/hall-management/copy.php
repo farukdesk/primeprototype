@@ -59,8 +59,9 @@ if ($new_time !== '' && hm_room_slot_taken($hall['room_number'], $new_date, $new
     redirect(APP_URL . '/hall-management/index.php');
 }
 
-// Students already seated in ANY hall on the target date — they are skipped
-// automatically so a student is never double-booked on the same day.
+// Students already seated in ANY hall on the target date. We compare time
+// ranges and skip overlaps so a student is never double-booked in the same
+// exam slot.
 $busy = [];
 try {
     $st = db()->prepare(
