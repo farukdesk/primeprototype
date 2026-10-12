@@ -9,6 +9,8 @@ $id      = (int)($_GET['id'] ?? 0);
 $student = sm_get_student($id);
 $user    = auth_user();
 $is_staff = sm_is_staff();
+$student_dept_id = (int)($student['dept_id'] ?? 0);
+$can_batch_transfer = $is_staff || (faculty_own_dept_ids() !== null && $student_dept_id > 0 && can_access_dept($student_dept_id));
 
 // ── Return-to-filtered-list support ───────────────────────────────────────────
 // Preserve the caller's active filters so navigating back / editing keeps the
@@ -80,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ── Batch transfer: add ───────────────────────────────────────────────
-    if ($action === 'add_batch_transfer' && $is_staff) {
+    if ($action === 'add_batch_transfer' && $can_batch_transfer) {
         $to_batch_id = (int)($_POST['to_batch_id'] ?? 0);
         $note        = trim($_POST['transfer_note'] ?? '');
         $from_batch  = $student['batch_id'] !== null ? (int)$student['batch_id'] : null;
@@ -103,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ── Batch transfer: remove ────────────────────────────────────────────
-    if ($action === 'remove_batch_transfer' && $is_staff) {
+    if ($action === 'remove_batch_transfer' && $can_batch_transfer) {
         $transfer_id = (int)($_POST['transfer_id'] ?? 0);
         if (sm_remove_batch_transfer($transfer_id, $id)) {
             log_change('students', 'UPDATE', $id,
@@ -623,10 +625,12 @@ $statusChipClass = match($student['status']) {
                 <i class="fas fa-shield-alt"></i> Verify
             </a>
             <?php endif; ?>
-            <?php if ($is_staff): ?>
+            <?php if ($can_batch_transfer): ?>
             <a href="#sv-batch-transfer" class="btn-hero">
                 <i class="fas fa-exchange-alt"></i> Batch Transfer
             </a>
+            <?php endif; ?>
+            <?php if ($is_staff): ?>
             <a href="<?= APP_URL ?>/students/edit.php?<?= h(http_build_query(['id' => $id, 'ret' => $ret_qs])) ?>" class="btn-hero btn-hero-edit">
                 <i class="fas fa-edit"></i> Edit
             </a>
@@ -658,13 +662,15 @@ $statusChipClass = match($student['status']) {
     <?php if (!empty($results)): ?>
     <a href="#sv-results"><i class="fas fa-chart-bar me-1"></i>Results</a>
     <?php endif; ?>
-    <?php if ($is_staff): ?>
+    <?php if ($can_batch_transfer): ?>
     <a href="#sv-batch-transfer" style="<?= $batch_transfers ? 'border-color:#fcd34d;color:#92400e;background:#fffbeb;' : '' ?>">
         <i class="fas fa-exchange-alt me-1"></i>Batch Transfer
         <?php if ($batch_transfers): ?>
         <span class="badge ms-1" style="background:#f59e0b;color:#fff;font-size:.65rem;"><?= count($batch_transfers) ?></span>
         <?php endif; ?>
     </a>
+    <?php endif; ?>
+    <?php if ($is_staff): ?>
     <a href="#sv-portal" style="<?= $portal_user ? 'border-color:#bbf7d0;color:#16a34a;background:#f0fdf4;' : '' ?>">
         <i class="fas fa-user-lock me-1"></i>Portal Account
         <?php if ($portal_user): ?>
@@ -1216,7 +1222,7 @@ $hasLocalGuardian = !empty($student['local_guardian_name']) || !empty($student['
 </div>
 <?php endif; ?>
 
-<?php if ($is_staff): ?>
+<?php if ($can_batch_transfer): ?>
 <!-- ══════════════════════════════════════════════════════════
      BATCH TRANSFER
 ═══════════════════════════════════════════════════════════ -->
