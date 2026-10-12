@@ -1099,10 +1099,25 @@ if (is_portal_student()) {
             <?php endif; ?>
             <?php endif; ?>
             <?php if (is_super_admin() || can_access('hall-management')): ?>
+            <?php $is_hall_mgmt_active = strpos($current_path, '/hall-management/') !== false; ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/hall-management/index.php"
-                   class="<?= strpos($current_path, '/hall-management/') !== false ? 'active' : '' ?>">
+                   class="<?= ($is_hall_mgmt_active
+                        && strpos($current_path, '/hall-management/finder') === false
+                        && strpos($current_path, '/hall-management/unseated') === false) ? 'active' : '' ?>">
                     <i class="fas fa-door-open"></i> Hall Management
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/hall-management/finder.php"
+                   class="<?= strpos($current_path, '/hall-management/finder') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-search-location"></i> Room Finder
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/hall-management/unseated.php"
+                   class="<?= strpos($current_path, '/hall-management/unseated') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-user-clock"></i> Unseated Students
                 </a>
             </li>
             <?php endif; ?>
