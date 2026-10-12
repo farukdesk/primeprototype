@@ -20,6 +20,18 @@ $page_title = 'Edit GPA Scholarship Setup';
 $db = db();
 
 $exam_options = gs_exam_options();
+$current_exam_id = (int)$config['exam_id'];
+$has_current_exam = false;
+foreach ($exam_options as $ex) {
+    if ((int)$ex['id'] === $current_exam_id) {
+        $has_current_exam = true;
+        break;
+    }
+}
+if (!$has_current_exam && $current_exam_id > 0) {
+    $legacy_exam = gs_get_exam($current_exam_id);
+    if ($legacy_exam) $exam_options[] = $legacy_exam;
+}
 $departments = gs_departments();
 $batches = gs_batches();
 $errors = [];
@@ -48,9 +60,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset(gs_attendance_missing_policy_options()[$attendance_missing_policy])) $errors[] = 'Invalid attendance missing policy.';
 
     $exam = gs_get_exam($exam_id);
-    if (!$exam || (int)$exam['is_published'] !== 1) {
-        $errors[] = 'Selected exam is not published.';
-    } elseif ((int)$exam['dept_id'] !== $dept_id) {
+    if (!$exam) {
+        $errors[] = 'Selected exam is invalid or inaccessible.';
+    } elseif (!empty($exam['dept_id']) && (int)$exam['dept_id'] !== $dept_id) {
         $errors[] = 'Selected department does not match the selected exam.';
     }
 
@@ -153,7 +165,7 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-4"><label class="form-label">Setup name</label><input type="text" name="name" class="form-control" value="<?= h($config['name']) ?>" required></div>
-                <div class="col-md-4"><label class="form-label">Published exam</label><select name="exam_id" class="form-select" required><?php foreach ($exam_options as $ex): ?><option value="<?= (int)$ex['id'] ?>" <?= (int)$config['exam_id'] === (int)$ex['id'] ? 'selected' : '' ?>><?= h($ex['exam_title']) ?></option><?php endforeach; ?></select></div>
+                <div class="col-md-4"><label class="form-label">Invigilation exam</label><select name="exam_id" class="form-select" required><?php foreach ($exam_options as $ex): ?><option value="<?= (int)$ex['id'] ?>" <?= (int)$config['exam_id'] === (int)$ex['id'] ? 'selected' : '' ?>><?= h($ex['exam_title']) ?></option><?php endforeach; ?></select></div>
                 <div class="col-md-2"><label class="form-label">Target semester #</label><input type="number" min="1" max="20" name="target_semester_number" class="form-control" value="<?= (int)$config['target_semester_number'] ?>"></div>
                 <div class="col-md-2"><label class="form-label">Attendance semester</label><input type="text" name="attendance_semester" class="form-control" value="<?= h($config['attendance_semester'] ?? '') ?>"></div>
 

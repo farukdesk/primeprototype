@@ -30,16 +30,14 @@ if (!is_super_admin() && $scope !== null) {
 }
 
 $sql = 'SELECT c.*,
-               d.name AS dept_name,
-               p.program_name,
-               b.name AS batch_name,
-               e.exam_title,
-               (SELECT COUNT(*) FROM gpa_scholarship_tiers t WHERE t.config_id = c.id AND t.metric = "gpa") AS gpa_tier_count,
-               (SELECT COUNT(*) FROM gpa_scholarship_tiers t WHERE t.config_id = c.id AND t.metric = "attendance") AS attendance_tier_count,
-               (SELECT COUNT(*) FROM gpa_scholarship_awards a WHERE a.config_id = c.id AND a.status = "applied") AS applied_count,
-               (SELECT COUNT(*) FROM gpa_scholarship_awards a WHERE a.config_id = c.id AND a.status = "failed") AS failed_count
+              d.name AS dept_name,
+              p.program_name,
+              b.name AS batch_name,
+              (SELECT COUNT(*) FROM gpa_scholarship_tiers t WHERE t.config_id = c.id AND t.metric = "gpa") AS gpa_tier_count,
+              (SELECT COUNT(*) FROM gpa_scholarship_tiers t WHERE t.config_id = c.id AND t.metric = "attendance") AS attendance_tier_count,
+              (SELECT COUNT(*) FROM gpa_scholarship_awards a WHERE a.config_id = c.id AND a.status = "applied") AS applied_count,
+              (SELECT COUNT(*) FROM gpa_scholarship_awards a WHERE a.config_id = c.id AND a.status = "failed") AS failed_count
         FROM gpa_scholarship_configs c
-        JOIN result_exams e ON e.id = c.exam_id
         LEFT JOIN dept_departments d ON d.id = c.dept_id
         LEFT JOIN dept_academic_programs p ON p.id = c.program_id
         LEFT JOIN student_batches b ON b.id = c.batch_id
@@ -49,6 +47,11 @@ $sql = 'SELECT c.*,
 $st = db()->prepare($sql);
 $st->execute($params);
 $configs = $st->fetchAll();
+foreach ($configs as &$cfg) {
+    $exam = gs_get_exam((int)$cfg['exam_id']);
+    $cfg['exam_title'] = $exam ? gs_format_exam_title($exam) : ('Exam #' . (int)$cfg['exam_id']);
+}
+unset($cfg);
 $exam_options = gs_exam_options();
 
 require_once __DIR__ . '/../includes/header.php';
@@ -57,7 +60,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h1 class="h3 mb-0"><i class="fas fa-award me-2 text-primary"></i>GPA Scholarship</h1>
-        <div class="text-muted small">Configurable merit scholarship from published exam GPA and attendance.</div>
+        <div class="text-muted small">Configurable merit scholarship from invigilation exam GPA and attendance.</div>
     </div>
     <?php if (gs_can_create()): ?>
     <a href="<?= APP_URL ?>/gpa-scholarship/create.php" class="btn btn-primary btn-sm">
@@ -74,7 +77,7 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-4">
                 <label class="form-label small fw-semibold mb-1">Exam</label>
                 <select name="exam_id" class="form-select form-select-sm">
-                    <option value="">All published exams</option>
+                    <option value="">All invigilation exams</option>
                     <?php foreach ($exam_options as $ex): ?>
                     <option value="<?= (int)$ex['id'] ?>" <?= (int)($_GET['exam_id'] ?? 0) === (int)$ex['id'] ? 'selected' : '' ?>>
                         <?= h($ex['exam_title']) ?>

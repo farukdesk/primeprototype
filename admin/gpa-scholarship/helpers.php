@@ -2,8 +2,8 @@
 /**
  * GPA Scholarship module helpers.
  *
- * Evaluates published result-exam GPA (and optional attendance tiers) then
- * applies/upserts a module-owned semester scholarship row in sfp_semester_scholarships.
+ * Uses Exam Invigilation exams (ei_exams) as setup/selection source and
+ * evaluates GPA from result_grades/result_subjects for the selected exam id.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -69,44 +69,105 @@ function gs_batches(): array
     return db()->query('SELECT id, name FROM student_batches WHERE is_active = 1 ORDER BY sort_order ASC, name ASC')->fetchAll();
 }
 
+function gs_format_exam_title(array $row): string
+{
+    $name = trim((string)($row['exam_name'] ?? $row['exam_title'] ?? ''));
+    $year = trim((string)($row['exam_year'] ?? ''));
+    if ($name !== '' && $year !== '') return $name . ' (' . $year . ')';
+    if ($name !== '') return $name;
+    if ($year !== '') return $year;
+    return 'Exam #' . (int)($row['exam_id'] ?? $row['id'] ?? 0);
+}
+
 function gs_exam_options(): array
 {
-    $where = ['e.is_published = 1'];
-    $params = [];
+    $rows = db()->query(
+        'SELECT e.id, e.exam_name, e.exam_year, e.start_date, e.end_date, e.is_active
+         FROM ei_exams e
+         ORDER BY e.exam_year DESC, e.start_date DESC, e.id DESC'
+    )->fetchAll();
 
-    $scope = get_dept_scope();
-    if (!is_super_admin() && $scope !== null) {
-        if (empty($scope)) return [];
-        $ph = implode(',', array_fill(0, count($scope), '?'));
-        $where[] = "e.dept_id IN ($ph)";
-        foreach ($scope as $sid) $params[] = (int)$sid;
+    $legacy_map = [];
+    try {
+        $legacy_rows = db()->query(
+            'SELECT e.id, e.dept_id, e.program_id, e.batch, e.completion_semester, e.exam_title,
+                    d.name AS dept_name, p.program_name
+             FROM result_exams e
+             LEFT JOIN dept_departments d ON d.id = e.dept_id
+             LEFT JOIN dept_academic_programs p ON p.id = e.program_id'
+        )->fetchAll();
+        foreach ($legacy_rows as $lr) {
+            $legacy_map[(int)$lr['id']] = $lr;
+        }
+    } catch (Throwable $e) {
+        $legacy_map = [];
     }
 
-    $sql = 'SELECT e.id, e.exam_title, e.batch, e.completion_semester, e.dept_id, e.program_id,
-                   d.name AS dept_name, p.program_name
-            FROM result_exams e
-            JOIN dept_departments d ON d.id = e.dept_id
-            LEFT JOIN dept_academic_programs p ON p.id = e.program_id
-            WHERE ' . implode(' AND ', $where) . '
-            ORDER BY e.id DESC';
-
-    $st = db()->prepare($sql);
-    $st->execute($params);
-    return $st->fetchAll();
+    foreach ($rows as &$row) {
+        $legacy = $legacy_map[(int)$row['id']] ?? null;
+        $row['dept_id'] = $legacy['dept_id'] ?? null;
+        $row['program_id'] = $legacy['program_id'] ?? null;
+        $row['batch'] = $legacy['batch'] ?? null;
+        $row['completion_semester'] = $legacy['completion_semester'] ?? null;
+        $row['dept_name'] = $legacy['dept_name'] ?? null;
+        $row['program_name'] = $legacy['program_name'] ?? null;
+        $row['legacy_exam_title'] = $legacy['exam_title'] ?? null;
+        $row['exam_title'] = gs_format_exam_title($row);
+    }
+    unset($row);
+    return $rows;
 }
 
 function gs_get_exam(int $id): ?array
 {
     $st = db()->prepare(
-        'SELECT e.id, e.exam_title, e.batch, e.completion_semester, e.is_published, e.dept_id, e.program_id,
-                d.name AS dept_name, p.program_name
-         FROM result_exams e
-         JOIN dept_departments d ON d.id = e.dept_id
-         LEFT JOIN dept_academic_programs p ON p.id = e.program_id
+        'SELECT e.id, e.exam_name, e.exam_year, e.start_date, e.end_date, e.is_active
+         FROM ei_exams e
          WHERE e.id = ? LIMIT 1'
     );
     $st->execute([$id]);
-    return $st->fetch() ?: null;
+    $exam = $st->fetch() ?: null;
+    if ($exam) {
+        try {
+            $legacy = db()->prepare(
+                'SELECT e.dept_id, e.program_id, e.batch, e.completion_semester, e.exam_title,
+                        d.name AS dept_name, p.program_name
+                 FROM result_exams e
+                 LEFT JOIN dept_departments d ON d.id = e.dept_id
+                 LEFT JOIN dept_academic_programs p ON p.id = e.program_id
+                 WHERE e.id = ? LIMIT 1'
+            );
+            $legacy->execute([$id]);
+            $legacy_row = $legacy->fetch() ?: null;
+            if ($legacy_row) {
+                $exam = array_merge($exam, $legacy_row);
+                $exam['legacy_exam_title'] = $legacy_row['exam_title'] ?? null;
+            }
+        } catch (Throwable $e) {
+            // result_exams may be unavailable in some deployments.
+        }
+        $exam['exam_title'] = gs_format_exam_title($exam);
+        return $exam;
+    }
+
+    // Backward compatibility for old configs that still point to result_exams.
+    $legacy = db()->prepare(
+        'SELECT e.id, e.exam_title, e.batch, e.completion_semester, e.dept_id, e.program_id,
+                d.name AS dept_name, p.program_name
+         FROM result_exams e
+         LEFT JOIN dept_departments d ON d.id = e.dept_id
+         LEFT JOIN dept_academic_programs p ON p.id = e.program_id
+         WHERE e.id = ? LIMIT 1'
+    );
+    $legacy->execute([$id]);
+    $row = $legacy->fetch() ?: null;
+    if ($row) {
+        $row['exam_name'] = (string)$row['exam_title'];
+        $row['exam_year'] = null;
+        $row['is_active'] = 1;
+        $row['exam_title'] = gs_format_exam_title($row);
+    }
+    return $row;
 }
 
 function gs_get_config(int $id): ?array
@@ -127,16 +188,28 @@ function gs_get_config_with_relations(int $id): ?array
 {
     $st = db()->prepare(
         'SELECT c.*, d.name AS dept_name, p.program_name, b.name AS batch_name,
-                e.exam_title, e.completion_semester, e.is_published
+                NULL AS exam_name, NULL AS exam_year, NULL AS exam_is_active,
+                NULL AS legacy_exam_title, NULL AS completion_semester
          FROM gpa_scholarship_configs c
-         JOIN result_exams e ON e.id = c.exam_id
          LEFT JOIN dept_departments d ON d.id = c.dept_id
          LEFT JOIN dept_academic_programs p ON p.id = c.program_id
          LEFT JOIN student_batches b ON b.id = c.batch_id
          WHERE c.id = ? LIMIT 1'
     );
     $st->execute([$id]);
-    return $st->fetch() ?: null;
+    $row = $st->fetch() ?: null;
+    if ($row) {
+        $exam = gs_get_exam((int)$row['exam_id']);
+        if ($exam) {
+            $row['exam_name'] = $exam['exam_name'] ?? null;
+            $row['exam_year'] = $exam['exam_year'] ?? null;
+            $row['exam_is_active'] = $exam['is_active'] ?? null;
+            $row['legacy_exam_title'] = $exam['legacy_exam_title'] ?? ($exam['exam_title'] ?? null);
+            $row['completion_semester'] = $exam['completion_semester'] ?? null;
+        }
+        $row['exam_title'] = gs_format_exam_title($row);
+    }
+    return $row;
 }
 
 function gs_validate_tiers(array $tiers, string $metric, array &$errors): array
@@ -235,8 +308,8 @@ function gs_evaluate_config(array $cfg): array
 {
     $db = db();
     $exam = gs_get_exam((int)$cfg['exam_id']);
-    if (!$exam || (int)$exam['is_published'] !== 1) {
-        return ['rows' => [], 'meta' => ['error' => 'Selected exam is missing or not published.']];
+    if (!$exam) {
+        return ['rows' => [], 'meta' => ['error' => 'Selected exam is missing or inaccessible.']];
     }
 
     $gpa_tiers = gs_get_tiers((int)$cfg['id'], 'gpa');
@@ -274,6 +347,9 @@ function gs_evaluate_config(array $cfg): array
     $student_ids = array_map(static fn($r) => (int)$r['student_pk'], $students);
     $ph = implode(',', array_fill(0, count($student_ids), '?'));
 
+    // Keep GPA source on result_grades/result_subjects keyed by exam_id. If an
+    // invigilation exam has no corresponding result rows yet, students remain
+    // excluded with "No GPA found..." instead of silently mapping another exam.
     $gpa_sql = "SELECT rg.student_id,
                        ROUND(SUM(COALESCE(rg.grade_point,0) * CASE WHEN COALESCE(rs.credits,0) > 0 THEN rs.credits ELSE 1 END)
                            / NULLIF(SUM(CASE WHEN COALESCE(rs.credits,0) > 0 THEN rs.credits ELSE 1 END),0), 2) AS semester_gpa
@@ -373,7 +449,7 @@ function gs_evaluate_config(array $cfg): array
 
         if ($eligible_row && $gpa === null) {
             $eligible_row = false;
-            $reason = 'No published exam GPA found';
+            $reason = 'No GPA found for selected exam';
         }
 
         if ($eligible_row && (int)$cfg['require_gpa_tier'] === 1 && !$gpa_tier) {
