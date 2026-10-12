@@ -28,6 +28,7 @@ function gs_mode_options(): array
 {
     return [
         'gpa_only' => 'GPA tier only',
+        'gpa_then_attendance' => 'GPA tier first, attendance fallback when GPA tier does not match',
         'attendance_only' => 'Attendance tier only',
         'min' => 'Minimum of GPA/Attendance percentages',
         'max' => 'Maximum of GPA/Attendance percentages',
@@ -292,6 +293,7 @@ function gs_calculate_final_percent(array $cfg, ?array $gpa_tier, ?array $att_ti
     if (empty($vals)) return null;
 
     if ($mode === 'gpa_only') return $g;
+    if ($mode === 'gpa_then_attendance') return $g !== null ? $g : $a;
     if ($mode === 'attendance_only') return $a;
     if ($mode === 'min') return min($vals);
     if ($mode === 'max') return max($vals);
@@ -457,7 +459,10 @@ function gs_evaluate_config(array $cfg): array
             $reason = 'No matching GPA tier';
         }
 
-        $needs_att = ((int)$cfg['require_attendance_tier'] === 1) || in_array((string)$cfg['combine_mode'], ['attendance_only', 'min', 'max'], true);
+        $combine_mode = (string)$cfg['combine_mode'];
+        $needs_att = ((int)$cfg['require_attendance_tier'] === 1)
+            || in_array($combine_mode, ['attendance_only', 'min', 'max'], true)
+            || ($combine_mode === 'gpa_then_attendance' && $gpa_tier === null);
         if ($eligible_row && $needs_att && empty($att_tiers)) {
             $eligible_row = false;
             $reason = 'Attendance tier setup missing';
