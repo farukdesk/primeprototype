@@ -168,6 +168,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         redirect($ret . ($f_date !== '' ? '&a_date=' . urlencode($f_date) : ''));
     }
 
+    if ($action === 'unassign_many') {
+        $ids = [];
+        foreach ((array)($_POST['assignment_ids'] ?? []) as $aid) {
+            $aid = (int)$aid;
+            if ($aid > 0) $ids[$aid] = true;
+        }
+        $ids = array_keys($ids);
+        if (!$ids) {
+            flash_set('error', 'Select at least one assigned student to remove.');
+            redirect($ret . ($f_date !== '' ? '&a_date=' . urlencode($f_date) : ''));
+        }
+
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $chk = db()->prepare(
+            "SELECT a.id, s.dept_id
+               FROM hm_hall_assignments a
+               JOIN students s ON s.id = a.student_id
+              WHERE a.hall_id = ? AND a.id IN ($ph)"
+        );
+        $chk->execute(array_merge([$hall_id], $ids));
+        $rows = $chk->fetchAll();
+        if (!$rows) {
+            flash_set('error', 'Selected assignments were not found.');
+            redirect($ret . ($f_date !== '' ? '&a_date=' . urlencode($f_date) : ''));
+        }
+
+        $allowed = [];
+        $denied  = 0;
+        foreach ($rows as $row) {
+            if (can_access_dept((int)$row['dept_id'])) {
+                $allowed[] = (int)$row['id'];
+            } else {
+                $denied++;
+            }
+        }
+
+        $removed = 0;
+        if ($allowed) {
+            $dph = implode(',', array_fill(0, count($allowed), '?'));
+            $del = db()->prepare("DELETE FROM hm_hall_assignments WHERE hall_id = ? AND id IN ($dph)");
+            $del->execute(array_merge([$hall_id], $allowed));
+            $removed = (int)$del->rowCount();
+            if ($removed > 0) hm_sync_hall_schedule($hall_id);
+        }
+
+        $missing = max(0, count($ids) - count($rows));
+        $msg = $removed . ' assignment(s) removed.';
+        if ($denied > 0)  $msg .= ' ' . $denied . ' skipped — you can only remove your department students.';
+        if ($missing > 0) $msg .= ' ' . $missing . ' not found.';
+        flash_set($removed > 0 ? 'success' : 'error', $msg);
+        redirect($ret . ($f_date !== '' ? '&a_date=' . urlencode($f_date) : ''));
+    }
+
     if ($action === 'clear_date') {
         $p_date = trim($_POST['exam_date'] ?? '');
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
@@ -827,27 +880,46 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card mt-4" style="border-radius:12px;">
     <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center" style="border-radius:12px 12px 0 0;">
         <span><i class="fas fa-users me-2 text-primary"></i>Assigned Students — <?= h(date('d M Y', strtotime($f_date))) ?> (<?= count($assignments) ?>)</span>
-        <form method="post" class="mb-0">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="clear_date">
-            <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
-            <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:8px;"
-                    onclick="return confirm('Remove ALL seat assignments of this hall for <?= h($f_date) ?>?');">
-                <i class="fas fa-trash me-1"></i> Clear All
-            </button>
-        </form>
+        <div class="d-flex align-items-center gap-2">
+            <form method="post" id="hmBulkUnassignForm" class="mb-0">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="unassign_many">
+                <button type="submit" class="btn btn-sm btn-outline-danger" id="hmBulkUnassignBtn" style="border-radius:8px;" disabled>
+                    <i class="fas fa-user-minus me-1"></i>Remove Selected (<span id="hmBulkUnassignCount">0</span>)
+                </button>
+            </form>
+            <form method="post" class="mb-0">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="clear_date">
+                <input type="hidden" name="exam_date" value="<?= h($f_date) ?>">
+                <button type="submit" class="btn btn-sm btn-outline-danger" style="border-radius:8px;"
+                        onclick="return confirm('Remove ALL seat assignments of this hall for <?= h($f_date) ?>?');">
+                    <i class="fas fa-trash me-1"></i> Clear All
+                </button>
+            </form>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
                 <thead class="table-light">
-                    <tr><th class="ps-3">Seat</th><th>Student ID</th><th>Name</th><th>Department</th><th>Batch</th><th>Section</th><th>Shift</th><th class="text-end pe-3">Action</th></tr>
+                    <tr><th class="ps-3" style="width:38px;"><input type="checkbox" id="hmBulkToggleAll" title="Select all removable students"></th><th>Seat</th><th>Student ID</th><th>Name</th><th>Department</th><th>Batch</th><th>Section</th><th>Shift</th><th class="text-end pe-3">Action</th></tr>
                 </thead>
                 <tbody>
                     <?php foreach ($assignments as $a):
+                        $a_can_remove = can_access_dept((int)($a['student_dept_id'] ?? 0));
                         $a_other = (int)($a['student_dept_id'] ?? 0) !== $hall_dept_id;
                         $a_dept  = $dept_names[(int)($a['student_dept_id'] ?? 0)] ?? 'Unknown dept'; ?>
                     <tr<?= $a_other ? ' class="table-danger"' : '' ?>>
+                        <td class="ps-3">
+                            <?php if ($a_can_remove): ?>
+                            <input type="checkbox" class="hm-bulk-unassign-item"
+                                   form="hmBulkUnassignForm"
+                                   name="assignment_ids[]" value="<?= (int)$a['id'] ?>">
+                            <?php else: ?>
+                            <span class="text-muted" style="font-size:.72rem;">—</span>
+                            <?php endif; ?>
+                        </td>
                         <td class="ps-3 fw-semibold">C<?= (int)$a['col_no'] ?>-S<?= (int)$a['seat_no'] ?></td>
                         <td><?= h($a['student_code']) ?></td>
                         <td><?= h($a['full_name']) ?></td>
@@ -864,7 +936,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= h($a['section'] ?? '') ?></td>
                         <td><?= h($a['shift'] ?? '') ?></td>
                         <td class="text-end pe-3">
-                            <?php if (can_access_dept((int)($a['student_dept_id'] ?? 0))): ?>
+                            <?php if ($a_can_remove): ?>
                             <form method="post" class="d-inline mb-0">
                                 <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="unassign">
@@ -1000,6 +1072,42 @@ require_once __DIR__ . '/../includes/header.php';
             setTimeout(clearHighlight, 8000);
         }
     }
+})();
+// Assigned Students: bulk select + remove selected
+(function () {
+    var form = document.getElementById('hmBulkUnassignForm');
+    if (!form) return;
+    var toggleAll = document.getElementById('hmBulkToggleAll');
+    var btn = document.getElementById('hmBulkUnassignBtn');
+    var countEl = document.getElementById('hmBulkUnassignCount');
+    var items = Array.prototype.slice.call(document.querySelectorAll('.hm-bulk-unassign-item'));
+    function refresh() {
+        var checked = 0;
+        items.forEach(function (el) { if (el.checked) checked++; });
+        if (countEl) countEl.textContent = String(checked);
+        if (btn) btn.disabled = checked === 0;
+        if (toggleAll) {
+            toggleAll.indeterminate = checked > 0 && checked < items.length;
+            toggleAll.checked = items.length > 0 && checked === items.length;
+        }
+    }
+    if (toggleAll) {
+        toggleAll.addEventListener('change', function () {
+            items.forEach(function (el) { el.checked = !!toggleAll.checked; });
+            refresh();
+        });
+    }
+    items.forEach(function (el) { el.addEventListener('change', refresh); });
+    form.addEventListener('submit', function (e) {
+        var checked = 0;
+        items.forEach(function (el) { if (el.checked) checked++; });
+        if (checked === 0) {
+            e.preventDefault();
+            return;
+        }
+        if (!confirm('Remove ' + checked + ' selected seat assignment(s)?')) e.preventDefault();
+    });
+    refresh();
 })();
 </script>
 
