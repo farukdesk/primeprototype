@@ -109,9 +109,49 @@ function gs_exam_fk_table(): string
     return $table;
 }
 
+function gs_published_exam_map(): array
+{
+    try {
+        $rows = db()->query(
+            "SELECT ms.exam_id AS id,
+                    MAX(e.exam_name) AS exam_name,
+                    MAX(e.exam_year) AS exam_year,
+                    MAX(e.is_active) AS is_active,
+                    MAX(COALESCE(ms.dept_id, re.dept_id)) AS dept_id,
+                    MAX(COALESCE(ms.program_id, re.program_id)) AS program_id,
+                    MAX(re.batch) AS batch,
+                    MAX(re.completion_semester) AS completion_semester,
+                    MAX(d.name) AS dept_name,
+                    MAX(p.program_name) AS program_name,
+                    MAX(re.exam_title) AS legacy_exam_title
+             FROM result_mark_sheets ms
+             LEFT JOIN ei_exams e ON e.id = ms.exam_id
+             LEFT JOIN result_exams re ON re.id = ms.exam_id
+             LEFT JOIN dept_departments d ON d.id = COALESCE(ms.dept_id, re.dept_id)
+             LEFT JOIN dept_academic_programs p ON p.id = COALESCE(ms.program_id, re.program_id)
+             WHERE ms.workflow_status = 'published'
+               AND ms.exam_id IS NOT NULL
+             GROUP BY ms.exam_id
+             ORDER BY MAX(ms.updated_at) DESC, ms.exam_id DESC"
+        )->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+
+    $out = [];
+    foreach ($rows as $row) {
+        $row['id'] = (int)($row['id'] ?? 0);
+        if ($row['id'] <= 0) continue;
+        $row['exam_title'] = gs_format_exam_title($row);
+        $out[$row['id']] = $row;
+    }
+    return $out;
+}
+
 function gs_exam_options(): array
 {
-    if (gs_exam_fk_table() === 'result_exams') {
+    $fk_table = gs_exam_fk_table();
+    if ($fk_table === 'result_exams') {
         $rows = db()->query(
             'SELECT e.id, e.exam_title, e.batch, e.completion_semester, e.dept_id, e.program_id,
                     d.name AS dept_name, p.program_name
@@ -165,6 +205,34 @@ function gs_exam_options(): array
         $row['exam_title'] = gs_format_exam_title($row);
     }
     unset($row);
+
+    $published_map = gs_published_exam_map();
+    if (!empty($published_map)) {
+        $current_ids = [];
+        foreach ($rows as $idx => &$row) {
+            $id = (int)($row['id'] ?? 0);
+            if ($id <= 0) continue;
+            $current_ids[$id] = true;
+            $pub = $published_map[$id] ?? null;
+            if (!$pub) continue;
+            foreach (['exam_name', 'exam_year', 'is_active', 'dept_id', 'program_id', 'batch', 'completion_semester', 'dept_name', 'program_name', 'legacy_exam_title'] as $key) {
+                if (!array_key_exists($key, $row) || $row[$key] === null || $row[$key] === '') {
+                    $row[$key] = $pub[$key] ?? ($row[$key] ?? null);
+                }
+            }
+            $row['exam_title'] = gs_format_exam_title($row);
+            unset($published_map[$id]);
+        }
+        unset($row);
+
+        if ($fk_table === 'ei_exams') {
+            foreach ($published_map as $pid => $prow) {
+                if (isset($current_ids[(int)$pid])) continue;
+                $rows[] = $prow;
+            }
+        }
+    }
+
     return $rows;
 }
 
