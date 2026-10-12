@@ -2,8 +2,9 @@
 /**
  * GPA Scholarship module helpers.
  *
- * Uses Exam Invigilation exams (ei_exams) as setup/selection source and
- * evaluates GPA from result_grades/result_subjects for the selected exam id.
+ * Evaluates GPA from result_grades/result_subjects for the selected exam id.
+ * Exam source is resolved from gpa_scholarship_configs.exam_id foreign-key
+ * target so setup options stay compatible with deployed schema.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -80,8 +81,56 @@ function gs_format_exam_title(array $row): string
     return 'Exam #' . (int)($row['exam_id'] ?? $row['id'] ?? 0);
 }
 
+function gs_exam_fk_table(): string
+{
+    static $table = null;
+    if ($table !== null) return $table;
+
+    $table = 'ei_exams';
+    try {
+        $st = db()->prepare(
+            "SELECT k.REFERENCED_TABLE_NAME
+             FROM information_schema.KEY_COLUMN_USAGE k
+             WHERE k.TABLE_SCHEMA = DATABASE()
+               AND k.TABLE_NAME = 'gpa_scholarship_configs'
+               AND k.COLUMN_NAME = 'exam_id'
+               AND k.REFERENCED_TABLE_NAME IS NOT NULL
+             LIMIT 1"
+        );
+        $st->execute();
+        $ref = (string)($st->fetchColumn() ?: '');
+        if (in_array($ref, ['ei_exams', 'result_exams'], true)) {
+            $table = $ref;
+        }
+    } catch (Throwable $e) {
+        $table = 'ei_exams';
+    }
+
+    return $table;
+}
+
 function gs_exam_options(): array
 {
+    if (gs_exam_fk_table() === 'result_exams') {
+        $rows = db()->query(
+            'SELECT e.id, e.exam_title, e.batch, e.completion_semester, e.dept_id, e.program_id,
+                    d.name AS dept_name, p.program_name
+             FROM result_exams e
+             LEFT JOIN dept_departments d ON d.id = e.dept_id
+             LEFT JOIN dept_academic_programs p ON p.id = e.program_id
+             ORDER BY e.id DESC'
+        )->fetchAll();
+        foreach ($rows as &$row) {
+            $row['exam_name'] = (string)($row['exam_title'] ?? '');
+            $row['exam_year'] = null;
+            $row['is_active'] = 1;
+            $row['legacy_exam_title'] = $row['exam_title'] ?? null;
+            $row['exam_title'] = gs_format_exam_title($row);
+        }
+        unset($row);
+        return $rows;
+    }
+
     $rows = db()->query(
         'SELECT e.id, e.exam_name, e.exam_year, e.start_date, e.end_date, e.is_active
          FROM ei_exams e
@@ -121,6 +170,27 @@ function gs_exam_options(): array
 
 function gs_get_exam(int $id): ?array
 {
+    if (gs_exam_fk_table() === 'result_exams') {
+        $legacy = db()->prepare(
+            'SELECT e.id, e.exam_title, e.batch, e.completion_semester, e.dept_id, e.program_id,
+                    d.name AS dept_name, p.program_name
+             FROM result_exams e
+             LEFT JOIN dept_departments d ON d.id = e.dept_id
+             LEFT JOIN dept_academic_programs p ON p.id = e.program_id
+             WHERE e.id = ? LIMIT 1'
+        );
+        $legacy->execute([$id]);
+        $row = $legacy->fetch() ?: null;
+        if ($row) {
+            $row['exam_name'] = (string)$row['exam_title'];
+            $row['exam_year'] = null;
+            $row['is_active'] = 1;
+            $row['legacy_exam_title'] = $row['exam_title'] ?? null;
+            $row['exam_title'] = gs_format_exam_title($row);
+            return $row;
+        }
+    }
+
     $st = db()->prepare(
         'SELECT e.id, e.exam_name, e.exam_year, e.start_date, e.end_date, e.is_active
          FROM ei_exams e
