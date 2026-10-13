@@ -108,7 +108,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sst->execute([$ov_routine_id, $bid]);
                 } else {
                     $sst = $db->prepare(
-                        "SELECT s.id FROM students s
+                        "SELECT DISTINCT s.id FROM students s
+                          JOIN co_registrations reg ON reg.student_id = s.id
                           WHERE s.dept_id = ? AND s.program_id = ? AND s.batch_id = ?
                             AND s.status NOT IN ('Withdrawn','Expelled')"
                     );
@@ -211,6 +212,7 @@ if ($card_has_subject_rows) {
         "SELECT s.id, s.student_id, s.full_name, s.status, s.photo,
                 p.id AS pkg_id
          FROM students s
+         JOIN co_registrations reg ON reg.student_id = s.id
          LEFT JOIN sfp_packages p ON p.student_id = s.id
          WHERE s.dept_id = ? AND s.program_id = ? $batch_cond
            AND s.status = 'Active'
