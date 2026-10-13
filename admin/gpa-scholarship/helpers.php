@@ -134,6 +134,24 @@ function gs_fk_exam_id_set(): ?array
     return $cache;
 }
 
+function gs_filter_exam_rows_for_fk(array $rows): array
+{
+    $fk_ids = gs_fk_exam_id_set();
+    if ($fk_ids === null) {
+        return $rows;
+    }
+
+    $filtered = [];
+    foreach ($rows as $row) {
+        $id = (int)($row['id'] ?? 0);
+        if ($id > 0 && isset($fk_ids[$id])) {
+            $filtered[] = $row;
+        }
+    }
+
+    return $filtered;
+}
+
 function gs_published_exam_map(): array
 {
     try {
@@ -214,20 +232,7 @@ function gs_exam_options(): array
             $legacy['exam_title'] = gs_format_exam_title($legacy);
             $rows[] = $legacy;
         }
-        $fk_ids = gs_fk_exam_id_set();
-        if ($fk_ids === null) {
-            return $rows;
-        }
-
-        $filtered = [];
-        foreach ($rows as $row) {
-            $id = (int)($row['id'] ?? 0);
-            if ($id > 0 && isset($fk_ids[$id])) {
-                $filtered[] = $row;
-            }
-        }
-
-        return $filtered;
+        return gs_filter_exam_rows_for_fk($rows);
     }
 
     foreach ($rows as &$row) {
@@ -268,7 +273,7 @@ function gs_exam_options(): array
         }
     }
 
-    return $rows;
+    return gs_filter_exam_rows_for_fk($rows);
 }
 
 function gs_get_exam(int $id): ?array
