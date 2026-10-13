@@ -121,8 +121,10 @@ function gs_exam_fk_table(): string
         } catch (Throwable $e) {
             $legacy_has_rows = false;
         }
-        if (!$ei_has_rows && $legacy_has_rows) {
+        if ($legacy_has_rows) {
             $table = 'result_exams';
+        } elseif ($ei_has_rows) {
+            $table = 'ei_exams';
         }
     }
 
@@ -213,6 +215,32 @@ function gs_published_exam_map(): array
 
 function gs_exam_options(): array
 {
+    if (gs_exam_fk_table() === 'result_exams') {
+        try {
+            $rows = db()->query(
+                'SELECT e.id, e.dept_id, e.program_id, e.batch, e.completion_semester, e.exam_title,
+                        d.name AS dept_name, p.program_name
+                 FROM result_exams e
+                 LEFT JOIN dept_departments d ON d.id = e.dept_id
+                 LEFT JOIN dept_academic_programs p ON p.id = e.program_id
+                 ORDER BY e.id DESC'
+            )->fetchAll();
+        } catch (Throwable $e) {
+            $rows = [];
+        }
+
+        foreach ($rows as &$row) {
+            $row['exam_name'] = (string)($row['exam_title'] ?? '');
+            $row['exam_year'] = null;
+            $row['is_active'] = 1;
+            $row['legacy_exam_title'] = $row['exam_title'] ?? null;
+            $row['exam_title'] = gs_format_exam_title($row);
+        }
+        unset($row);
+
+        return gs_filter_exam_rows_for_fk($rows);
+    }
+
     $rows = [];
     $ei_loaded = false;
     try {
