@@ -44,16 +44,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
+    if ($old['exam_time'] !== '') {
+        $pt = hm_parse_clock_time($old['exam_time']);
+        $old['exam_time'] = $pt !== null ? (string)$pt[1] : $old['exam_time'];
+    }
+
     if ($old['dept_id'] <= 0) {
         $errors[] = 'Please select a department.';
     } elseif (!can_access_dept($old['dept_id'])) {
         $errors[] = 'You do not have permission for that department.';
     }
     if ($old['room_number'] === '') $errors[] = 'Room number is required.';
-    if ($old['exam_date'] !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $old['exam_date'])) {
+    if ($old['exam_date'] !== '' && !hm_is_valid_exam_date($old['exam_date'])) {
         $errors[] = 'Exam date is invalid.';
     }
-    if ($old['exam_time'] !== '' && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $old['exam_time'])) {
+    if ($old['exam_time'] !== '' && hm_parse_clock_time($old['exam_time']) === null) {
         $errors[] = 'Exam time is invalid.';
     }
     if ($old['num_columns'] < 1 || $old['num_columns'] > 50) $errors[] = 'Number of columns must be between 1 and 50.';

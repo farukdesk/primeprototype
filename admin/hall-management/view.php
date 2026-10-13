@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         $p_section = trim($_POST['section'] ?? '');
         $p_shift   = trim($_POST['shift'] ?? '');
         $p_course  = trim($_POST['course_code'] ?? '');
-        if ($p_dept <= 0 || $p_program <= 0 || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
+        if ($p_dept <= 0 || $p_program <= 0 || !hm_is_valid_exam_date($p_date)) {
             flash_set('error', 'Department, Program and Exam Date are required.');
         } elseif (!can_access_dept($p_dept)) {
             flash_set('error', 'You do not have permission for that department.');
@@ -54,13 +54,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
             if (!$students) {
                 flash_set('error', 'No admit-card students found for the selected Department / Program / Batch / Exam Date / Section / Shift / Course.');
             } else {
-                [$assigned, $skipped, $left] = hm_assign_students($hall_id, $p_date, $students, [
+                [$assigned, $skipped, $left, $issues] = hm_assign_students($hall_id, $p_date, $students, [
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
                     'section' => $p_section, 'shift' => $p_shift,
                 ]);
                 $msg = $assigned . ' student(s) assigned to seats (one course per column, different courses in adjacent columns).';
-                if ($skipped > 0) $msg .= ' ' . $skipped . ' already seated elsewhere were skipped.';
+                if ($skipped > 0) $msg .= ' ' . $skipped . ' conflicted/invalid record(s) were skipped.';
                 if ($left    > 0) $msg .= ' ' . $left . ' could not be seated — no suitable seats left (each column holds a single course).';
+                if ($issues) {
+                    $sample = array_slice(array_values(array_unique($issues)), 0, 3);
+                    $msg .= ' Conflicts: ' . implode(' ', $sample);
+                    if (count($issues) > count($sample)) $msg .= ' (+' . (count($issues) - count($sample)) . ' more).';
+                }
                 flash_set($assigned > 0 ? 'success' : 'error', $msg);
             }
             hm_sync_hall_schedule($hall_id);
@@ -90,25 +95,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
             $used[$seat] = true;
             $picks[$sid] = $seat;
         }
-        if (!$picks || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $p_date)) {
+        if (!$picks || !hm_is_valid_exam_date($p_date)) {
             flash_set('error', 'Pick a seat for at least one student (and a valid exam date) to assign manually.');
         } else {
+            $slot_map   = (array)($_POST['slot_map'] ?? []);
+            $course_map = (array)($_POST['course_map'] ?? []);
             $ctx = [
                 'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
-                'section' => $p_section, 'shift' => $p_shift,
+                'section' => $p_section, 'shift' => $p_shift, 'course_code' => $p_course,
             ];
             $ok_cnt    = 0;
             $fail_msgs = [];
             $conflicts = [];
             foreach ($picks as $sid => $seat) {
                 [$col_no, $seat_no] = array_map('intval', explode(':', $seat));
-                [$ok, $msg, $warnings] = hm_assign_single_student($hall_id, $p_date, $sid, $col_no, $seat_no, $ctx, $p_force);
+                $ctx_one = $ctx;
+                $ctx_one['time_slot'] = trim((string)($slot_map[$sid] ?? ''));
+                if (($course_map[$sid] ?? '') !== '') $ctx_one['course_code'] = trim((string)$course_map[$sid]);
+                [$ok, $msg, $warnings] = hm_assign_single_student($hall_id, $p_date, $sid, $col_no, $seat_no, $ctx_one, $p_force);
                 if ($ok) {
                     $ok_cnt++;
                 } elseif ($warnings) {
                     $conflicts[] = [
                         'student_id' => $sid, 'seat' => $seat,
                         'col_no' => $col_no, 'seat_no' => $seat_no, 'warnings' => $warnings,
+                        'time_slot' => (string)($ctx_one['time_slot'] ?? ''),
+                        'course_code' => (string)($ctx_one['course_code'] ?? ''),
                     ];
                 } else {
                     $fail_msgs[] = $msg;
@@ -423,6 +435,8 @@ require_once __DIR__ . '/../includes/header.php';
                 <input type="hidden" name="force" value="1">
                 <?php foreach ($pending_confirm['items'] as $it): ?>
                 <input type="hidden" name="seat_map[<?= (int)$it['student_id'] ?>]" value="<?= h($it['seat']) ?>">
+                <input type="hidden" name="slot_map[<?= (int)$it['student_id'] ?>]" value="<?= h((string)($it['time_slot'] ?? '')) ?>">
+                <input type="hidden" name="course_map[<?= (int)$it['student_id'] ?>]" value="<?= h((string)($it['course_code'] ?? '')) ?>">
                 <?php endforeach; ?>
                 <input type="hidden" name="dept_id" value="<?= (int)$pending_confirm['dept_id'] ?>">
                 <input type="hidden" name="program_id" value="<?= (int)$pending_confirm['program_id'] ?>">
@@ -807,7 +821,7 @@ require_once __DIR__ . '/../includes/header.php';
             </form>
         </div>
         <div class="text-muted mb-2" style="font-size:.8rem;">
-            <i class="fas fa-hand-pointer me-1"></i>Or seat students manually: pick a seat (e.g. C1, C2…) for each student below, then press <strong>Save Manual Seats</strong> to assign them all at once. Manual seating is free-form: any seat can be chosen and rule conflicts (mixed/adjacent courses, double seating) only ask for confirmation.
+            <i class="fas fa-hand-pointer me-1"></i>Or seat students manually: pick a seat (e.g. C1, C2…) for each student below, then press <strong>Save Manual Seats</strong> to assign them all at once. Manual seating is free-form for layout rules (mixed/adjacent courses), but exam-time conflicts are blocked server-side.
         </div>
         <form method="post" class="mb-0" id="hmManualForm">
             <?= csrf_field() ?>
@@ -848,6 +862,8 @@ require_once __DIR__ . '/../includes/header.php';
                             <?php endif; ?>
                         </td>
                         <td>
+                            <input type="hidden" name="slot_map[<?= (int)$stu['id'] ?>]" value="<?= h((string)($stu['time_slot'] ?? '')) ?>">
+                            <input type="hidden" name="course_map[<?= (int)$stu['id'] ?>]" value="<?= h((string)($stu['course_code'] ?? '')) ?>">
                             <?php if ($seat_opts !== ''): ?>
                             <select name="seat_map[<?= (int)$stu['id'] ?>]" class="form-select form-select-sm hm-seat-pick" style="width:auto;font-size:.75rem;">
                                 <option value="">Seat…</option>
