@@ -114,6 +114,8 @@ try {
     // 3) Copy the seated students onto the same seats for the new date.
     $copied  = 0;
     $skipped = 0;
+    $exam_students = [];
+    $copy_time = $new_time !== '' ? $new_time : null;
     $ins = db()->prepare(
         'INSERT INTO hm_hall_assignments
                (hall_id, exam_date, student_id, col_no, seat_no, dept_id, program_id, batch_id, section, shift, course_code, time_slot, assigned_by)
@@ -121,8 +123,23 @@ try {
     );
     foreach ($src_assignments as $a) {
         $sid   = (int)$a['student_id'];
-        $shift = (string)($a['shift'] ?? '');
-        $slot  = hm_parse_time_slot_interval((string)($a['time_slot'] ?? ''));
+        $filters = [
+            (int)$a['student_dept_id'], (int)$a['student_program_id'],
+            0, $new_date,
+            (string)($a['student_section'] ?? ''), (string)($a['shift'] ?? ''),
+            '', $copy_time,
+        ];
+        $key = json_encode($filters);
+        if (!isset($exam_students[$key])) {
+            $exam_students[$key] = [];
+            foreach (hm_find_exam_students(...$filters) as $student) {
+                $exam_students[$key][(int)$student['id']] = $student;
+            }
+        }
+        $exam = $exam_students[$key][$sid] ?? null;
+        if ($exam === null) { $skipped++; continue; }
+        $shift = (string)($exam['shift'] ?? '');
+        $slot  = hm_parse_time_slot_interval((string)($exam['time_slot'] ?? ''));
         if (!($slot['ok'] ?? false)) { $skipped++; continue; }
         if (isset($busy[$sid])) {
             $conflict = false;
@@ -137,6 +154,7 @@ try {
             }
             if ($conflict) { $skipped++; continue; }
         }
+        if ($copy_time === null) $copy_time = (string)$slot['start'];
         $ins->execute([
             $new_id, $new_date, $sid,
             (int)$a['col_no'], (int)$a['seat_no'],
@@ -145,8 +163,8 @@ try {
             $a['batch_id'] !== null ? (int)$a['batch_id'] : null,
             $a['section'] !== null && $a['section'] !== '' ? $a['section'] : null,
             $shift !== '' ? $shift : null,
-            $a['course_code'] !== null && $a['course_code'] !== '' ? $a['course_code'] : null,
-            $a['time_slot'] !== null && $a['time_slot'] !== '' ? $a['time_slot'] : null,
+            (string)($exam['course_code'] ?? '') !== '' ? (string)$exam['course_code'] : null,
+            (string)$exam['time_slot'],
             (int)(auth_user()['id'] ?? 0) ?: null,
         ]);
         $copied++;
@@ -177,7 +195,7 @@ if ($copied > 0) {
           . ($src_date !== '' ? ' on ' . date('d M Y', strtotime($src_date)) : '') . '.';
 }
 if ($skipped > 0) {
-    $msg .= ' ' . $skipped . ' student(s) skipped — already seated in another room on that date.';
+    $msg .= ' ' . $skipped . ' student(s) skipped — no matching exam on the target date/time, invalid exam slot, or already seated in an overlapping slot.';
 }
 flash_set($copied > 0 || !$src_assignments ? 'success' : 'error', $msg);
 redirect(APP_URL . '/hall-management/view.php?id=' . $new_id . '&a_date=' . urlencode($new_date));
