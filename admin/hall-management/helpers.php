@@ -322,9 +322,10 @@ function hm_section_options(): array
  *
  * For subject-linked card rows the shift resolves from the course offer;
  * legacy rows without a subject link have no offer shift and are always
+ * included. When $exam_time is supplied, only matching start times are
  * included. Returns rows: course_code, course_title (deduped by code).
  */
-function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $shift): array
+function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $shift, ?string $exam_time = null): array
 {
     if ($dept_id <= 0 || $program_id <= 0 || $exam_date === '') return [];
     $db = db();
@@ -343,7 +344,7 @@ function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, st
                    LEFT JOIN co_offers o ON o.id = cos.offer_id';
         if ($shift !== '') { $shift_cond = ' AND (o.id IS NULL OR o.shift = ?)'; }
     }
-    $sql = "SELECT DISTINCT cc.course_code, cc.course_title
+    $sql = "SELECT DISTINCT cc.course_code, cc.course_title, cc.time_slot
               FROM ac_admit_cards ac
               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
               $joins
@@ -356,6 +357,7 @@ function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, st
         $st->execute($params);
         $out = [];
         foreach ($st->fetchAll() as $row) {
+            if (!hm_slot_matches_exam_time((string)($row['time_slot'] ?? ''), $exam_time)) continue;
             $code = (string)$row['course_code'];
             if ($code === '' || isset($out[$code])) continue;
             $out[$code] = ['course_code' => $code, 'course_title' => (string)$row['course_title']];
@@ -376,12 +378,13 @@ function hm_exam_course_options(int $dept_id, int $program_id, int $batch_id, st
  * without subject links fall back to the card's dept/program/batch
  * students (shift / section from the students table). A non-empty
  * $course_code narrows both paths to students whose admit-card course row
- * for that date is the given course.
+ * for that date is the given course. A supplied $exam_time filters course
+ * rows by their start time BEFORE deduplicating students.
  *
  * Returns rows: id, student_id, full_name, batch_name, shift, section,
  * course_code + time_slot (the exam course + slot the student sits on that date).
  */
-function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $section, string $shift, string $course_code = ''): array
+function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, string $exam_date, string $section, string $shift, string $course_code = '', ?string $exam_time = null): array
 {
     $db  = db();
     $out = [];
@@ -411,7 +414,10 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
         if ($course_code !== '') { $sql .= ' AND cc.course_code = ?'; $params[] = $course_code; }
         $st = $db->prepare($sql);
         $st->execute($params);
-        foreach ($st->fetchAll() as $row) $out[(int)$row['id']] = $row;
+        foreach ($st->fetchAll() as $row) {
+            if (!hm_slot_matches_exam_time((string)($row['time_slot'] ?? ''), $exam_time)) continue;
+            $out[(int)$row['id']] = $row;
+        }
     }
 
     // ── Legacy / manual cards (no subject links): dept+program+batch ───
@@ -437,6 +443,7 @@ function hm_find_exam_students(int $dept_id, int $program_id, int $batch_id, str
         $st = $db->prepare($sql);
         $st->execute($params);
         foreach ($st->fetchAll() as $row) {
+            if (!hm_slot_matches_exam_time((string)($row['time_slot'] ?? ''), $exam_time)) continue;
             $sid = (int)$row['id'];
             if (!isset($out[$sid])) $out[$sid] = $row;
         }
@@ -530,9 +537,10 @@ function hm_busy_student_halls(string $exam_date, string $shift = ''): array
  * from active admit cards: subject-linked card rows via the student's
  * course registrations, legacy rows via cards matching the student's
  * dept / program / batch. Returns student_id => COURSE_CODE (uppercased);
- * students without a resolvable course are omitted.
+ * students without a resolvable course are omitted. An optional $exam_time
+ * limits resolution to the room's exam start time.
  */
-function hm_student_course_map(array $student_ids, string $exam_date): array
+function hm_student_course_map(array $student_ids, string $exam_date, ?string $exam_time = null): array
 {
     $ids = array_values(array_unique(array_filter(array_map('intval', $student_ids))));
     if (!$ids) return [];
@@ -546,7 +554,7 @@ function hm_student_course_map(array $student_ids, string $exam_date): array
     if ($has_subject_col) {
         try {
             $st = $db->prepare(
-                "SELECT DISTINCT r.student_id, cc.course_code
+                "SELECT DISTINCT r.student_id, cc.course_code, cc.time_slot
                    FROM co_registrations r
                    JOIN co_offer_subjects cos ON cos.id = r.offer_subject_id
                    JOIN ac_admit_card_courses cc ON cc.offer_subject_id = cos.id AND cc.exam_date = ?
@@ -555,6 +563,7 @@ function hm_student_course_map(array $student_ids, string $exam_date): array
             );
             $st->execute(array_merge([$exam_date], $ids));
             foreach ($st->fetchAll() as $r) {
+                if (!hm_slot_matches_exam_time((string)($r['time_slot'] ?? ''), $exam_time)) continue;
                 $sid = (int)$r['student_id'];
                 if (!isset($map[$sid])) $map[$sid] = strtoupper(trim((string)$r['course_code']));
             }
@@ -564,7 +573,7 @@ function hm_student_course_map(array $student_ids, string $exam_date): array
     $legacy_cond = $has_subject_col ? 'cc.offer_subject_id IS NULL' : '1=1';
     try {
         $st = $db->prepare(
-            "SELECT DISTINCT s.id AS student_id, cc.course_code
+            "SELECT DISTINCT s.id AS student_id, cc.course_code, cc.time_slot
                FROM students s
                JOIN ac_admit_cards ac ON ac.is_active = 1
                                      AND ac.dept_id = s.dept_id
@@ -577,6 +586,7 @@ function hm_student_course_map(array $student_ids, string $exam_date): array
         );
         $st->execute(array_merge([$exam_date], $ids));
         foreach ($st->fetchAll() as $r) {
+            if (!hm_slot_matches_exam_time((string)($r['time_slot'] ?? ''), $exam_time)) continue;
             $sid = (int)$r['student_id'];
             if (!isset($map[$sid])) $map[$sid] = strtoupper(trim((string)$r['course_code']));
         }
@@ -638,10 +648,15 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
     hm_ensure_assignments_table();
     $taken = hm_assignments($hall_id, $exam_date);
     $issues = [];
+    $exam_time = hm_hall_exam_time($hall_id, $exam_date);
 
     // Course of each student already seated in this hall (for column locks)
     $seated_ids  = array_map(static fn($r) => (int)$r['student_id'], $taken);
-    $course_map  = hm_student_course_map($seated_ids, $exam_date);
+    $course_map  = hm_student_course_map($seated_ids, $exam_date, $exam_time);
+    foreach ($taken as $occ) {
+        $course = strtoupper(trim((string)($occ['course_code'] ?? '')));
+        if ($course !== '') $course_map[(int)$occ['student_id']] = $course;
+    }
     $room_rows   = hm_room_assignments_on_date($hall_id, $exam_date);
     $room_slots  = [];
     foreach ($room_rows as $rr) {
@@ -654,6 +669,11 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
     $groups  = [];   // course key => list of student rows
     $skipped = 0;
     foreach ($students as $stu) {
+        if (!hm_slot_matches_exam_time((string)($stu['time_slot'] ?? ''), $exam_time)) {
+            $skipped++;
+            $issues[] = 'An exam was skipped because its start time does not match this room\'s exam time.';
+            continue;
+        }
         $sid = (int)$stu['id'];
         $sname = trim((string)($stu['full_name'] ?? 'Student'));
         $scode = trim((string)($stu['student_id'] ?? ''));
@@ -869,8 +889,12 @@ function hm_assign_single_student(int $hall_id, string $exam_date, int $student_
 
     // Exam course of this student and of every student already seated here
     $occ_ids    = array_map(static fn($r) => (int)$r['student_id'], $taken);
-    $course_map = hm_student_course_map(array_merge($occ_ids, [$student_id]), $exam_date);
-    $stu_course = $course_map[$student_id] ?? '';
+    $course_map = hm_student_course_map(array_merge($occ_ids, [$student_id]), $exam_date, (string)$slot['start']);
+    foreach ($taken as $occ) {
+        $course = strtoupper(trim((string)($occ['course_code'] ?? '')));
+        if ($course !== '') $course_map[(int)$occ['student_id']] = $course;
+    }
+    $stu_course = $course_code !== '' ? $course_code : ($course_map[$student_id] ?? '');
     $stu_cname  = $stu_course !== '' ? $stu_course : 'Unknown course';
 
     // 1) Column should hold a single course
@@ -951,6 +975,7 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
     hm_ensure_assignments_table();
     $db  = db();
     $out = [];   // "batch_id|section" => dedupe-key => row
+    $exam_time = hm_hall_exam_time($hall_id, $exam_date);
 
     $has_subject_col = false;
     try { $db->query('SELECT offer_subject_id FROM ac_admit_card_courses LIMIT 1'); $has_subject_col = true; } catch (Throwable $e) {}
@@ -976,6 +1001,7 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
                    JOIN ac_admit_card_courses cc ON cc.offer_subject_id = cos.id AND cc.exam_date = a.exam_date
                    JOIN ac_admit_cards ac ON ac.id = cc.admit_card_id AND ac.is_active = 1
                   WHERE a.hall_id = ? AND a.exam_date = ?
+                    AND (a.course_code IS NULL OR a.course_code = '' OR cc.course_code = a.course_code)
                   GROUP BY s.batch_id, grp_section, cc.course_code, cc.course_title, cc.time_slot, cos.id"
             );
             $st->execute([$hall_id, $exam_date]);
@@ -999,6 +1025,7 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
             }
 
             foreach ($rows as $r) {
+                if (!hm_slot_matches_exam_time((string)($r['time_slot'] ?? ''), $exam_time)) continue;
                 $sec = (string)($r['grp_section'] ?? '');
                 $gk  = (int)($r['batch_id'] ?? 0) . '|' . $sec;
                 $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
@@ -1052,10 +1079,12 @@ function hm_exam_courses_by_group(int $hall_id, string $exam_date): array
                                             AND cc.exam_date = a.exam_date
                                             AND $legacy_cond
               WHERE a.hall_id = ? AND a.exam_date = ?
+                AND (a.course_code IS NULL OR a.course_code = '' OR cc.course_code = a.course_code)
               GROUP BY s.batch_id, grp_section, cc.course_code, cc.course_title, cc.time_slot"
         );
         $st->execute([$hall_id, $exam_date]);
         foreach ($st->fetchAll() as $r) {
+            if (!hm_slot_matches_exam_time((string)($r['time_slot'] ?? ''), $exam_time)) continue;
             $sec = (string)($r['grp_section'] ?? '');
             $gk  = (int)($r['batch_id'] ?? 0) . '|' . $sec;
             $key = mb_strtolower($r['course_code'] . '|' . ($r['time_slot'] ?? ''));
@@ -1237,14 +1266,48 @@ function hm_slot_start_time(string $slot): ?string
     return ($parsed['ok'] ?? false) ? (string)$parsed['start'] : null;
 }
 
+/** Compare normalized start times, retaining date-only behavior for unscheduled rooms. */
+function hm_slot_matches_exam_time(string $slot, ?string $exam_time): bool
+{
+    if ($exam_time === null || $exam_time === '') return true;
+    $time = hm_parse_clock_time($exam_time);
+    return $time !== null && hm_slot_start_time($slot) === $time[1];
+}
+
+/** Prefer the booked time on this date; otherwise use the saved seat time slots. */
+function hm_hall_exam_time(int $hall_id, string $exam_date): ?string
+{
+    $hall = hm_get_hall($hall_id, false);
+    if ((string)($hall['exam_date'] ?? '') === $exam_date) {
+        $time = hm_parse_clock_time((string)($hall['exam_time'] ?? ''));
+        if ($time !== null) return $time[1];
+    }
+    $times = [];
+    foreach (hm_assignments($hall_id, $exam_date) as $row) {
+        $time = hm_slot_start_time((string)($row['time_slot'] ?? ''));
+        if ($time !== null) $times[] = $time;
+    }
+    if (!$times) return null;
+    sort($times);
+    return $times[0];
+}
+
 /**
- * Derive the exam time for a hall on a date from the seated students'
- * admit-card course time slots (e.g. "1:00 PM - 3:00 PM" → "13:00:00").
+ * Derive the exam time for a hall on a date from saved assignment slots,
+ * falling back to admit cards for older seats without saved time slots.
  * The earliest start time wins; returns NULL when no slot can be parsed.
  */
 function hm_derive_exam_time(int $hall_id, string $exam_date): ?string
 {
     $times = [];
+    foreach (hm_assignments($hall_id, $exam_date) as $row) {
+        $t = hm_slot_start_time((string)($row['time_slot'] ?? ''));
+        if ($t !== null) $times[] = $t;
+    }
+    if ($times) {
+        sort($times);
+        return $times[0];
+    }
     foreach (hm_exam_courses_by_batch($hall_id, $exam_date) as $rows) {
         foreach ($rows as $r) {
             $t = hm_slot_start_time((string)($r['time_slot'] ?? ''));
@@ -1259,7 +1322,7 @@ function hm_derive_exam_time(int $hall_id, string $exam_date): ?string
 /**
  * Keep hm_halls.exam_date / exam_time in sync with the hall's seat
  * assignments: the schedule follows the assignment date nearest to today
- * and the earliest admit-card time slot of the seated students. Called
+ * and the earliest assigned exam time slot of the seated students. Called
  * after every assign / unassign action so the index list updates
  * automatically once seats are assigned.
  */

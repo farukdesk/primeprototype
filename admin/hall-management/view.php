@@ -50,9 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
         } elseif (!can_access_dept($p_dept)) {
             flash_set('error', 'You do not have permission for that department.');
         } else {
-            $students = hm_find_exam_students($p_dept, $p_program, $p_batch, $p_date, $p_section, $p_shift, $p_course);
+            $students = hm_find_exam_students($p_dept, $p_program, $p_batch, $p_date, $p_section, $p_shift, $p_course, hm_hall_exam_time($hall_id, $p_date));
             if (!$students) {
-                flash_set('error', 'No admit-card students found for the selected Department / Program / Batch / Exam Date / Section / Shift / Course.');
+                flash_set('error', 'No admit-card students found for the selected filters and this room\'s exam time.');
             } else {
                 [$assigned, $skipped, $left, $issues] = hm_assign_students($hall_id, $p_date, $students, [
                     'dept_id' => $p_dept, 'program_id' => $p_program, 'batch_id' => $p_batch,
@@ -67,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit) {
                     if (count($issues) > count($sample)) $msg .= ' (+' . (count($issues) - count($sample)) . ' more).';
                 }
                 flash_set($assigned > 0 ? 'success' : 'error', $msg);
+                if ($assigned > 0) hm_sync_hall_schedule($hall_id);
             }
-            hm_sync_hall_schedule($hall_id);
             $ret .= '&a_date=' . urlencode($p_date);
         }
         redirect($ret);
@@ -347,15 +347,8 @@ foreach ($columns as $col) {
     if ($col_free) $empty_cols++;
 }
 $fit_hints = [];
-$hall_slot_time = null; // the room's exam time ("HH:MM:SS") on the selected date
+$hall_slot_time = $f_date !== '' ? hm_hall_exam_time($hall_id, $f_date) : null;
 if ($can_edit && $f_date !== '' && $free_seats > 0) {
-    // Same room + same date + same time: prefer the time of students already
-    // seated here on the selected date; otherwise the room's booked slot time.
-    $hall_slot_time = hm_derive_exam_time($hall_id, $f_date);
-    if ($hall_slot_time === null && (string)($hall['exam_date'] ?? '') === $f_date) {
-        $t = trim((string)($hall['exam_time'] ?? ''));
-        if ($t !== '') $hall_slot_time = $t;
-    }
     $fit_hints = hm_unseated_group_counts($f_date, $hall_slot_time);
 }
 
@@ -363,14 +356,14 @@ if ($can_edit && $f_date !== '' && $free_seats > 0) {
 // chosen dept / program (+ batch / shift). Lets the user narrow students
 // down to one of the courses actually examined on that day.
 $asg_courses = ($f_dept > 0 && $f_program > 0 && $f_date !== '')
-    ? hm_exam_course_options($f_dept, $f_program, $f_batch, $f_date, $f_shift)
+    ? hm_exam_course_options($f_dept, $f_program, $f_batch, $f_date, $f_shift, $hall_slot_time)
     : [];
 if ($f_course !== '' && !in_array($f_course, array_column($asg_courses, 'course_code'), true)) $f_course = '';
 
 // Preview of matching students (before assigning)
 $preview = null;
 if (isset($_GET['preview']) && $f_dept > 0 && $f_program > 0 && $f_date !== '') {
-    $preview = hm_find_exam_students($f_dept, $f_program, $f_batch, $f_date, $f_section, $f_shift, $f_course);
+    $preview = hm_find_exam_students($f_dept, $f_program, $f_batch, $f_date, $f_section, $f_shift, $f_course, $hall_slot_time);
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -782,7 +775,18 @@ require_once __DIR__ . '/../includes/header.php';
             No admit-card students found for the selected filters.
         </div>
         <?php else:
-            $busy_map  = hm_busy_student_halls($f_date, $f_shift);
+            $busy_map = [];
+            foreach ($preview as $stu) {
+                $slot = hm_parse_time_slot_interval((string)($stu['time_slot'] ?? ''));
+                foreach (hm_student_assignments_on_date((int)$stu['id'], $f_date) as $seated) {
+                    $existing_slot = hm_parse_time_slot_interval((string)($seated['time_slot'] ?? ''));
+                    if ((int)$seated['hall_id'] !== $hall_id
+                        && (!(($slot['ok'] ?? false) && ($existing_slot['ok'] ?? false))
+                            || !hm_intervals_overlap($slot['start_sec'], $slot['end_sec'], $existing_slot['start_sec'], $existing_slot['end_sec']))) continue;
+                    $busy_map[(int)$stu['id']] = $seated;
+                    break;
+                }
+            }
             $free_cnt  = max(0, (int)$hall['total_capacity'] - count($assignments));
             $new_cnt   = 0;
             foreach ($preview as $stu) { if (!isset($busy_map[(int)$stu['id']])) $new_cnt++; }
