@@ -1317,7 +1317,8 @@ function hm_hall_assignment_dates(int $hall_id): array
  * Optional filters: dept_id, program_id, batch_id, section, shift, time_slot.
  *
  * Returns rows: id, student_id, full_name, dept_name, program_name,
- * batch_name, section, shift, time_slot, exam_name, semester, exam_date.
+ * batch_name, section, shift, course_code, course_title, time_slot,
+ * exam_name, semester, exam_date.
  */
 function hm_unseated_students(string $exam_date, array $filters = []): array
 {
@@ -1334,6 +1335,19 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
     $section    = trim((string)($filters['section'] ?? ''));
     $shift      = trim((string)($filters['shift'] ?? ''));
     $time_slot  = trim((string)($filters['time_slot'] ?? ''));
+    $row_key = static function (array $row): string {
+        return implode("\0", [
+            (string)(int)$row['id'],
+            strtoupper(trim((string)($row['course_code'] ?? ''))),
+            trim((string)($row['course_title'] ?? '')),
+            trim((string)($row['time_slot'] ?? '')),
+            trim((string)($row['exam_name'] ?? '')),
+            trim((string)($row['semester'] ?? '')),
+            trim((string)($row['section'] ?? '')),
+            trim((string)($row['shift'] ?? '')),
+        ]);
+    };
+    $subject_students = [];
 
     $card_where  = 'ac.is_active = 1';
     $card_params = [];
@@ -1358,7 +1372,8 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
                        ac.dept_id, ac.program_id, s.batch_id,
                        d.name AS dept_name, p.program_name,
                        b.name AS batch_name, o.shift, cc.section,
-                       cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
+                       cc.course_code, cc.course_title, cc.time_slot,
+                       cc.exam_date, ac.exam_name, ac.semester
                   FROM ac_admit_cards ac
                   JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
                   JOIN co_offer_subjects cos ON cos.id = cc.offer_subject_id
@@ -1376,7 +1391,11 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
         try {
             $st = $db->prepare($sql);
             $st->execute($params);
-            foreach ($st->fetchAll() as $row) $out[(int)$row['id']] = $row;
+            foreach ($st->fetchAll() as $row) {
+                $sid = (int)$row['id'];
+                $subject_students[$sid] = true;
+                $out[$row_key($row)] = $row;
+            }
         } catch (Throwable $e) {}
     }
 
@@ -1389,7 +1408,8 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
                    ac.dept_id, ac.program_id, s.batch_id,
                    d.name AS dept_name, p.program_name,
                    b.name AS batch_name, s.shift, s.section,
-                   cc.time_slot, cc.exam_date, ac.exam_name, ac.semester
+                   cc.course_code, cc.course_title, cc.time_slot,
+                   cc.exam_date, ac.exam_name, ac.semester
               FROM ac_admit_cards ac
               JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
               JOIN students s ON s.dept_id = ac.dept_id
@@ -1409,14 +1429,14 @@ function hm_unseated_students(string $exam_date, array $filters = []): array
         $st->execute($params);
         foreach ($st->fetchAll() as $row) {
             $sid = (int)$row['id'];
-            if (!isset($out[$sid])) $out[$sid] = $row;
+            if (!isset($subject_students[$sid])) $out[$row_key($row)] = $row;
         }
     } catch (Throwable $e) {}
 
     $out = array_values($out);
     usort($out, static function ($a, $b) {
-        return [$a['dept_name'], (string)$a['program_name'], (string)$a['batch_name'], (string)$a['student_id']]
-           <=> [$b['dept_name'], (string)$b['program_name'], (string)$b['batch_name'], (string)$b['student_id']];
+        return [$a['dept_name'], (string)$a['program_name'], (string)$a['batch_name'], (string)$a['student_id'], (string)$a['course_code']]
+           <=> [$b['dept_name'], (string)$b['program_name'], (string)$b['batch_name'], (string)$b['student_id'], (string)$b['course_code']];
     });
     return $out;
 }
