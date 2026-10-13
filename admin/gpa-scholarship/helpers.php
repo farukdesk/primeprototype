@@ -150,32 +150,18 @@ function gs_published_exam_map(): array
 
 function gs_exam_options(): array
 {
-    $fk_table = gs_exam_fk_table();
-    if ($fk_table === 'result_exams') {
+    $rows = [];
+    $ei_loaded = false;
+    try {
         $rows = db()->query(
-            'SELECT e.id, e.exam_title, e.batch, e.completion_semester, e.dept_id, e.program_id,
-                    d.name AS dept_name, p.program_name
-             FROM result_exams e
-             LEFT JOIN dept_departments d ON d.id = e.dept_id
-             LEFT JOIN dept_academic_programs p ON p.id = e.program_id
-             ORDER BY e.id DESC'
+            'SELECT e.id, e.exam_name, e.exam_year, e.start_date, e.end_date, e.is_active
+             FROM ei_exams e
+             ORDER BY e.exam_year DESC, e.start_date DESC, e.id DESC'
         )->fetchAll();
-        foreach ($rows as &$row) {
-            $row['exam_name'] = (string)($row['exam_title'] ?? '');
-            $row['exam_year'] = null;
-            $row['is_active'] = 1;
-            $row['legacy_exam_title'] = $row['exam_title'] ?? null;
-            $row['exam_title'] = gs_format_exam_title($row);
-        }
-        unset($row);
-        return $rows;
+        $ei_loaded = true;
+    } catch (Throwable $e) {
+        $rows = [];
     }
-
-    $rows = db()->query(
-        'SELECT e.id, e.exam_name, e.exam_year, e.start_date, e.end_date, e.is_active
-         FROM ei_exams e
-         ORDER BY e.exam_year DESC, e.start_date DESC, e.id DESC'
-    )->fetchAll();
 
     $legacy_map = [];
     try {
@@ -191,6 +177,19 @@ function gs_exam_options(): array
         }
     } catch (Throwable $e) {
         $legacy_map = [];
+    }
+
+    if (!$ei_loaded) {
+        foreach ($legacy_map as $id => $legacy) {
+            $legacy['id'] = (int)$id;
+            $legacy['exam_name'] = (string)($legacy['exam_title'] ?? '');
+            $legacy['exam_year'] = null;
+            $legacy['is_active'] = 1;
+            $legacy['legacy_exam_title'] = $legacy['exam_title'] ?? null;
+            $legacy['exam_title'] = gs_format_exam_title($legacy);
+            $rows[] = $legacy;
+        }
+        return $rows;
     }
 
     foreach ($rows as &$row) {
@@ -225,11 +224,9 @@ function gs_exam_options(): array
         }
         unset($row);
 
-        if ($fk_table === 'ei_exams') {
-            foreach ($published_map as $pid => $prow) {
-                if (isset($current_ids[(int)$pid])) continue;
-                $rows[] = $prow;
-            }
+        foreach ($published_map as $pid => $prow) {
+            if (isset($current_ids[(int)$pid])) continue;
+            $rows[] = $prow;
         }
     }
 
@@ -487,9 +484,9 @@ function gs_evaluate_config(array $cfg): array
     $student_ids = array_map(static fn($r) => (int)$r['student_pk'], $students);
     $ph = implode(',', array_fill(0, count($student_ids), '?'));
 
-    // Keep GPA source on result_grades/result_subjects keyed by exam_id. If an
-    // invigilation exam has no corresponding result rows yet, students remain
-    // excluded with "No GPA found..." instead of silently mapping another exam.
+    // Primary GPA source stays on legacy result_grades/result_subjects keyed by
+    // the selected exam id. Missing students are then resolved from published
+    // workflow sheets of the same exam.
     $gpa_sql = "SELECT rg.student_id,
                        ROUND(SUM(COALESCE(rg.grade_point,0) * CASE WHEN COALESCE(rs.credits,0) > 0 THEN rs.credits ELSE 1 END)
                            / NULLIF(SUM(CASE WHEN COALESCE(rs.credits,0) > 0 THEN rs.credits ELSE 1 END),0), 2) AS semester_gpa
@@ -502,6 +499,36 @@ function gs_evaluate_config(array $cfg): array
     $gpa_map = [];
     foreach ($gpa_st->fetchAll() as $row) {
         $gpa_map[(int)$row['student_id']] = $row['semester_gpa'] !== null ? (float)$row['semester_gpa'] : null;
+    }
+
+    $missing_gpa_student_ids = [];
+    foreach ($student_ids as $sid) {
+        if (!array_key_exists($sid, $gpa_map) || $gpa_map[$sid] === null) {
+            $missing_gpa_student_ids[] = $sid;
+        }
+    }
+    if (!empty($missing_gpa_student_ids)) {
+        $ph_missing = implode(',', array_fill(0, count($missing_gpa_student_ids), '?'));
+        try {
+            $wf_gpa_sql = "SELECT sg.student_id,
+                                  ROUND(SUM(COALESCE(sg.grade_point,0) * CASE WHEN COALESCE(ms.credits,0) > 0 THEN ms.credits ELSE 1 END)
+                                      / NULLIF(SUM(CASE WHEN COALESCE(ms.credits,0) > 0 THEN ms.credits ELSE 1 END),0), 2) AS semester_gpa
+                           FROM result_mark_sheets ms
+                           JOIN result_sheet_grades sg ON sg.sheet_id = ms.id
+                           WHERE ms.workflow_status = 'published'
+                             AND ms.exam_id = ?
+                             AND sg.student_id IN ($ph_missing)
+                           GROUP BY sg.student_id";
+            $wf_gpa_st = $db->prepare($wf_gpa_sql);
+            $wf_gpa_st->execute(array_merge([(int)$cfg['exam_id']], $missing_gpa_student_ids));
+            foreach ($wf_gpa_st->fetchAll() as $row) {
+                $sid = (int)($row['student_id'] ?? 0);
+                if ($sid <= 0) continue;
+                $gpa_map[$sid] = $row['semester_gpa'] !== null ? (float)$row['semester_gpa'] : null;
+            }
+        } catch (Throwable $e) {
+            // Workflow tables may be unavailable in some deployments.
+        }
     }
 
     $att_map = [];
