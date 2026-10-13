@@ -108,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sst->execute([$ov_routine_id, $bid]);
                 } else {
                     $sst = $db->prepare(
-                        "SELECT s.id FROM students s
+                        "SELECT DISTINCT s.id FROM students s
                           JOIN co_registrations reg ON reg.student_id = s.id
                           WHERE s.dept_id = ? AND s.program_id = ? AND s.batch_id = ?
                             AND s.status NOT IN ('Withdrawn','Expelled')"
