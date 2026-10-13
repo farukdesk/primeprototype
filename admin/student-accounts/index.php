@@ -391,6 +391,17 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" name="bulk_tuition_per_semester" class="form-control form-control-sm"
                            min="0" step="0.01" placeholder="&mdash;">
                 </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small mb-1">Bulk Scholarship Name</label>
+                    <input type="text" name="bulk_scholarship_label" class="form-control form-control-sm"
+                           maxlength="120" placeholder="e.g. Merit Scholarship">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Bulk Scholarship %</label>
+                    <input type="number" name="bulk_scholarship_pct" class="form-control form-control-sm"
+                           min="0.01" max="100" step="0.01" placeholder="&mdash;">
+                    <div class="form-text small">Applied to tuition only (not Fixed Institutional Fees or English Course Fee).</div>
+                </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold small mb-1">Monthly Fixed</label>
                     <input type="number" name="bulk_monthly_fixed" class="form-control form-control-sm"
@@ -821,7 +832,8 @@ require_once __DIR__ . '/../includes/header.php';
         }
         var fields = ['bulk_cf_program_id', 'bulk_student_program_id', 'bulk_dept_id',
                       'bulk_total_semesters',
-                      'bulk_tuition_per_semester', 'bulk_monthly_fixed',
+                      'bulk_tuition_per_semester', 'bulk_scholarship_label', 'bulk_scholarship_pct',
+                      'bulk_monthly_fixed',
                       'bulk_fixed_institutional_fees', 'bulk_project_fee',
                       'bulk_english_course_fee', 'bulk_english_per_semester',
                       'bulk_target_monthly_total',
