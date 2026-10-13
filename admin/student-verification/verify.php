@@ -189,9 +189,9 @@ if (isset($_GET['ajax_student_card'])) {
             'SELECT ROUND(SUM(rg.grade_point * COALESCE(rs.credits,3)) /
                  NULLIF(SUM(COALESCE(rs.credits,3)),0), 2) AS cgpa
              FROM result_grades rg
-             JOIN result_exams re ON re.id = rg.exam_id
+             JOIN ei_exams e ON e.id = rg.exam_id
              JOIN result_subjects rs ON rs.id = rg.subject_id
-             WHERE rg.student_sid=? AND re.is_published=1
+             WHERE rg.student_sid=? AND e.is_active=1
                AND rg.grade_point IS NOT NULL AND COALESCE(rs.credits,3)>0'
         );
         $cq->execute([$sc['student_id']]);
@@ -213,12 +213,11 @@ if (isset($_GET['ajax_student_card'])) {
     $result_published = null;
     try {
         $eq = db()->prepare(
-            'SELECT re.completion_semester, re.updated_at
+            'SELECT CONCAT(e.exam_name, " ", e.exam_year) AS completion_semester, e.updated_at
              FROM result_grades rg
-             JOIN result_exams re ON re.id = rg.exam_id
-             WHERE rg.student_sid = ? AND re.is_published = 1
-               AND re.completion_semester IS NOT NULL
-             ORDER BY re.updated_at DESC LIMIT 1'
+             JOIN ei_exams e ON e.id = rg.exam_id
+             WHERE rg.student_sid = ? AND e.is_active = 1
+             ORDER BY e.updated_at DESC LIMIT 1'
         );
         $eq->execute([$sc['student_id']]);
         $erow = $eq->fetch();
@@ -378,9 +377,9 @@ if ($has_pre) {
             'SELECT ROUND(SUM(rg.grade_point * COALESCE(rs.credits,3)) /
                  NULLIF(SUM(COALESCE(rs.credits,3)),0), 2) AS cgpa
              FROM result_grades rg
-             JOIN result_exams re ON re.id = rg.exam_id
+             JOIN ei_exams e ON e.id = rg.exam_id
              JOIN result_subjects rs ON rs.id = rg.subject_id
-             WHERE rg.student_sid=? AND re.is_published=1
+             WHERE rg.student_sid=? AND e.is_active=1
                AND rg.grade_point IS NOT NULL AND COALESCE(rs.credits,3)>0'
         );
         $cq->execute([$pre_student['student_id']]);
@@ -406,12 +405,11 @@ $pre_result_published = null;
 if ($has_pre) {
     try {
         $eq = db()->prepare(
-            'SELECT re.completion_semester, re.updated_at
+            'SELECT CONCAT(e.exam_name, " ", e.exam_year) AS completion_semester, e.updated_at
              FROM result_grades rg
-             JOIN result_exams re ON re.id = rg.exam_id
-             WHERE rg.student_sid = ? AND re.is_published = 1
-               AND re.completion_semester IS NOT NULL
-             ORDER BY re.updated_at DESC LIMIT 1'
+             JOIN ei_exams e ON e.id = rg.exam_id
+             WHERE rg.student_sid = ? AND e.is_active = 1
+             ORDER BY e.updated_at DESC LIMIT 1'
         );
         $eq->execute([$pre_student['student_id']]);
         $erow = $eq->fetch();

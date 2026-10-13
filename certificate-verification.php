@@ -172,12 +172,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($student) {
                         // Try to find the most recent published result exam linked to this student
                         $res_stmt = $db->prepare(
-                            'SELECT re.completion_semester, re.updated_at
+                            'SELECT CONCAT(e.exam_name, " ", e.exam_year) AS completion_semester, e.updated_at
                              FROM   result_grades rg
-                             JOIN   result_exams re ON re.id = rg.exam_id
+                             JOIN   ei_exams e ON e.id = rg.exam_id
                              WHERE  rg.student_sid = ?
-                               AND  re.is_published = 1
-                             ORDER  BY re.updated_at DESC
+                               AND  e.is_active = 1
+                             ORDER  BY e.updated_at DESC
                              LIMIT  1'
                         );
                         $res_stmt->execute([$student['student_id']]);
@@ -213,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ];
                         }
 
-                        // Compute Final CGPA across all published result_exams
+                        // Compute Final CGPA across all active exams
                         try {
                             $cgpa_stmt = $db->prepare(
                                 'SELECT ROUND(
@@ -221,10 +221,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                      NULLIF(SUM(COALESCE(rs.credits, 3)), 0), 2
                                  ) AS cgpa
                                  FROM   result_grades   rg
-                                 JOIN   result_exams    re ON re.id = rg.exam_id
+                                 JOIN   ei_exams        e  ON e.id  = rg.exam_id
                                  JOIN   result_subjects rs ON rs.id = rg.subject_id
                                  WHERE  rg.student_sid     = ?
-                                   AND  re.is_published    = 1
+                                   AND  e.is_active        = 1
                                    AND  rg.grade_point     IS NOT NULL
                                    AND  COALESCE(rs.credits, 3) > 0'
                             );
