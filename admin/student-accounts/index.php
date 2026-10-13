@@ -165,7 +165,6 @@ $sfp_latest_semester_gpa_by_student = static function (PDO $db, array $student_r
                    ms.semester,
                    ms.subject_code,
                    ms.subject_title,
-                   ms.marks_json AS ms_marks_json,
                    COALESCE(ms.credits, cc.credit) AS credits,
                    e.exam_name,
                    e.end_date AS exam_end_date,
