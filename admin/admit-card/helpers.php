@@ -771,6 +771,13 @@ function ac_get_or_create_token(int $admit_card_id, int $student_id): string
 
 // ── Check whether a student can access/download an admit card ─────────────────
 
+function ac_student_has_subject_enrollment(int $student_id): bool
+{
+    $st = db()->prepare('SELECT 1 FROM co_registrations WHERE student_id = ? LIMIT 1');
+    $st->execute([$student_id]);
+    return (bool)$st->fetchColumn();
+}
+
 /**
  * Returns:
  *   ['allowed' => true]
@@ -778,9 +785,12 @@ function ac_get_or_create_token(int $admit_card_id, int $student_id): string
  */
 function ac_check_access(int $admit_card_id, int $student_id): array
 {
-    // Check for admin override first
-    if (ac_has_override($admit_card_id, $student_id)) {
-        return ['allowed' => true];
+    if (!ac_student_has_subject_enrollment($student_id)) {
+        return [
+            'allowed' => false,
+            'due'     => 0.0,
+            'reason'  => 'You are not enrolled in any subject. Please contact your department office.',
+        ];
     }
 
     // Exam-linked cards: only students actually enrolled (registered) in
@@ -804,6 +814,11 @@ function ac_check_access(int $admit_card_id, int $student_id): array
             'due'     => 0.0,
             'reason'  => 'You are not enrolled in any course of this exam routine. Please contact your department office.',
         ];
+    }
+
+    // Overrides bypass the due check, not the enrollment requirements above.
+    if (ac_has_override($admit_card_id, $student_id)) {
+        return ['allowed' => true];
     }
 
     // Find the student's package and compute outstanding balance
@@ -839,7 +854,7 @@ function ac_check_access(int $admit_card_id, int $student_id): array
  * Active students covered by an admit card.
  * Cards whose course rows are linked to course-offer subjects count the
  * registered students of those subjects; manual / bulk cards fall back to
- * the active students of the card's dept + program (+ batch when set).
+ * active, enrolled students of the card's dept + program (+ batch when set).
  *
  * @return int[]
  */
@@ -871,9 +886,11 @@ function ac_card_student_ids(int $admit_card_id): array
     $card = $st->fetch();
     if (!$card) return [];
 
-    $sql    = "SELECT id FROM students WHERE dept_id = ? AND program_id = ? AND status = 'Active'";
+    $sql    = "SELECT s.id FROM students s
+                WHERE s.dept_id = ? AND s.program_id = ? AND s.status = 'Active'
+                  AND EXISTS (SELECT 1 FROM co_registrations r WHERE r.student_id = s.id)";
     $params = [(int)$card['dept_id'], (int)$card['program_id']];
-    if (!empty($card['batch_id'])) { $sql .= ' AND batch_id = ?'; $params[] = (int)$card['batch_id']; }
+    if (!empty($card['batch_id'])) { $sql .= ' AND s.batch_id = ?'; $params[] = (int)$card['batch_id']; }
     $st = $db->prepare($sql);
     $st->execute($params);
     return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));

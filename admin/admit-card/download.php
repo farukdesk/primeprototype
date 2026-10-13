@@ -63,6 +63,11 @@ if (!$student) {
     die('Student not found.');
 }
 
+if (!ac_student_has_subject_enrollment($student_id)) {
+    http_response_code(404);
+    die('Student is not enrolled in any subject.');
+}
+
 // Portal students must belong to the card's dept+program
 if (is_portal_student()) {
     if ((int)$student['dept_id'] !== (int)$card['dept_id']
