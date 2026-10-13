@@ -103,6 +103,18 @@ function mr_is_fail(string $grade, ?float $point): bool
     return strtoupper(trim($grade)) === 'F' || ($point !== null && $point <= 0.0);
 }
 
+/** Grade point fallback for letter-only sources (legacy spring-result rows). */
+function mr_grade_point(string $letter): ?float
+{
+    return match (strtoupper(trim($letter))) {
+        'A+' => 4.00, 'A' => 3.75, 'A-' => 3.50,
+        'B+' => 3.25, 'B' => 3.00, 'B-' => 2.75,
+        'C+' => 2.50, 'C' => 2.25, 'D'  => 2.00,
+        'F'  => 0.00,
+        default => null,
+    };
+}
+
 /** Semester GPA is withheld while the semester contains an F grade or an Incom. */
 function mr_gpa_withheld(array $sem): bool
 {
@@ -316,6 +328,91 @@ foreach ($courses as $c) {
 
     if (!empty($c['offer_subject_id'])) $published_offer_subjects[(int)$c['offer_subject_id']] = true;
     if ($ck !== '') $published_course_terms[$ck . '|' . $key] = true;
+}
+
+// ── Published Spring-Result sets (sr_results / sr_result_entries) ──────────────────
+if ($student_sid !== '') {
+    try {
+        $st = db()->prepare(
+            "SELECT r.id, r.title, r.semester, r.created_at
+               FROM sr_results r
+              WHERE r.is_published = 1
+                AND EXISTS (SELECT 1 FROM sr_result_entries e
+                             WHERE e.result_id = r.id AND e.student_id = ?)
+              ORDER BY r.created_at ASC, r.id ASC"
+        );
+        $st->execute([$student_sid]);
+        $sets = $st->fetchAll();
+
+        $est = db()->prepare(
+            'SELECT course_code, course_title, letter_grade, grade_point, credit
+               FROM sr_result_entries
+              WHERE result_id = ? AND student_id = ?
+              ORDER BY course_code ASC, course_title ASC'
+        );
+        foreach ($sets as $res) {
+            $est->execute([(int)$res['id'], $student_sid]);
+            $entries = $est->fetchAll();
+            if (empty($entries)) continue;
+
+            $title = trim((string)($res['title'] ?? ''));
+            $term  = mr_parse_term($res['semester'] ?? null)
+                  ?: mr_parse_term($title)
+                  ?: ['label' => $title !== '' ? $title : ('Result set #' . (int)$res['id']), 'sort' => 0];
+            $key   = $term['label'];
+
+            if (!isset($semesters[$key])) {
+                $semesters[$key] = [
+                    'label'        => $term['label'],
+                    'sort'         => $term['sort'],
+                    'exam'         => '',
+                    'exam_kind'    => -1,
+                    'published_at' => null,
+                    'courses'      => [],
+                ];
+            }
+            if (!empty($res['created_at']) && ($semesters[$key]['published_at'] === null || $res['created_at'] > $semesters[$key]['published_at'])) {
+                $semesters[$key]['published_at'] = $res['created_at'];
+            }
+            $kind = mr_exam_kind($title);
+            if ($title !== '' && $kind > $semesters[$key]['exam_kind']) {
+                $semesters[$key]['exam_kind'] = $kind;
+                $semesters[$key]['exam']      = $title;
+            }
+
+            foreach ($entries as $e) {
+                $letter = trim((string)($e['letter_grade'] ?? ''));
+                $is_incom = strcasecmp($letter, 'Incom') === 0;
+                $point = $is_incom ? null : ($e['grade_point'] !== null ? (float)$e['grade_point'] : mr_grade_point($letter));
+                $row = [
+                    'code'        => (string)($e['course_code'] ?? ''),
+                    'title'       => (string)($e['course_title'] ?? ''),
+                    'credits'     => $e['credit'] !== null && $e['credit'] !== '' ? (float)$e['credit'] : null,
+                    'grade'       => $is_incom ? 'Incom' : ($letter !== '' ? $letter : '—'),
+                    'point'       => $point,
+                    'is_incom'    => $is_incom,
+                    'remarks'     => '',
+                    'pending'     => false,
+                    'teachers'    => '',
+                ];
+
+                $ck   = strtoupper(preg_replace('/\s+/', '', (string)($e['course_code'] ?? '')));
+                $slot = $key . '|' . ($ck !== '' ? $ck : 'T:' . strtoupper(preg_replace('/\s+/', '', (string)($e['course_title'] ?? ''))));
+                $rank = [$kind, 0, (string)($res['created_at'] ?? ''), (int)($res['id'] ?? 0)];
+                if (isset($live_slots[$slot])) {
+                    if (($rank <=> $live_slots[$slot]['rank']) > 0) {
+                        $semesters[$key]['courses'][$live_slots[$slot]['idx']] = $row;
+                        $live_slots[$slot]['rank'] = $rank;
+                    }
+                } else {
+                    $semesters[$key]['courses'][] = $row;
+                    $live_slots[$slot] = ['idx' => array_key_last($semesters[$key]['courses']), 'rank' => $rank];
+                }
+
+                if ($ck !== '') $published_course_terms[$ck . '|' . $key] = true;
+            }
+        }
+    } catch (Throwable $e) {}
 }
 
 // ── Registered courses whose result is NOT published yet ─────────────────────────────
