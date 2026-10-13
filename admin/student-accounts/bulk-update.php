@@ -12,6 +12,8 @@
  *   - Tuition per semester (applied to every semester row, scholarships recalculated)
  *   - Monthly fixed fee (fixed_institutional_fees re-derived from total_months)
  *   - Fixed institutional fees total (monthly_fixed_fee re-derived)
+ *   - Bulk scholarship (name + percentage) applied to tuition only
+ *     across all semester rows in each selected package
  *   - "Select all pages": when select_all_matching = 1, package IDs are
  *     resolved server-side from the posted list filters
  *   - Project fee (requires the project_fee column - see
@@ -98,6 +100,8 @@ $semesters_raw = trim((string)($_POST['bulk_total_semesters']      ?? ''));
 $tuition_raw   = trim((string)($_POST['bulk_tuition_per_semester'] ?? ''));
 $monthly_raw   = trim((string)($_POST['bulk_monthly_fixed']        ?? ''));
 $project_raw   = trim((string)($_POST['bulk_project_fee']          ?? ''));
+$sch_label_raw = trim((string)($_POST['bulk_scholarship_label']    ?? ''));
+$sch_pct_raw   = trim((string)($_POST['bulk_scholarship_pct']      ?? ''));
 $fixed_total_raw = trim((string)($_POST['bulk_fixed_institutional_fees'] ?? ''));
 $english_total_raw   = trim((string)($_POST['bulk_english_course_fee']   ?? ''));
 $english_per_sem_raw = trim((string)($_POST['bulk_english_per_semester'] ?? ''));
@@ -116,6 +120,8 @@ $total_semesters = $semesters_raw !== '' ? (int)$semesters_raw           : null;
 $tuition         = $tuition_raw   !== '' ? round((float)$tuition_raw, 2) : null;
 $monthly_fixed   = $monthly_raw   !== '' ? round((float)$monthly_raw, 2) : null;
 $project_fee     = $project_raw   !== '' ? round((float)$project_raw, 2) : null;
+$scholarship_label = $sch_label_raw;
+$scholarship_pct   = $sch_pct_raw !== '' ? round((float)$sch_pct_raw, 2) : null;
 $fixed_total     = $fixed_total_raw !== '' ? round((float)$fixed_total_raw, 2) : null;
 $english_total   = $english_total_raw   !== '' ? round((float)$english_total_raw, 2)   : null;
 $english_per_sem = $english_per_sem_raw !== '' ? round((float)$english_per_sem_raw, 2) : null;
@@ -133,6 +139,7 @@ if (empty($ids)) {
 }
 if ($cf_program_id <= 0 && $student_program_id <= 0 && $dept_id <= 0 && $total_semesters === null
     && $tuition === null && $monthly_fixed === null && $project_fee === null
+    && $scholarship_label === '' && $scholarship_pct === null
     && $fixed_total === null
     && $english_total === null && $english_per_sem === null
     && $payment_type === '' && $monthly_payment === null
@@ -163,6 +170,13 @@ if ($std_tuition  !== null && $std_tuition  < 0)  $errors[] = 'Standard tuition 
 if ($reg_fee      !== null && $reg_fee      < 0)  $errors[] = 'Registration fee per semester cannot be negative.';
 if ($total_semesters !== null && $total_semesters <= 0) $errors[] = 'Total semesters must be greater than 0.';
 if ($tuition       !== null && $tuition       < 0)      $errors[] = 'Tuition per semester cannot be negative.';
+if (($scholarship_label !== '' && $scholarship_pct === null)
+    || ($scholarship_label === '' && $scholarship_pct !== null)) {
+    $errors[] = 'Provide both Bulk Scholarship Name and Bulk Scholarship %.';
+}
+if ($scholarship_pct !== null && ($scholarship_pct < 0.01 || $scholarship_pct > 100)) {
+    $errors[] = 'Bulk Scholarship % must be between 0.01 and 100.';
+}
 if ($monthly_fixed !== null && $monthly_fixed < 0)      $errors[] = 'Monthly fixed fee cannot be negative.';
 if ($fixed_total   !== null && $fixed_total   < 0)      $errors[] = 'Fixed institutional fees cannot be negative.';
 if ($fixed_total !== null && $monthly_fixed !== null) {
@@ -552,11 +566,45 @@ if (empty($errors)) {
                 )->execute([$tuition, $user['id'], $package_id]);
             }
 
+            if ($scholarship_label !== '' && $scholarship_pct !== null) {
+                $sf_stmt3 = $db->prepare(
+                    'SELECT id FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number'
+                );
+                $sf_stmt3->execute([$package_id]);
+                $sf_rows_for_sc = $sf_stmt3->fetchAll();
+
+                if (!empty($sf_rows_for_sc)) {
+                    $ins_bulk_sc = $db->prepare(
+                        'INSERT INTO sfp_semester_scholarships
+                           (sf_id, label, discount_pct, discount_type, fixed_amount, amount, note,
+                            is_from_policy, applies_to_fixed, applies_to_english,
+                            support_doc_id, created_by)
+                         VALUES (?, ?, ?, \'percentage\', NULL, 0, ?, 0, 0, 0, NULL, ?)'
+                    );
+
+                    $bulk_note = 'Bulk scholarship from student accounts index';
+                    foreach ($sf_rows_for_sc as $sf_sc_row) {
+                        $ins_bulk_sc->execute([
+                            (int)$sf_sc_row['id'],
+                            $scholarship_label,
+                            $scholarship_pct,
+                            $bulk_note,
+                            (int)$user['id'],
+                        ]);
+                    }
+
+                    $changes[] = 'scholarship "' . $scholarship_label . '" -> '
+                        . number_format($scholarship_pct, 2)
+                        . '% (tuition only)';
+                }
+            }
+
             // Recalculate scholarship cascades / payables when fee inputs changed
             if ($tuition !== null || $monthly_fixed !== null || $fixed_total !== null
                 || $english_total !== null || $english_per_sem !== null
                 || $total_semesters !== null
-                || $total_months !== null || $mps !== null) {
+                || $total_months !== null || $mps !== null
+                || ($scholarship_label !== '' && $scholarship_pct !== null)) {
                 $sf_stmt = $db->prepare('SELECT id FROM sfp_semester_fees WHERE package_id = ?');
                 $sf_stmt->execute([$package_id]);
                 foreach ($sf_stmt->fetchAll() as $sf) {
