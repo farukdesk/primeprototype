@@ -109,6 +109,49 @@ function gs_exam_fk_table(): string
     return $table;
 }
 
+function gs_fk_exam_id_set(): ?array
+{
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $table = gs_exam_fk_table();
+    if (!in_array($table, ['ei_exams', 'result_exams'], true)) {
+        $cache = [];
+        return $cache;
+    }
+
+    try {
+        $rows = db()->query("SELECT id FROM {$table}")->fetchAll();
+        $cache = [];
+        foreach ($rows as $row) {
+            $id = (int)($row['id'] ?? 0);
+            if ($id > 0) $cache[$id] = true;
+        }
+    } catch (Throwable $e) {
+        $cache = null;
+    }
+
+    return $cache;
+}
+
+function gs_filter_exam_rows_for_fk(array $rows): array
+{
+    $fk_ids = gs_fk_exam_id_set();
+    if ($fk_ids === null) {
+        return $rows;
+    }
+
+    $filtered = [];
+    foreach ($rows as $row) {
+        $id = (int)($row['id'] ?? 0);
+        if ($id > 0 && isset($fk_ids[$id])) {
+            $filtered[] = $row;
+        }
+    }
+
+    return $filtered;
+}
+
 function gs_published_exam_map(): array
 {
     try {
@@ -189,7 +232,7 @@ function gs_exam_options(): array
             $legacy['exam_title'] = gs_format_exam_title($legacy);
             $rows[] = $legacy;
         }
-        return $rows;
+        return gs_filter_exam_rows_for_fk($rows);
     }
 
     foreach ($rows as &$row) {
@@ -230,7 +273,7 @@ function gs_exam_options(): array
         }
     }
 
-    return $rows;
+    return gs_filter_exam_rows_for_fk($rows);
 }
 
 function gs_get_exam(int $id): ?array
