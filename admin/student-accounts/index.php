@@ -20,8 +20,17 @@ $f_sems    = (int)($_GET['sems']    ?? 0);
 // OLD ERP cross-check status filter:
 // '' | 'mismatch' | 'match' | 'unchecked' | 'monthly_mismatch' | 'monthly_match'
 $f_erp     = trim($_GET['erp'] ?? '');
+$f_gpa_from = trim((string)($_GET['gpa_from'] ?? ''));
+$f_gpa_to   = trim((string)($_GET['gpa_to'] ?? ''));
 if (!in_array($f_erp, ['', 'mismatch', 'match', 'unchecked', 'monthly_mismatch', 'monthly_match'], true)) {
     $f_erp = '';
+}
+$gpa_from = is_numeric($f_gpa_from) ? (float)$f_gpa_from : null;
+$gpa_to   = is_numeric($f_gpa_to) ? (float)$f_gpa_to : null;
+if ($gpa_from !== null) $gpa_from = max(0.0, min(4.0, $gpa_from));
+if ($gpa_to !== null)   $gpa_to   = max(0.0, min(4.0, $gpa_to));
+if ($gpa_from !== null && $gpa_to !== null && $gpa_from > $gpa_to) {
+    [$gpa_from, $gpa_to] = [$gpa_to, $gpa_from];
 }
 
 $where  = ['1=1'];
@@ -114,6 +123,159 @@ $sfp_index_monthly_check = static function (array $pkg): ?array {
     return sfp_old_erp_monthly_check((float)$pkg['old_erp_monthly_amount'], $expected);
 };
 
+$sfp_gpa_exam_kind = static function (?string $exam_name): int {
+    $n = strtolower(trim((string)$exam_name));
+    if ($n === '') return 1;
+    if (preg_match('/\bfinal\b/', $n)) return 2;
+    if (preg_match('/\bmid\s*-?\s*term\b|\bmidterm\b|\bmid\b/', $n)) return 0;
+    return 1;
+};
+
+$sfp_gpa_marks_filled = static function (?string $marks_json): int {
+    if ($marks_json === null || $marks_json === '') return 0;
+    $m = json_decode($marks_json, true);
+    if (!is_array($m)) return 0;
+    return count(array_filter($m, static fn($v) => $v !== null && $v !== ''));
+};
+
+$sfp_parse_semester_sort = static function (?string $label): ?array {
+    $label = trim((string)$label);
+    if ($label === '') return null;
+    if (!preg_match('/\b(Spring|Summer|Fall|Autumn|Winter)\b\D*(\d{4})\b/i', $label, $m)) {
+        return null;
+    }
+    $term = strtolower($m[1]);
+    $rank = match ($term) {
+        'spring' => 1,
+        'summer' => 2,
+        'fall', 'autumn' => 3,
+        'winter' => 4,
+        default => 0,
+    };
+    return ['sort' => ((int)$m[2]) * 10 + $rank, 'label' => ucfirst($term) . ' ' . (int)$m[2]];
+};
+
+$sfp_latest_semester_gpa_by_student = static function (PDO $db, array $student_rows) use ($sfp_gpa_exam_kind, $sfp_gpa_marks_filled, $sfp_parse_semester_sort): array {
+    if (empty($student_rows)) return [];
+    $student_ids = array_values(array_unique(array_map(static fn($r) => (int)$r['student_id'], $student_rows)));
+    if (empty($student_ids)) return [];
+    $ph = implode(',', array_fill(0, count($student_ids), '?'));
+    $sql = "SELECT s.id AS student_pk,
+                   ms.id AS sheet_id,
+                   ms.semester,
+                   ms.subject_code,
+                   ms.subject_title,
+                   ms.marks_json AS ms_marks_json,
+                   COALESCE(ms.credits, cc.credit) AS credits,
+                   e.exam_name,
+                   e.end_date AS exam_end_date,
+                   g.letter_grade,
+                   g.grade_point,
+                   g.marks_json,
+                   (SELECT MAX(h.acted_at) FROM wf_sheet_history h
+                     WHERE h.sheet_id = ms.id AND h.action = 'published') AS published_at
+              FROM result_sheet_grades g
+              JOIN result_mark_sheets ms ON ms.id = g.sheet_id
+              LEFT JOIN course_curriculum cc ON cc.id = ms.curriculum_id
+              LEFT JOIN ei_exams e ON e.id = ms.exam_id
+              JOIN students s
+                ON (g.student_id = s.id OR (g.student_sid IS NOT NULL AND g.student_sid <> '' AND g.student_sid = s.student_id))
+             WHERE ms.workflow_status = 'published'
+               AND ms.semester IS NOT NULL
+               AND ms.semester <> ''
+               AND s.id IN ($ph)
+               AND e.end_date IS NOT NULL
+               AND e.end_date < CURDATE()
+             ORDER BY ms.id ASC";
+    $stmt = $db->prepare($sql);
+    $stmt->execute($student_ids);
+    $rows = $stmt->fetchAll();
+    if (empty($rows)) return [];
+
+    $data = [];
+    foreach ($rows as $row) {
+        $sid = (int)$row['student_pk'];
+        $sem_raw = trim((string)$row['semester']);
+        if ($sem_raw === '') continue;
+        $term = $sfp_parse_semester_sort($sem_raw);
+        $sem_key = $term['label'] ?? $sem_raw;
+        $sem_sort = $term['sort'] ?? 0;
+
+        $code = trim((string)($row['subject_code'] ?? ''));
+        if ($code === '') {
+            $code = trim((string)($row['subject_title'] ?? ''));
+        }
+        if (!isset($data[$sid][$sem_key])) {
+            $data[$sid][$sem_key] = ['sort' => $sem_sort, 'published_at' => '', 'courses' => []];
+        }
+        if ($sem_sort > (int)$data[$sid][$sem_key]['sort']) {
+            $data[$sid][$sem_key]['sort'] = $sem_sort;
+        }
+        if (!empty($row['published_at']) && (string)$row['published_at'] > (string)$data[$sid][$sem_key]['published_at']) {
+            $data[$sid][$sem_key]['published_at'] = (string)$row['published_at'];
+        }
+
+        $rank = [
+            $sfp_gpa_exam_kind($row['exam_name'] ?? null),
+            $sfp_gpa_marks_filled($row['marks_json'] ?? null),
+            (string)($row['published_at'] ?? ''),
+            (int)($row['sheet_id'] ?? 0),
+        ];
+        $slot = $code === '' ? ('sheet_' . (int)$row['sheet_id']) : $code;
+        if (!isset($data[$sid][$sem_key]['courses'][$slot]) || $rank > $data[$sid][$sem_key]['courses'][$slot]['rank']) {
+            $data[$sid][$sem_key]['courses'][$slot] = ['rank' => $rank, 'row' => $row];
+        }
+    }
+
+    $out = [];
+    foreach ($data as $sid => $semesters) {
+        $latest_key = null;
+        $latest_sort = -1;
+        $latest_pub = '';
+        foreach ($semesters as $sem_key => $sem) {
+            $srt = (int)($sem['sort'] ?? 0);
+            $pub = (string)($sem['published_at'] ?? '');
+            if ($latest_key === null || $srt > $latest_sort || ($srt === $latest_sort && $pub > $latest_pub)) {
+                $latest_key = $sem_key;
+                $latest_sort = $srt;
+                $latest_pub = $pub;
+            }
+        }
+        if ($latest_key === null) continue;
+
+        $courses = $semesters[$latest_key]['courses'] ?? [];
+        $points = 0.0;
+        $credits = 0.0;
+        $fails = 0;
+        $incom = 0;
+        foreach ($courses as $c) {
+            $r = $c['row'];
+            $grade = strtoupper(trim((string)($r['letter_grade'] ?? '')));
+            $gp_raw = $r['grade_point'] ?? null;
+            $point = is_numeric($gp_raw) ? (float)$gp_raw : null;
+            $cr_raw = $r['credits'] ?? 0;
+            $cr = is_numeric($cr_raw) ? (float)$cr_raw : 0.0;
+
+            if ($grade === 'INCOM' || strpos($grade, 'INCOM') === 0) {
+                $incom++;
+                continue;
+            }
+            if ($grade === 'F' || ($point !== null && $point <= 0.0)) {
+                $fails++;
+                continue;
+            }
+            if ($point !== null && $cr > 0) {
+                $points += $cr * $point;
+                $credits += $cr;
+            }
+        }
+
+        $gpa = ($fails > 0 || $incom > 0 || $credits <= 0) ? null : round($points / $credits, 2);
+        $out[$sid] = ['semester' => $latest_key, 'gpa' => $gpa, 'withheld' => ($fails > 0 || $incom > 0)];
+    }
+    return $out;
+};
+
 // ── Pagination ────────────────────────────────────────────────────────────────
 $per_page = 25;
 $page     = max(1, (int)($_GET['page'] ?? 1));
@@ -152,14 +314,16 @@ $list_select =
       WHERE $where_sql
       ORDER BY p.created_at DESC";
 
-if (in_array($f_erp, ['mismatch', 'match', 'monthly_mismatch', 'monthly_match'], true)) {
+if (in_array($f_erp, ['mismatch', 'match', 'monthly_mismatch', 'monthly_match'], true) || $gpa_from !== null || $gpa_to !== null) {
     // Match / mismatch is computed from live fee math, so load all checked
     // candidate rows (SQL already restricts to the relevant captured amount),
     // evaluate each one and paginate in PHP.
     $stmt = $db->prepare($list_select);
     $stmt->execute($params);
+    $all_rows = $stmt->fetchAll();
+    $gpa_map  = $sfp_latest_semester_gpa_by_student($db, $all_rows);
     $filtered = [];
-    foreach ($stmt->fetchAll() as $row) {
+    foreach ($all_rows as $row) {
         if ($f_erp === 'monthly_mismatch' || $f_erp === 'monthly_match') {
             $chk = $sfp_index_monthly_check($row);
             if ($chk === null) {
@@ -167,23 +331,43 @@ if (in_array($f_erp, ['mismatch', 'match', 'monthly_mismatch', 'monthly_match'],
             }
             if (($f_erp === 'monthly_mismatch' && !$chk['matched'])
                 || ($f_erp === 'monthly_match' && $chk['matched'])) {
-                $filtered[] = $row;
+                // pass
+            } else {
+                continue;
             }
-            continue;
+        } elseif ($f_erp === 'mismatch' || $f_erp === 'match') {
+            $chk = $sfp_index_erp_check($row);
+            if ($chk === null) {
+                continue;
+            }
+            if (($f_erp === 'mismatch' && !$chk['matched'])
+                || ($f_erp === 'match' && $chk['matched'])) {
+                // pass
+            } else {
+                continue;
+            }
         }
-        $chk = $sfp_index_erp_check($row);
-        if ($chk === null) {
-            continue;
+
+        if ($gpa_from !== null || $gpa_to !== null) {
+            $sid = (int)$row['student_id'];
+            $gpa = $gpa_map[$sid]['gpa'] ?? null;
+            if ($gpa === null) {
+                continue;
+            }
+            if ($gpa_from !== null && $gpa < $gpa_from) continue;
+            if ($gpa_to !== null && $gpa > $gpa_to) continue;
         }
-        if (($f_erp === 'mismatch' && !$chk['matched'])
-            || ($f_erp === 'match' && $chk['matched'])) {
-            $filtered[] = $row;
-        }
+        $filtered[] = $row;
     }
     $total    = count($filtered);
     $pages    = max(1, (int)ceil($total / $per_page));
     $page     = min($page, $pages);
     $packages = array_slice($filtered, ($page - 1) * $per_page, $per_page);
+    $latest_gpa_map = [];
+    foreach ($packages as $pkg_row) {
+        $sid = (int)$pkg_row['student_id'];
+        if (isset($gpa_map[$sid])) $latest_gpa_map[$sid] = $gpa_map[$sid];
+    }
 } else {
     $cnt_stmt = $db->prepare(
         "SELECT COUNT(*)
@@ -200,6 +384,7 @@ if (in_array($f_erp, ['mismatch', 'match', 'monthly_mismatch', 'monthly_match'],
     $stmt = $db->prepare($list_select . " LIMIT $per_page OFFSET $off");
     $stmt->execute($params);
     $packages = $stmt->fetchAll();
+    $latest_gpa_map = $sfp_latest_semester_gpa_by_student($db, $packages);
 }
 
 // ── Filter dropdown data ──────────────────────────────────────────────────────
@@ -322,9 +507,19 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="col-6 col-md-2 d-flex gap-2">
                 <button class="btn btn-primary btn-sm flex-fill" type="submit"><i class="fas fa-search me-1"></i>Filter</button>
-                <?php if ($search !== '' || $f_dept || $f_program || $f_batch || $f_sems || $f_erp !== ''): ?>
+                <?php if ($search !== '' || $f_dept || $f_program || $f_batch || $f_sems || $f_erp !== '' || $f_gpa_from !== '' || $f_gpa_to !== ''): ?>
                 <a href="<?= APP_URL ?>/student-accounts/index.php" class="btn btn-outline-secondary btn-sm flex-fill">Clear</a>
                 <?php endif; ?>
+            </div>
+            <div class="col-6 col-md-1">
+                <label class="form-label fw-semibold small mb-1">GPA From</label>
+                <input type="number" name="gpa_from" class="form-control form-control-sm" min="0" max="4" step="0.01"
+                       value="<?= h($f_gpa_from) ?>" placeholder="0.00">
+            </div>
+            <div class="col-6 col-md-1">
+                <label class="form-label fw-semibold small mb-1">GPA To</label>
+                <input type="number" name="gpa_to" class="form-control form-control-sm" min="0" max="4" step="0.01"
+                       value="<?= h($f_gpa_to) ?>" placeholder="4.00">
             </div>
         </form>
     </div>
@@ -534,6 +729,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Semesters</th>
                         <th>Tuition / Sem</th>
                         <th>Monthly Fixed</th>
+                        <th>Last Published Semester GPA</th>
                         <th>Assigned</th>
                         <th></th>
                     </tr>
@@ -642,6 +838,17 @@ require_once __DIR__ . '/../includes/header.php';
                     <td><?= sfp_money($current_sem_total) ?></td>
                     <td><?= sfp_money($current_monthly_total) ?></td>
                     <td>
+                        <?php $lg = $latest_gpa_map[(int)$pkg['student_id']] ?? null; ?>
+                        <?php if ($lg): ?>
+                            <div class="fw-semibold"><?= h($lg['semester']) ?></div>
+                            <small class="text-muted">
+                                <?= $lg['gpa'] !== null ? number_format((float)$lg['gpa'], 2) : 'Withheld' ?>
+                            </small>
+                        <?php else: ?>
+                            <small class="text-muted">—</small>
+                        <?php endif; ?>
+                    </td>
+                    <td>
                         <small class="text-muted"><?= date('d M Y', strtotime($pkg['created_at'])) ?></small>
                     </td>
                     <td class="text-end">
@@ -695,7 +902,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php for ($p = 1; $p <= $pages; $p++): ?>
                     <li class="page-item <?= $p === $page ? 'active' : '' ?>">
                         <a class="page-link"
-                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'sems' => $f_sems ?: '', 'erp' => $f_erp ?: '', 'page' => $p]) ?>">
+                           href="?<?= http_build_query(['q' => $search, 'dept' => $f_dept ?: '', 'program' => $f_program ?: '', 'batch' => $f_batch ?: '', 'sems' => $f_sems ?: '', 'erp' => $f_erp ?: '', 'gpa_from' => $f_gpa_from, 'gpa_to' => $f_gpa_to, 'page' => $p]) ?>">
                             <?= $p ?>
                         </a>
                     </li>
