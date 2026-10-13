@@ -87,6 +87,7 @@ function gs_exam_fk_table(): string
     if ($table !== null) return $table;
 
     $table = 'ei_exams';
+    $resolved_by_fk = false;
     try {
         $st = db()->prepare(
             "SELECT k.REFERENCED_TABLE_NAME
@@ -101,9 +102,28 @@ function gs_exam_fk_table(): string
         $ref = (string)($st->fetchColumn() ?: '');
         if (in_array($ref, ['ei_exams', 'result_exams'], true)) {
             $table = $ref;
+            $resolved_by_fk = true;
         }
     } catch (Throwable $e) {
         $table = 'ei_exams';
+    }
+
+    if (!$resolved_by_fk) {
+        $ei_has_rows = false;
+        $legacy_has_rows = false;
+        try {
+            $ei_has_rows = (bool)db()->query('SELECT 1 FROM ei_exams LIMIT 1')->fetchColumn();
+        } catch (Throwable $e) {
+            $ei_has_rows = false;
+        }
+        try {
+            $legacy_has_rows = (bool)db()->query('SELECT 1 FROM result_exams LIMIT 1')->fetchColumn();
+        } catch (Throwable $e) {
+            $legacy_has_rows = false;
+        }
+        if (!$ei_has_rows && $legacy_has_rows) {
+            $table = 'result_exams';
+        }
     }
 
     return $table;
@@ -247,6 +267,25 @@ function gs_exam_options(): array
         $row['exam_title'] = gs_format_exam_title($row);
     }
     unset($row);
+
+    if (!empty($legacy_map)) {
+        $current_ids = [];
+        foreach ($rows as $row) {
+            $id = (int)($row['id'] ?? 0);
+            if ($id > 0) $current_ids[$id] = true;
+        }
+        foreach ($legacy_map as $legacy_id => $legacy) {
+            $legacy_id = (int)$legacy_id;
+            if ($legacy_id <= 0 || isset($current_ids[$legacy_id])) continue;
+            $legacy['id'] = $legacy_id;
+            $legacy['exam_name'] = (string)($legacy['exam_title'] ?? '');
+            $legacy['exam_year'] = null;
+            $legacy['is_active'] = 1;
+            $legacy['legacy_exam_title'] = $legacy['exam_title'] ?? null;
+            $legacy['exam_title'] = gs_format_exam_title($legacy);
+            $rows[] = $legacy;
+        }
+    }
 
     $published_map = gs_published_exam_map();
     if (!empty($published_map)) {
