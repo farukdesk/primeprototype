@@ -166,6 +166,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <th style="width:50px;">#</th>
                         <th>Student ID</th>
                         <th>Name</th>
+                        <th>Course Code</th>
+                        <th>Course Title</th>
                         <th>Department</th>
                         <th>Program</th>
                         <th>Batch</th>
@@ -182,6 +184,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <td><?= $i + 1 ?></td>
                         <td class="fw-semibold"><?= h($stu['student_id']) ?></td>
                         <td><?= h($stu['full_name']) ?></td>
+                        <td><?= ($stu['course_code'] ?? '') !== '' ? h($stu['course_code']) : '<span class="text-muted">—</span>' ?></td>
+                        <td><?= ($stu['course_title'] ?? '') !== '' ? h($stu['course_title']) : '<span class="text-muted">—</span>' ?></td>
                         <td><?= h($stu['dept_name']) ?></td>
                         <td><?= h($stu['program_name'] ?? '—') ?></td>
                         <td><?= h($stu['batch_name'] ?? '—') ?></td>
