@@ -12,8 +12,8 @@
  *   - Tuition per semester (applied to every semester row, scholarships recalculated)
  *   - Monthly fixed fee (fixed_institutional_fees re-derived from total_months)
  *   - Fixed institutional fees total (monthly_fixed_fee re-derived)
- *   - Bulk scholarship (name + percentage) applied to tuition only
- *     across all semester rows in each selected package
+ *   - Bulk scholarship (name + percentage) applied to tuition only, either
+ *     across all semester rows or to one selected semester number
  *   - "Select all pages": when select_all_matching = 1, package IDs are
  *     resolved server-side from the posted list filters
  *   - Project fee (requires the project_fee column - see
@@ -102,6 +102,7 @@ $monthly_raw   = trim((string)($_POST['bulk_monthly_fixed']        ?? ''));
 $project_raw   = trim((string)($_POST['bulk_project_fee']          ?? ''));
 $sch_label_raw = trim((string)($_POST['bulk_scholarship_label']    ?? ''));
 $sch_pct_raw   = trim((string)($_POST['bulk_scholarship_pct']      ?? ''));
+$scholarship_semester_raw = trim((string)($_POST['bulk_scholarship_semester'] ?? ''));
 $fixed_total_raw = trim((string)($_POST['bulk_fixed_institutional_fees'] ?? ''));
 $english_total_raw   = trim((string)($_POST['bulk_english_course_fee']   ?? ''));
 $english_per_sem_raw = trim((string)($_POST['bulk_english_per_semester'] ?? ''));
@@ -122,6 +123,7 @@ $monthly_fixed   = $monthly_raw   !== '' ? round((float)$monthly_raw, 2) : null;
 $project_fee     = $project_raw   !== '' ? round((float)$project_raw, 2) : null;
 $scholarship_label = $sch_label_raw;
 $scholarship_pct   = $sch_pct_raw !== '' ? round((float)$sch_pct_raw, 2) : null;
+$scholarship_semester = null;
 $fixed_total     = $fixed_total_raw !== '' ? round((float)$fixed_total_raw, 2) : null;
 $english_total   = $english_total_raw   !== '' ? round((float)$english_total_raw, 2)   : null;
 $english_per_sem = $english_per_sem_raw !== '' ? round((float)$english_per_sem_raw, 2) : null;
@@ -176,6 +178,18 @@ if (($scholarship_label !== '' && $scholarship_pct === null)
 }
 if ($scholarship_pct !== null && ($scholarship_pct < 0.01 || $scholarship_pct > 100)) {
     $errors[] = 'Bulk Scholarship % must be between 0.01 and 100.';
+}
+if ($scholarship_semester_raw !== '') {
+    $validated_semester = filter_var(
+        $scholarship_semester_raw,
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1]]
+    );
+    if ($validated_semester === false) {
+        $errors[] = 'Scholarship semester must be a positive semester number.';
+    } else {
+        $scholarship_semester = (int)$validated_semester;
+    }
 }
 if ($monthly_fixed !== null && $monthly_fixed < 0)      $errors[] = 'Monthly fixed fee cannot be negative.';
 if ($fixed_total   !== null && $fixed_total   < 0)      $errors[] = 'Fixed institutional fees cannot be negative.';
@@ -567,10 +581,14 @@ if (empty($errors)) {
             }
 
             if ($scholarship_label !== '' && $scholarship_pct !== null) {
-                $sf_stmt3 = $db->prepare(
-                    'SELECT id FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number'
+                $sf_stmt3 = $db->prepare($scholarship_semester === null
+                    ? 'SELECT id FROM sfp_semester_fees WHERE package_id = ? ORDER BY semester_number'
+                    : 'SELECT id FROM sfp_semester_fees WHERE package_id = ? AND semester_number = ?'
                 );
-                $sf_stmt3->execute([$package_id]);
+                $sf_stmt3->execute($scholarship_semester === null
+                    ? [$package_id]
+                    : [$package_id, $scholarship_semester]
+                );
                 $sf_rows_for_sc = $sf_stmt3->fetchAll();
 
                 if (!empty($sf_rows_for_sc)) {
@@ -582,7 +600,10 @@ if (empty($errors)) {
                          VALUES (?, ?, ?, \'percentage\', NULL, 0, ?, 0, 0, 0, NULL, ?)'
                     );
 
-                    $bulk_note = 'Bulk scholarship from student accounts index';
+                    $bulk_note = 'Bulk scholarship from student accounts index'
+                        . ($scholarship_semester === null
+                            ? ''
+                            : ' (Semester ' . $scholarship_semester . ')');
                     foreach ($sf_rows_for_sc as $sf_sc_row) {
                         $ins_bulk_sc->execute([
                             (int)$sf_sc_row['id'],
@@ -595,7 +616,10 @@ if (empty($errors)) {
 
                     $changes[] = 'scholarship "' . $scholarship_label . '" -> '
                         . number_format($scholarship_pct, 2)
-                        . '% (tuition only)';
+                        . '% (tuition only'
+                        . ($scholarship_semester === null
+                            ? ', all semesters)'
+                            : ', Semester ' . $scholarship_semester . ' only)');
                 }
             }
 

@@ -396,6 +396,8 @@ $batches      = sm_batches();
 $semester_options = $db->query(
     'SELECT DISTINCT total_semesters FROM sfp_packages ORDER BY total_semesters ASC'
 )->fetchAll(PDO::FETCH_COLUMN);
+$max_semesters = max(array_map('intval', $semester_options ?: [1]));
+$bulk_scholarship_semester_options = range(1, $max_semesters);
 
 // Bulk edit is available to super admins and the Freelancer user group
 $can_bulk_edit    = sfp_can_bulk_edit();
@@ -595,6 +597,15 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="number" name="bulk_scholarship_pct" class="form-control form-control-sm"
                            min="0.01" max="100" step="0.01" placeholder="&mdash;">
                     <div class="form-text small">Applied to tuition only (not Fixed Institutional Fees or English Course Fee).</div>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold small mb-1">Scholarship Semester</label>
+                    <select name="bulk_scholarship_semester" class="form-select form-select-sm">
+                        <option value="">All semesters</option>
+                        <?php foreach ($bulk_scholarship_semester_options as $semester_number): ?>
+                        <option value="<?= $semester_number ?>">Semester <?= $semester_number ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
                 <div class="col-6 col-md-2">
                     <label class="form-label fw-semibold small mb-1">Monthly Fixed</label>
