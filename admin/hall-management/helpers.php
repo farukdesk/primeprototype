@@ -463,7 +463,7 @@ function hm_assignments(int $hall_id, string $exam_date): array
     try {
         $st = db()->prepare(
             "SELECT a.*, s.student_id AS student_code, s.full_name,
-                    s.dept_id AS student_dept_id,
+                    s.dept_id AS student_dept_id, s.program_id AS student_program_id,
                     s.batch_id AS student_batch_id, b.name AS batch_name,
                     COALESCE(NULLIF(a.section, ''), NULLIF(s.section, ''), '') AS student_section
                FROM hm_hall_assignments a
@@ -721,6 +721,7 @@ function hm_assign_students(int $hall_id, string $exam_date, array $students, ar
         }
         if ($hall_conflict) { $skipped++; continue; }
 
+        if ($exam_time === null) $exam_time = (string)$slot['start'];
         $ck = strtoupper(trim((string)($stu['course_code'] ?? '')));
         $stu['_slot_interval'] = $slot;
         $groups[$ck][] = $stu;
