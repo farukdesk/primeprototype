@@ -1080,6 +1080,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <span class="fw-semibold"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Fee Schedule &amp; Outstanding Balance</span>
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6" id="totalOutstandingBadge"></span>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnPrintStatement" title="Print the fee schedule &amp; outstanding balance as a statement">
+                        <i class="fas fa-print me-1"></i>Print Statement
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#feeObligationsCollapse" aria-expanded="true" aria-controls="feeObligationsCollapse">
                         <i class="fas fa-list me-1"></i>Details
                     </button>
@@ -1480,6 +1483,9 @@ require_once __DIR__ . '/../includes/header.php';
     const CASH_ACCOUNT_LABELS = <?= json_encode($cash_account_labels_by_id) ?>;
     const STUDENT_FORM_FEE = <?= json_encode((float)acc_student_form_fee_amount()) ?>;
     const STUDENT_ID_CARD_FEE = <?= json_encode((float)acc_student_id_card_fee_amount()) ?>;
+    const UNI_LOGO_URL = <?= json_encode(acc_university_logo_url()) ?>;
+    const UNI_ADDRESS  = <?= json_encode(acc_university_address()) ?>;
+    const UNI_WEBSITE  = <?= json_encode(acc_university_website()) ?>;
 
     // Income account map injected by AJAX response
     let incomeAccountsMap = {};
@@ -2918,6 +2924,182 @@ require_once __DIR__ . '/../includes/header.php';
         admAppNumberInput.value = '';
         admAppNumberInput.focus();
     });
+
+    // ── Print Fee Schedule & Outstanding Balance as a statement ──────────────
+    // Clones the on-screen fee table, strips interactive bits (checkboxes,
+    // Collect buttons, progress bars, links) and opens a clean A4 statement
+    // window with the university letterhead, student info and signatures.
+    function escStmt(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => (
+            {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+        ));
+    }
+
+    function buildStatementTable() {
+        const src = document.getElementById('feeTable');
+        if (!src) return '';
+        const table = src.cloneNode(true);
+        table.removeAttribute('id');
+        table.className = 'stmt-table';
+
+        // Drop the "#" (checkbox) and "Action" columns from every row.
+        table.querySelectorAll('tr').forEach(tr => {
+            const cells = tr.children;
+            if (cells.length === 1) {
+                // Section / semester-drop header rows span the full width.
+                cells[0].setAttribute('colspan', '4');
+                return;
+            }
+            if (cells.length >= 6) {
+                tr.removeChild(cells[cells.length - 1]); // Action
+                tr.removeChild(cells[0]);                // # / checkbox
+            }
+        });
+
+        // Strip interactive & decorative elements.
+        table.querySelectorAll('input, button, .progress').forEach(el => el.remove());
+        table.querySelectorAll('i.fas, i.far, i.fa').forEach(el => el.remove());
+        // Flatten voucher links to plain text.
+        table.querySelectorAll('a').forEach(a => {
+            const span = document.createElement('span');
+            span.textContent = a.textContent.trim();
+            a.replaceWith(span);
+        });
+        // Remove element ids so the print window has no duplicate-id clones.
+        table.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+        return table.outerHTML;
+    }
+
+    function printStatement() {
+        if (!currentStudent || !currentSummary) {
+            alert('Load a student first to print their statement.');
+            return;
+        }
+        const tbody = document.getElementById('feeTableBody');
+        if (!tbody || !tbody.children.length) {
+            alert('No fee schedule loaded yet. Please load a student first.');
+            return;
+        }
+
+        const pkg      = currentSummary.package || {};
+        const statusEl = document.getElementById('infoStatus');
+        const outBadge = document.getElementById('totalOutstandingBadge');
+        const now      = new Date();
+        const genAt    = now.toLocaleDateString('en-GB', {year: 'numeric', month: 'long', day: 'numeric'})
+                       + ' ' + now.toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'});
+
+        const totalDue  = document.getElementById('footTotalDue')?.textContent || '';
+        const totalPaid = document.getElementById('footTotalPaid')?.textContent || '';
+        const totalOut  = document.getElementById('footTotalOut')?.textContent || '';
+
+        const logoHtml = UNI_LOGO_URL
+            ? '<img src="' + escStmt(UNI_LOGO_URL) + '" alt="Logo" class="stmt-logo">'
+            : '';
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fee Statement – ${escStmt(currentStudent.full_name)} (${escStmt(currentStudent.student_id)})</title>
+<style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; margin: 0; padding: 24px; font-size: 11px; }
+    .stmt-sheet { max-width: 800px; margin: 0 auto; }
+    .stmt-head { position: relative; text-align: center; border-bottom: 2px solid #198754; padding-bottom: 10px; margin-bottom: 12px; }
+    .stmt-logo { position: absolute; left: 0; top: 0; height: 52px; width: auto; }
+    .stmt-uni { font-size: 17px; font-weight: 700; color: #198754; }
+    .stmt-addr { font-size: 10px; color: #555; }
+    .stmt-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-top: 6px; }
+    .stmt-sub { font-size: 10px; color: #777; }
+    .stmt-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 11px; }
+    .stmt-meta table td { padding: 1px 10px 1px 0; vertical-align: top; }
+    .stmt-meta .lbl { color: #666; }
+    .stmt-meta .val { font-weight: 600; }
+    .stmt-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    .stmt-table th, .stmt-table td { border: 1px solid #ccc; padding: 4px 8px; font-size: 10.5px; }
+    .stmt-table thead th { background: #f1f3f5; text-align: left; }
+    .stmt-table .text-end { text-align: right; }
+    .stmt-table .text-center { text-align: center; }
+    .stmt-table .table-secondary td { background: #e9ecef; font-weight: 600; }
+    .stmt-table .sd-drop-row td { background: #fdf6e3; font-style: italic; color: #666; }
+    .stmt-table tfoot td { background: #f1f3f5; font-weight: 700; }
+    .stmt-table .text-danger { color: #b02a37; }
+    .stmt-table .text-success { color: #146c43; }
+    .stmt-summary { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+    .stmt-summary table td { padding: 3px 12px; border: 1px solid #ccc; font-size: 11px; }
+    .stmt-summary .lbl { background: #f1f3f5; font-weight: 600; }
+    .stmt-summary .out { color: #b02a37; font-weight: 700; }
+    .stmt-sign { display: flex; justify-content: space-between; margin-top: 48px; }
+    .stmt-sign div { width: 180px; border-top: 1px solid #333; text-align: center; font-size: 10px; padding-top: 4px; }
+    .stmt-foot { margin-top: 28px; border-top: 1px dashed #bbb; padding-top: 6px; font-size: 9px; color: #888; text-align: center; }
+    .no-print { text-align: center; margin-bottom: 14px; }
+    .no-print button { padding: 6px 18px; font-size: 13px; cursor: pointer; }
+    @media print {
+        body { padding: 0; }
+        .no-print { display: none !important; }
+        @page { size: A4 portrait; margin: 12mm; }
+    }
+</style>
+</head>
+<body>
+<div class="no-print"><button onclick="window.print()">&#128438; Print Statement</button></div>
+<div class="stmt-sheet">
+    <div class="stmt-head">
+        ${logoHtml}
+        <div class="stmt-uni">Prime University</div>
+        <div class="stmt-addr">${escStmt(UNI_ADDRESS)}${UNI_WEBSITE ? ' &nbsp;|&nbsp; ' + escStmt(UNI_WEBSITE) : ''}</div>
+        <div class="stmt-title">Student Fee Statement</div>
+        <div class="stmt-sub">Fee Schedule &amp; Outstanding Balance</div>
+    </div>
+
+    <div class="stmt-meta">
+        <table>
+            <tr><td class="lbl">Student Name</td><td class="val">${escStmt(currentStudent.full_name)}</td></tr>
+            <tr><td class="lbl">Student ID</td><td class="val">${escStmt(currentStudent.student_id)}</td></tr>
+            <tr><td class="lbl">Program</td><td class="val">${escStmt(pkg.program_name || '—')}</td></tr>
+        </table>
+        <table>
+            <tr><td class="lbl">Statement Date</td><td class="val">${escStmt(genAt)}</td></tr>
+            <tr><td class="lbl">Status</td><td class="val">${escStmt(statusEl ? statusEl.textContent : 'Active')}</td></tr>
+            <tr><td class="lbl">${escStmt(outBadge ? outBadge.textContent.split(':')[0] : 'Outstanding')}</td><td class="val stmt-out" style="color:#b02a37">${escStmt(outBadge ? (outBadge.textContent.split(':')[1] || '').trim() : '')}</td></tr>
+        </table>
+    </div>
+
+    ${buildStatementTable()}
+
+    <div class="stmt-summary">
+        <table>
+            <tr><td class="lbl">Total Due</td><td class="text-end">${escStmt(totalDue)}</td></tr>
+            <tr><td class="lbl">Total Paid</td><td class="text-end">${(document.getElementById('footTotalPaid')?.innerHTML || '').includes('scholarship') ? document.getElementById('footTotalPaid').innerHTML : escStmt(totalPaid)}</td></tr>
+            <tr><td class="lbl">Outstanding Balance</td><td class="text-end out">${escStmt(totalOut)}</td></tr>
+        </table>
+    </div>
+
+    <div class="stmt-sign">
+        <div>Prepared By</div>
+        <div>Accounts Officer</div>
+        <div>Authorized Signature</div>
+    </div>
+
+    <div class="stmt-foot">
+        This is a computer-generated fee statement of scheduled dues and payments as of ${escStmt(genAt)}. Please retain it for your records. &nbsp;|&nbsp; Prime University${UNI_ADDRESS ? ', ' + escStmt(UNI_ADDRESS) : ''}
+    </div>
+</div>
+<script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });<\/script>
+</body>
+</html>`;
+
+        const win = window.open('', 'fee_statement_print', 'width=980,height=920');
+        if (!win) {
+            alert('Statement popup was blocked. Please allow popups for this site and try again.');
+            return;
+        }
+        win.document.open();
+        win.document.write(html);
+        win.document.close();
+    }
+
+    document.getElementById('btnPrintStatement').addEventListener('click', printStatement);
 
     // ── Disable submit buttons on form submit (prevent double-click / double-payment) ──
     function disableSubmitOnClick(formId) {
