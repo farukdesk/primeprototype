@@ -1113,7 +1113,7 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
             if ($ext_p === 'webp') $photo_mime = 'image/webp';
             $photo_b64  = base64_encode(file_get_contents($photo_abs));
             $photo_html = '<img src="data:' . $photo_mime . ';base64,' . $photo_b64 . '"
-                                style="width:95px;height:115px;object-fit:cover;border:1px solid #ddd;"
+                                style="width:85px;height:105px;object-fit:cover;border:1px solid #ddd;"
                                 alt="Student Photo">';
         }
     }
@@ -1123,22 +1123,22 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
     foreach ($courses as $c) {
         $date_str = $c['exam_date'] ? date('d/m/Y', strtotime($c['exam_date'])) : '—';
         $course_rows .= '<tr>'
-            . '<td style="border:1px solid #000;padding:6px;">' . h($c['course_code'])  . '</td>'
-            . '<td style="border:1px solid #000;padding:6px;text-align:left;">' . h($c['course_title']) . '</td>'
-            . '<td style="border:1px solid #000;padding:6px;">' . h($date_str)          . '</td>'
-            . '<td style="border:1px solid #000;padding:6px;">' . h($c['time_slot'] ?? '—')  . '</td>'
-            . '<td style="border:1px solid #000;padding:6px;">' . h($c['section']   ?? '—')  . '</td>'
-            . '<td style="border:1px solid #000;padding:6px;">' . h(($c['hall_room'] ?? '') !== '' ? $c['hall_room'] : '—') . '</td>'
-            . '<td style="border:1px solid #000;padding:6px;">' . h(($c['hall_seat'] ?? '') !== '' ? $c['hall_seat'] : '—') . '</td>'
+            . '<td style="border:1px solid #000;padding:4px;">' . h($c['course_code'])  . '</td>'
+            . '<td style="border:1px solid #000;padding:4px;text-align:left;">' . h($c['course_title']) . '</td>'
+            . '<td style="border:1px solid #000;padding:4px;">' . h($date_str)          . '</td>'
+            . '<td style="border:1px solid #000;padding:4px;">' . h($c['time_slot'] ?? '—')  . '</td>'
+            . '<td style="border:1px solid #000;padding:4px;">' . h($c['section']   ?? '—')  . '</td>'
+            . '<td style="border:1px solid #000;padding:4px;">' . h(($c['hall_room'] ?? '') !== '' ? $c['hall_room'] : '—') . '</td>'
+            . '<td style="border:1px solid #000;padding:4px;">' . h(($c['hall_seat'] ?? '') !== '' ? $c['hall_seat'] : '—') . '</td>'
             . '</tr>';
     }
     if ($course_rows === '') {
-        $course_rows = '<tr><td colspan="7" style="border:1px solid #000;padding:8px;text-align:center;color:#777;">No courses listed</td></tr>';
+        $course_rows = '<tr><td colspan="7" style="border:1px solid #000;padding:6px;text-align:center;color:#777;">No courses listed</td></tr>';
     }
 
     $logo_img = $logo_uri
-        ? '<img src="' . $logo_uri . '" style="width:80px;height:auto;max-height:100px;" alt="Prime University">'
-        : '<div style="width:80px;height:100px;border:1px solid #ccc;display:flex;align-items:center;
+        ? '<img src="' . $logo_uri . '" style="width:72px;height:auto;max-height:85px;" alt="Prime University">'
+        : '<div style="width:72px;height:85px;border:1px solid #ccc;display:flex;align-items:center;
                        justify-content:center;font-size:11px;color:#777;">Logo</div>';
 
     // Bangla-capable font (when available): dompdf's core fonts render
@@ -1160,67 +1160,73 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
     $html = '<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
   ' . $font_face . 'body { margin:0; padding:0; font-family:' . $font_stack . '; }
-  @page { margin:15mm; }
+  @page { margin:10mm 12mm; }
 </style>
 </head><body>
-<div style="max-width:750px;margin:0 auto;font-family:' . $font_stack . ';color:#000;padding:20px;background:#fff;">
+<div style="max-width:750px;margin:0 auto;font-family:' . $font_stack . ';color:#000;background:#fff;">
 
   <!-- Header: logo + university/faculty/program (+ photo) on one line.
        Table layout is used because dompdf does not support flexbox. -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:15px;">
+  <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
     <tr>
       <td style="width:120px;text-align:center;vertical-align:middle;">' . $logo_img . '</td>
-      <td style="text-align:center;vertical-align:middle;line-height:1.4;">
-        <h1 style="margin:0;font-size:22px;font-weight:bold;">Prime University</h1>
-        <div style="font-size:15px;font-weight:bold;">' . $dept_label . '</div>
-        <div style="font-size:15px;font-weight:bold;">' . $program_label . '</div>
+      <td style="text-align:center;vertical-align:middle;line-height:1.35;">
+        <h1 style="margin:0;font-size:21px;font-weight:bold;">Prime University</h1>
+        <div style="font-size:14px;font-weight:bold;">' . $dept_label . '</div>
+        <div style="font-size:14px;font-weight:bold;">' . $program_label . '</div>
       </td>
       <td style="width:120px;text-align:center;vertical-align:middle;">' . $photo_html . '</td>
     </tr>
   </table>
 
   <!-- Admit Card title -->
-  <div style="text-align:center;margin:20px 0 14px 0;">
-    <span style="font-size:21px;font-weight:bold;border:3px solid #000;padding:2px 22px;display:inline-block;">Admit Card</span>
+  <div style="text-align:center;margin:10px 0 10px 0;">
+    <span style="font-size:19px;font-weight:bold;border:3px solid #000;padding:2px 22px;display:inline-block;">Admit Card</span>
   </div>
 
   <!-- Student info + course table -->
-  <table style="width:100%;border-collapse:collapse;text-align:center;font-size:14px;">
+  <table style="width:100%;border-collapse:collapse;text-align:center;font-size:12px;">
     <tbody>
       <tr>
-        <td style="border:1px solid #000;padding:6px;width:12%;">Name</td>
-        <td style="border:1px solid #000;padding:6px;font-weight:bold;width:30%;">' . $student_name . '</td>
-        <td colspan="5" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">' . $exam_name . '</td>
+        <td style="border:1px solid #000;padding:4px;width:12%;">Name</td>
+        <td style="border:1px solid #000;padding:4px;font-weight:bold;width:30%;">' . $student_name . '</td>
+        <td colspan="5" style="border:1px solid #000;padding:4px;font-size:12px;font-weight:bold;">' . $exam_name . '</td>
       </tr>
       <tr>
-        <td style="border:1px solid #000;padding:6px;">ID No.</td>
-        <td style="border:1px solid #000;padding:6px;font-weight:bold;">' . $student_id . '</td>
-        <td colspan="3" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">Batch: ' . $batch_label . '</td>
-        <td colspan="2" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">' . $semester . '</td>
+        <td style="border:1px solid #000;padding:4px;">ID No.</td>
+        <td style="border:1px solid #000;padding:4px;font-weight:bold;">' . $student_id . '</td>
+        <td colspan="3" style="border:1px solid #000;padding:4px;font-size:12px;font-weight:bold;">Batch: ' . $batch_label . '</td>
+        <td colspan="2" style="border:1px solid #000;padding:4px;font-size:12px;font-weight:bold;">' . $semester . '</td>
       </tr>
-      <tr style="font-weight:bold;font-size:15px;background:#f5f5f5;">
-        <td style="border:1px solid #000;padding:7px;">Course Code</td>
-        <td style="border:1px solid #000;padding:7px;">Course Title</td>
-        <td style="border:1px solid #000;padding:7px;">Date</td>
-        <td style="border:1px solid #000;padding:7px;">Time Slot</td>
-        <td style="border:1px solid #000;padding:7px;">Section</td>
-        <td style="border:1px solid #000;padding:7px;">Room</td>
-        <td style="border:1px solid #000;padding:7px;">Seat</td>
+      <tr style="font-weight:bold;font-size:12px;background:#f5f5f5;">
+        <td style="border:1px solid #000;padding:5px;">Course Code</td>
+        <td style="border:1px solid #000;padding:5px;">Course Title</td>
+        <td style="border:1px solid #000;padding:5px;">Date</td>
+        <td style="border:1px solid #000;padding:5px;">Time Slot</td>
+        <td style="border:1px solid #000;padding:5px;">Section</td>
+        <td style="border:1px solid #000;padding:5px;">Room</td>
+        <td style="border:1px solid #000;padding:5px;">Seat</td>
       </tr>
       ' . $course_rows . '
     </tbody>
   </table>
 
+  <!-- Seat guideline + department allocation notes -->
+  <div style="margin-top:8px;font-size:10.5px;color:#333;line-height:1.5;">
+    <div><strong>Seat guide:</strong> C = Column and S = Seat. For example, C3-S1 means Column 3, Seat 1 in the assigned room.</div>
+    <div><strong>Note:</strong> The department may slightly change a student\'s seat or room as needed. Please follow the department\'s seat allocation on exam day.</div>
+  </div>
+
   <!-- Footer with QR (table layout — dompdf does not support flexbox) -->
-  <table style="width:100%;border-collapse:collapse;margin-top:20px;">
+  <table style="width:100%;border-collapse:collapse;margin-top:8px;">
     <tr>
       <td style="font-size:11px;color:#555;line-height:1.5;vertical-align:bottom;">
-        <p style="margin:8px 0 0 0;font-style:italic;color:#444;">
+        <p style="margin:6px 0 0 0;font-style:italic;color:#444;">
           This is a digitally generated admit card. You can authenticate it by scanning the QR code.
         </p>
       </td>
-      <td style="width:110px;text-align:center;vertical-align:bottom;">
-        <img src="' . $qr_data_uri . '" style="width:100px;height:100px;" alt="QR Code">
+      <td style="width:95px;text-align:center;vertical-align:bottom;">
+        <img src="' . $qr_data_uri . '" style="width:85px;height:85px;" alt="QR Code">
         <div style="font-size:9px;color:#666;margin-top:2px;">Scan to verify</div>
       </td>
     </tr>
