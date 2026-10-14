@@ -206,6 +206,9 @@ require_once __DIR__ . '/../includes/header.php';
         </ol>
     </nav>
     <div class="d-flex gap-2">
+        <a href="<?= APP_URL ?>/hall-management/routine.php" class="btn btn-outline-primary" style="border-radius:10px;">
+            <i class="fas fa-calendar-alt me-1"></i> Exam Routine
+        </a>
         <a href="<?= APP_URL ?>/hall-management/problems.php?exam_date=<?= h($filter_date) ?><?= $filter_dept > 0 ? '&dept_id=' . $filter_dept : '' ?>"
            class="btn btn-outline-danger" style="border-radius:10px;" title="Find hall scheduling and seating conflicts">
             <i class="fas fa-exclamation-triangle me-1"></i> Problem Report
