@@ -10,8 +10,11 @@
  *      way the card generation/download path does, via ac_card_student_ids)
  *      is checked for an outstanding due as of today
  *      (ac_student_due_today → acc_outstanding_through_current_month).
- *   3. Students with a due are listed department-wise with batch, contact
- *      number and the amount — with a printable sheet.
+ *   3. Students with a due are listed grouped by department, program or
+ *      batch (selectable), filterable by department, program, batch,
+ *      section and shift — with a printable sheet.
+ *
+ * The module lives under the Accounts section of the admin sidebar.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_access('student-due-list');
@@ -46,20 +49,31 @@ try {
     $exams = $st->fetchAll();
 } catch (Throwable $e) {}
 
-$f_exam = trim((string)($_GET['exam'] ?? ''));
-$f_dept = (int)($_GET['dept'] ?? 0);
-$f_all  = (string)($_GET['show'] ?? 'due') === 'all';   // default: only students with a due
-$exam   = null;
+$f_exam    = trim((string)($_GET['exam'] ?? ''));
+$f_dept    = (int)($_GET['dept'] ?? 0);
+$f_program = (int)($_GET['program'] ?? 0);
+$f_batch   = (int)($_GET['batch'] ?? 0);
+$f_section = trim((string)($_GET['section'] ?? ''));
+$f_shift   = trim((string)($_GET['shift'] ?? ''));
+$f_all     = (string)($_GET['show'] ?? 'due') === 'all';   // default: only students with a due
+$f_group   = (string)($_GET['group'] ?? 'dept');           // dept | program | batch
+if (!in_array($f_group, ['dept', 'program', 'batch'], true)) $f_group = 'dept';
+
+$exam = null;
 foreach ($exams as $e) {
     if ($e['exam_name'] . '|' . $e['semester'] === $f_exam) { $exam = $e; break; }
 }
 
 // ── Build the due list ────────────────────────────────────────────────────
-// $report[dept_id] = ['dept_name', 'rows' => [...], 'checked' => int,
-//                     'due_count' => int, 'due_total' => float]
-$report     = [];
-$dept_opts  = [];   // departments present on this exam's cards (for the filter)
-$tot        = ['checked' => 0, 'due_count' => 0, 'due_total' => 0.0];
+// $report[group_key] = ['label', 'rows' => [...], 'checked' => int,
+//                       'due_count' => int, 'due_total' => float]
+$report       = [];
+$dept_opts    = [];   // departments present on this exam's cards (for the filter)
+$program_opts = [];   // programs of the covered students
+$batch_opts   = [];   // batches of the covered students
+$section_opts = [];   // sections of the covered students
+$shift_opts   = [];   // shifts of the covered students
+$tot          = ['checked' => 0, 'due_count' => 0, 'due_total' => 0.0];
 
 if ($exam) {
     // 1) Admit cards of this exam → departments + covered students.
@@ -98,12 +112,13 @@ if ($exam) {
         } catch (Throwable $e) {}
     }
 
-    // 3) Student rows + due as of today, grouped by department.
+    // 3) Student rows + due as of today, grouped by the selected dimension.
     if ($sid_depts) {
         $ids = array_keys($sid_depts);
         $ph  = implode(',', array_fill(0, count($ids), '?'));
         $st  = $db->prepare(
             'SELECT s.id AS sid, s.student_id, s.full_name, s.phone,
+                    s.program_id, s.batch_id, s.section, s.shift,
                     sb.name AS batch_name, p.program_name
                FROM students s
           LEFT JOIN student_batches sb        ON sb.id = s.batch_id
@@ -111,33 +126,76 @@ if ($exam) {
               WHERE s.id IN (' . $ph . ')'
         );
         $st->execute($ids);
-        foreach ($st->fetchAll() as $row) {
+        $students = $st->fetchAll();
+
+        // Filter dropdown options come from ALL covered students.
+        foreach ($students as $row) {
+            if ((int)$row['program_id'] > 0) $program_opts[(int)$row['program_id']] = (string)($row['program_name'] ?? ('Program #' . (int)$row['program_id']));
+            if ((int)$row['batch_id'] > 0)   $batch_opts[(int)$row['batch_id']]     = (string)($row['batch_name'] ?? ('Batch #' . (int)$row['batch_id']));
+            $sec = trim((string)($row['section'] ?? ''));
+            $shf = trim((string)($row['shift'] ?? ''));
+            if ($sec !== '') $section_opts[$sec] = $sec;
+            if ($shf !== '') $shift_opts[$shf] = $shf;
+        }
+        asort($program_opts, SORT_NATURAL | SORT_FLAG_CASE);
+        asort($batch_opts, SORT_NATURAL | SORT_FLAG_CASE);
+        ksort($section_opts, SORT_NATURAL | SORT_FLAG_CASE);
+        ksort($shift_opts, SORT_NATURAL | SORT_FLAG_CASE);
+
+        foreach ($students as $row) {
             $sid = (int)$row['sid'];
+
+            // Student-level filters
+            if ($f_program > 0 && (int)$row['program_id'] !== $f_program) continue;
+            if ($f_batch   > 0 && (int)$row['batch_id']   !== $f_batch)   continue;
+            if ($f_section !== '' && strcasecmp(trim((string)($row['section'] ?? '')), $f_section) !== 0) continue;
+            if ($f_shift   !== '' && strcasecmp(trim((string)($row['shift']   ?? '')), $f_shift)   !== 0) continue;
+
+            $s_depts = array_keys($sid_depts[$sid]);
+            if ($f_dept > 0) {
+                $s_depts = array_values(array_filter($s_depts, static fn($d) => (int)$d === $f_dept));
+                if (!$s_depts) continue;
+            }
+
             $due = ac_student_due_today($sid);
             $row['due']      = $due;
             $row['override'] = isset($overrides[$sid]);
-            foreach (array_keys($sid_depts[$sid]) as $did) {
-                if ($f_dept > 0 && $did !== $f_dept) continue;
-                if (!isset($report[$did])) {
-                    $report[$did] = [
-                        'dept_name' => $dept_opts[$did] ?? ('Dept #' . $did),
+
+            // Resolve the group bucket(s) for this student.
+            if ($f_group === 'program') {
+                $pid    = (int)$row['program_id'];
+                $groups = [['p' . $pid, $pid > 0 ? ($program_opts[$pid] ?? ('Program #' . $pid)) : 'No program set']];
+            } elseif ($f_group === 'batch') {
+                $bid    = (int)$row['batch_id'];
+                $groups = [['b' . $bid, $bid > 0 ? ($batch_opts[$bid] ?? ('Batch #' . $bid)) : 'No batch set']];
+            } else {
+                $groups = [];
+                foreach ($s_depts as $did) {
+                    $groups[] = ['d' . (int)$did, $dept_opts[(int)$did] ?? ('Dept #' . (int)$did)];
+                }
+            }
+
+            foreach ($groups as [$gkey, $glabel]) {
+                if (!isset($report[$gkey])) {
+                    $report[$gkey] = [
+                        'label'     => $glabel,
                         'rows'      => [],
                         'checked'   => 0,
                         'due_count' => 0,
                         'due_total' => 0.0,
                     ];
                 }
-                $report[$did]['checked']++;
+                $report[$gkey]['checked']++;
                 if ($due > 0) {
-                    $report[$did]['due_count']++;
-                    $report[$did]['due_total'] += $due;
+                    $report[$gkey]['due_count']++;
+                    $report[$gkey]['due_total'] += $due;
                 }
-                if ($due > 0 || $f_all) $report[$did]['rows'][] = $row;
+                if ($due > 0 || $f_all) $report[$gkey]['rows'][] = $row;
             }
         }
     }
 
-    uasort($report, static fn($a, $b) => strnatcasecmp($a['dept_name'], $b['dept_name']));
+    uasort($report, static fn($a, $b) => strnatcasecmp($a['label'], $b['label']));
     foreach ($report as &$dep) {
         usort($dep['rows'], static function ($a, $b) {
             $c = strnatcasecmp((string)($a['batch_name'] ?? ''), (string)($b['batch_name'] ?? ''));
@@ -177,9 +235,9 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="card mb-4 d-print-none">
     <div class="card-body py-3 px-4">
         <form method="get" class="row g-2 align-items-end">
-            <div class="col-md-5 col-lg-4">
+            <div class="col-md-6 col-lg-4">
                 <label class="form-label small text-muted mb-1">Exam</label>
-                <select name="exam" class="form-select" onchange="this.form.dept.value='';this.form.submit()">
+                <select name="exam" class="form-select" onchange="['dept','program','batch','section','shift'].forEach(n=>this.form[n].value='');this.form.submit()">
                     <option value="">— Select an exam —</option>
                     <?php foreach ($exams as $e): $val = $e['exam_name'] . '|' . $e['semester']; ?>
                         <option value="<?= h($val) ?>" <?= $f_exam === $val ? 'selected' : '' ?>>
@@ -188,13 +246,57 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-4 col-lg-3">
+            <div class="col-md-3 col-lg-2">
                 <label class="form-label small text-muted mb-1">Department</label>
                 <select name="dept" class="form-select" <?= $exam ? '' : 'disabled' ?>>
                     <option value="">All departments</option>
                     <?php foreach ($dept_opts as $did => $dname): ?>
                         <option value="<?= (int)$did ?>" <?= $f_dept === (int)$did ? 'selected' : '' ?>><?= h($dname) ?></option>
                     <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3 col-lg-2">
+                <label class="form-label small text-muted mb-1">Program</label>
+                <select name="program" class="form-select" <?= $exam ? '' : 'disabled' ?>>
+                    <option value="">All programs</option>
+                    <?php foreach ($program_opts as $pid => $pname): ?>
+                        <option value="<?= (int)$pid ?>" <?= $f_program === (int)$pid ? 'selected' : '' ?>><?= h($pname) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3 col-lg-2">
+                <label class="form-label small text-muted mb-1">Batch</label>
+                <select name="batch" class="form-select" <?= $exam ? '' : 'disabled' ?>>
+                    <option value="">All batches</option>
+                    <?php foreach ($batch_opts as $bid => $bname): ?>
+                        <option value="<?= (int)$bid ?>" <?= $f_batch === (int)$bid ? 'selected' : '' ?>><?= h($bname) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2 col-lg-1">
+                <label class="form-label small text-muted mb-1">Section</label>
+                <select name="section" class="form-select" <?= $exam ? '' : 'disabled' ?>>
+                    <option value="">All</option>
+                    <?php foreach ($section_opts as $sec): ?>
+                        <option value="<?= h($sec) ?>" <?= strcasecmp($f_section, $sec) === 0 ? 'selected' : '' ?>><?= h($sec) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2 col-lg-1">
+                <label class="form-label small text-muted mb-1">Shift</label>
+                <select name="shift" class="form-select" <?= $exam ? '' : 'disabled' ?>>
+                    <option value="">All</option>
+                    <?php foreach ($shift_opts as $shf): ?>
+                        <option value="<?= h($shf) ?>" <?= strcasecmp($f_shift, $shf) === 0 ? 'selected' : '' ?>><?= h($shf) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3 col-lg-2">
+                <label class="form-label small text-muted mb-1">Group by</label>
+                <select name="group" class="form-select">
+                    <option value="dept" <?= $f_group === 'dept' ? 'selected' : '' ?>>Department-wise</option>
+                    <option value="program" <?= $f_group === 'program' ? 'selected' : '' ?>>Program-wise</option>
+                    <option value="batch" <?= $f_group === 'batch' ? 'selected' : '' ?>>Batch-wise</option>
                 </select>
             </div>
             <div class="col-md-3 col-lg-2">
@@ -217,9 +319,13 @@ require_once __DIR__ . '/../includes/header.php';
     <div class="alert alert-warning"><i class="fas fa-triangle-exclamation me-2"></i>Exam not found or you do not have access to any of its departments.</div>
 <?php else: ?>
 
+<?php
+    $group_noun = ['dept' => 'department', 'program' => 'program', 'batch' => 'batch'][$f_group];
+    $group_icon = ['dept' => 'fa-building', 'program' => 'fa-graduation-cap', 'batch' => 'fa-users'][$f_group];
+?>
     <!-- Print-only heading -->
     <div class="d-none d-print-block text-center mb-3">
-        <h4 class="mb-1">Student Due List</h4>
+        <h4 class="mb-1">Student Due List (<?= h(ucfirst($group_noun)) ?>-wise)</h4>
         <div><?= h($exam['exam_name']) ?> — <?= h($exam['semester']) ?></div>
         <div class="small">Dues as of <?= h(date('d M Y')) ?></div>
     </div>
@@ -229,7 +335,7 @@ require_once __DIR__ . '/../includes/header.php';
     <!-- Totals -->
     <div class="d-flex flex-wrap gap-2 mb-3">
         <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle px-3 py-2">
-            <i class="fas fa-building me-1"></i><?= count($report) ?> department(s)
+            <i class="fas <?= $group_icon ?> me-1"></i><?= count($report) ?> <?= h($group_noun) ?>(s)
         </span>
         <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-3 py-2">
             <i class="fas fa-users me-1"></i><?= (int)$tot['checked'] ?> admit-card student(s) checked
@@ -246,14 +352,14 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="alert alert-secondary"><i class="fas fa-circle-info me-2"></i>No admit-card students found for this selection — generate admit cards for this exam first.</div>
     <?php else: ?>
 
-    <?php foreach ($report as $did => $dep): ?>
+    <?php foreach ($report as $gkey => $dep): ?>
     <div class="card mb-4 sdl-dept">
         <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span class="fw-semibold"><i class="fas fa-building me-2 text-primary"></i><?= h($dep['dept_name']) ?></span>
+            <span class="fw-semibold"><i class="fas <?= $group_icon ?> me-2 text-primary"></i><?= h($dep['label']) ?></span>
             <span class="small text-muted">
                 <?= (int)$dep['checked'] ?> student(s) checked ·
                 <span class="text-danger fw-semibold"><?= (int)$dep['due_count'] ?> with due</span> ·
-                dept due total <span class="fw-semibold">৳<?= number_format($dep['due_total'], 2) ?></span>
+                <?= h($group_noun) ?> due total <span class="fw-semibold">৳<?= number_format($dep['due_total'], 2) ?></span>
             </span>
         </div>
         <div class="table-responsive">
@@ -265,13 +371,15 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Name</th>
                         <th>Program</th>
                         <th>Batch</th>
+                        <th>Section</th>
+                        <th>Shift</th>
                         <th>Phone</th>
                         <th class="text-end">Due as of Today (৳)</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (!$dep['rows']): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-3">No students with due in this department</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-3">No students with due in this <?= h($group_noun) ?></td></tr>
                 <?php else: foreach ($dep['rows'] as $i => $s): ?>
                     <tr>
                         <td><?= $i + 1 ?></td>
@@ -284,6 +392,8 @@ require_once __DIR__ . '/../includes/header.php';
                         </td>
                         <td><?= h($s['program_name'] ?? '—') ?></td>
                         <td><?= h($s['batch_name'] ?? '—') ?></td>
+                        <td><?= h(trim((string)($s['section'] ?? '')) !== '' ? $s['section'] : '—') ?></td>
+                        <td><?= h(trim((string)($s['shift'] ?? '')) !== '' ? $s['shift'] : '—') ?></td>
                         <td><?= h($s['phone'] ?? '—') ?></td>
                         <td class="text-end fw-semibold <?= (float)$s['due'] > 0 ? 'text-danger' : 'text-success' ?>">
                             <?= number_format((float)$s['due'], 2) ?>
@@ -294,7 +404,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php if ($dep['rows']): ?>
                 <tfoot class="table-light fw-semibold">
                     <tr>
-                        <td colspan="6" class="text-end">Department due total</td>
+                        <td colspan="8" class="text-end"><?= h(ucfirst($group_noun)) ?> due total</td>
                         <td class="text-end">৳<?= number_format($dep['due_total'], 2) ?></td>
                     </tr>
                 </tfoot>
