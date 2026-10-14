@@ -179,25 +179,21 @@ require_once __DIR__ . '/../includes/header.php';
                 $print_exam_key = json_encode([$group['exam_name'], $group['semester']]);
                 $print_exam_groups[$print_exam_key][] = $group;
             }
-            $print_exam_title = $exam_filter !== '' && isset($exam_options[$exam_filter])
-                ? $exam_options[$exam_filter]
-                : 'All Exams / Semesters';
         ?>
         <div class="hm-routine-print">
-            <div class="hm-routine-print-header">
-                <img src="<?= APP_URL ?>/../assets/img/logo/logo-black.png" alt="Prime University Logo">
-                <div>
-                    <h1>At-a-glance Exam Routine</h1>
-                    <p><?= h($print_exam_title) ?></p>
-                </div>
-                <span></span>
-            </div>
             <?php foreach ($print_exam_groups as $print_exam_key => $exam_groups):
                 $first_exam_group = $exam_groups[0];
                 $exam_title = $first_exam_group['exam_name']
                     . ($first_exam_group['semester'] !== '' ? ' — ' . $first_exam_group['semester'] : '');
             ?>
-            <h2 class="hm-routine-print-exam"><?= h($exam_title) ?></h2>
+            <div class="hm-routine-print-header">
+                <img src="<?= APP_URL ?>/../assets/img/logo/logo-black.png" alt="Prime University Logo">
+                <div>
+                    <h1>At-a-glance Exam Routine</h1>
+                    <p><?= h($exam_title) ?></p>
+                </div>
+                <span></span>
+            </div>
             <table>
                 <thead>
                     <tr>
