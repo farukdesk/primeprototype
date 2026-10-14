@@ -104,6 +104,7 @@ require_once __DIR__ . '/../includes/header.php';
 <style>
 .hm-routine-print { display: none; }
 @media print {
+    @page { size: landscape; }
     body.hm-routine-page #sidebar, body.hm-routine-page #topbar,
     body.hm-routine-page footer, body.hm-routine-page .hm-routine-no-print { display: none !important; }
     body.hm-routine-page #main-wrapper, body.hm-routine-page #content { margin: 0 !important; padding: 0 !important; }
@@ -198,9 +199,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <thead>
                     <tr>
                         <th>EXAM DATE</th>
+                        <th>PROGRAM</th>
                         <th>START TIME</th>
                         <th>END TIME</th>
-                        <th>PROGRAM</th>
                         <th>ROOM NUMBERS</th>
                         <th>TOTAL STUDENTS (SCHEDULED)</th>
                     </tr>
@@ -222,9 +223,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <?php if ($show_date): ?>
                         <td rowspan="<?= $date_rowspan ?>"><?= h(date('d M Y', strtotime($group['exam_date']))) ?></td>
                         <?php endif; ?>
+                        <td><?= h($short_name) ?></td>
                         <td><?= $group['start'] !== '' ? h(date('g:i A', strtotime($group['start']))) : 'Not set' ?></td>
                         <td><?= $group['end'] !== '' ? h(date('g:i A', strtotime($group['end']))) : 'Not set' ?></td>
-                        <td><?= h($short_name) ?></td>
                         <td><?= $group['rooms'] ? h(implode(', ', $group['rooms'])) : 'Not assigned' ?></td>
                         <td><?= $group['total_students'] ?></td>
                     </tr>
