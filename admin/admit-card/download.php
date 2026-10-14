@@ -95,6 +95,9 @@ $courses = array_values(array_filter($courses, static function ($c) {
     return !preg_match('/\blab\b/i', (string)($c['course_title'] ?? ''));
 }));
 
+// Attach exam room + seat number from Hall Management seat assignments.
+$courses = ac_attach_hall_seats($student_id, $courses);
+
 // Get/create token and QR
 $token      = ac_get_or_create_token($card_id, $student_id);
 $verify_url = ac_verify_url($token);

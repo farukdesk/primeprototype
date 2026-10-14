@@ -1017,6 +1017,76 @@ function ac_verify_url(string $token): string
     return SITE_URL . '/admin/admit-card/verify.php?t=' . urlencode($token);
 }
 
+// ── Hall seat lookup (room + seat number from Hall Management) ───────────────
+
+/**
+ * Attach the student's exam room and seat (from Hall Management seat
+ * assignments) to each course row. Every course gains 'hall_room' and
+ * 'hall_seat' keys (empty string when no seat is assigned for that exam
+ * date). Matching per date prefers the assignment whose course_code equals
+ * the course's code, then one whose time_slot equals the course's time
+ * slot, then the date's only assignment.
+ */
+function ac_attach_hall_seats(int $student_id, array $courses): array
+{
+    $dates = [];
+    foreach ($courses as $c) {
+        $d = (string)($c['exam_date'] ?? '');
+        if ($d !== '') $dates[$d] = true;
+    }
+
+    $rows_by_date = [];
+    if ($student_id > 0 && $dates) {
+        try {
+            $ph = implode(',', array_fill(0, count($dates), '?'));
+            $st = db()->prepare(
+                "SELECT a.exam_date, a.course_code, a.time_slot, a.col_no, a.seat_no, h.room_number
+                   FROM hm_hall_assignments a
+                   JOIN hm_halls h ON h.id = a.hall_id
+                  WHERE a.student_id = ? AND a.exam_date IN ($ph)"
+            );
+            $st->execute(array_merge([$student_id], array_keys($dates)));
+            foreach ($st->fetchAll() as $r) {
+                $rows_by_date[(string)$r['exam_date']][] = $r;
+            }
+        } catch (Throwable $e) {
+            // Hall Management tables may not exist yet — print without seats.
+        }
+    }
+
+    foreach ($courses as &$c) {
+        $c['hall_room'] = '';
+        $c['hall_seat'] = '';
+        $rows = $rows_by_date[(string)($c['exam_date'] ?? '')] ?? [];
+        if (!$rows) continue;
+
+        $match = null;
+        $code  = strtoupper(trim((string)($c['course_code'] ?? '')));
+        if ($code !== '') {
+            foreach ($rows as $r) {
+                if (strtoupper(trim((string)($r['course_code'] ?? ''))) === $code) { $match = $r; break; }
+            }
+        }
+        if ($match === null) {
+            $slot = trim((string)($c['time_slot'] ?? ''));
+            if ($slot !== '') {
+                foreach ($rows as $r) {
+                    if (trim((string)($r['time_slot'] ?? '')) === $slot) { $match = $r; break; }
+                }
+            }
+        }
+        if ($match === null && count($rows) === 1) $match = $rows[0];
+
+        if ($match !== null) {
+            $c['hall_room'] = (string)$match['room_number'];
+            $c['hall_seat'] = 'C' . (int)$match['col_no'] . '-S' . (int)$match['seat_no'];
+        }
+    }
+    unset($c);
+
+    return $courses;
+}
+
 // ── Build admit card HTML (used for both on-page preview and PDF) ─────────────
 
 function ac_build_html(array $card, array $student, array $courses, string $qr_data_uri): string
@@ -1058,10 +1128,12 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
             . '<td style="border:1px solid #000;padding:6px;">' . h($date_str)          . '</td>'
             . '<td style="border:1px solid #000;padding:6px;">' . h($c['time_slot'] ?? '—')  . '</td>'
             . '<td style="border:1px solid #000;padding:6px;">' . h($c['section']   ?? '—')  . '</td>'
+            . '<td style="border:1px solid #000;padding:6px;">' . h(($c['hall_room'] ?? '') !== '' ? $c['hall_room'] : '—') . '</td>'
+            . '<td style="border:1px solid #000;padding:6px;">' . h(($c['hall_seat'] ?? '') !== '' ? $c['hall_seat'] : '—') . '</td>'
             . '</tr>';
     }
     if ($course_rows === '') {
-        $course_rows = '<tr><td colspan="5" style="border:1px solid #000;padding:8px;text-align:center;color:#777;">No courses listed</td></tr>';
+        $course_rows = '<tr><td colspan="7" style="border:1px solid #000;padding:8px;text-align:center;color:#777;">No courses listed</td></tr>';
     }
 
     $logo_img = $logo_uri
@@ -1116,15 +1188,15 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
   <table style="width:100%;border-collapse:collapse;text-align:center;font-size:14px;">
     <tbody>
       <tr>
-        <td style="border:1px solid #000;padding:6px;width:15%;">Name</td>
-        <td style="border:1px solid #000;padding:6px;font-weight:bold;width:45%;">' . $student_name . '</td>
-        <td colspan="3" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">' . $exam_name . '</td>
+        <td style="border:1px solid #000;padding:6px;width:12%;">Name</td>
+        <td style="border:1px solid #000;padding:6px;font-weight:bold;width:30%;">' . $student_name . '</td>
+        <td colspan="5" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">' . $exam_name . '</td>
       </tr>
       <tr>
         <td style="border:1px solid #000;padding:6px;">ID No.</td>
         <td style="border:1px solid #000;padding:6px;font-weight:bold;">' . $student_id . '</td>
-        <td colspan="2" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">Batch: ' . $batch_label . '</td>
-        <td style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">' . $semester . '</td>
+        <td colspan="3" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">Batch: ' . $batch_label . '</td>
+        <td colspan="2" style="border:1px solid #000;padding:6px;font-size:13px;font-weight:bold;">' . $semester . '</td>
       </tr>
       <tr style="font-weight:bold;font-size:15px;background:#f5f5f5;">
         <td style="border:1px solid #000;padding:7px;">Course Code</td>
@@ -1132,6 +1204,8 @@ function ac_build_html(array $card, array $student, array $courses, string $qr_d
         <td style="border:1px solid #000;padding:7px;">Date</td>
         <td style="border:1px solid #000;padding:7px;">Time Slot</td>
         <td style="border:1px solid #000;padding:7px;">Section</td>
+        <td style="border:1px solid #000;padding:7px;">Room</td>
+        <td style="border:1px solid #000;padding:7px;">Seat</td>
       </tr>
       ' . $course_rows . '
     </tbody>
