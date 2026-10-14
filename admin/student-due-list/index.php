@@ -24,6 +24,9 @@ require_once __DIR__ . '/../accounting/helpers.php';
 $page_title = 'Student Due List';
 $db = db();
 
+// Students owing more than this are flagged as "may be dropped".
+const SDL_HIGH_DUE_THRESHOLD = 50000;
+
 // Department scope: faculty users only see their own department(s)
 $scope = ac_dept_scope();
 
@@ -56,7 +59,10 @@ $f_program = (int)($_GET['program'] ?? 0);
 $f_batch   = (int)($_GET['batch'] ?? 0);
 $f_section = trim((string)($_GET['section'] ?? ''));
 $f_shift   = trim((string)($_GET['shift'] ?? ''));
-$f_all     = (string)($_GET['show'] ?? 'due') === 'all';   // default: only students with a due
+$f_show    = (string)($_GET['show'] ?? 'due');            // due | all | high
+if (!in_array($f_show, ['due', 'all', 'high'], true)) $f_show = 'due';
+$f_all     = $f_show === 'all';                            // default: only students with a due
+$f_high    = $f_show === 'high';                           // only students with a high (৳50,000+) due
 $f_group   = (string)($_GET['group'] ?? 'dept');           // dept | program | batch
 if (!in_array($f_group, ['dept', 'program', 'batch'], true)) $f_group = 'dept';
 
@@ -74,7 +80,7 @@ $program_opts = [];   // programs of the covered students
 $batch_opts   = [];   // batches of the covered students
 $section_opts = [];   // sections of the covered students
 $shift_opts   = [];   // shifts of the covered students
-$tot          = ['checked' => 0, 'due_count' => 0, 'due_total' => 0.0];
+$tot          = ['checked' => 0, 'due_count' => 0, 'due_total' => 0.0, 'high_count' => 0];
 
 if ($exam) {
     // 1) Admit cards of this exam → departments + covered students.
@@ -161,6 +167,7 @@ if ($exam) {
             $due = ac_student_due_today($sid);
             $row['due']      = $due;
             $row['override'] = isset($overrides[$sid]);
+            $row['high']     = $due > SDL_HIGH_DUE_THRESHOLD;
 
             // Resolve the group bucket(s) for this student.
             if ($f_group === 'program') {
@@ -179,11 +186,12 @@ if ($exam) {
             foreach ($groups as [$gkey, $glabel]) {
                 if (!isset($report[$gkey])) {
                     $report[$gkey] = [
-                        'label'     => $glabel,
-                        'rows'      => [],
-                        'checked'   => 0,
-                        'due_count' => 0,
-                        'due_total' => 0.0,
+                        'label'      => $glabel,
+                        'rows'       => [],
+                        'checked'    => 0,
+                        'due_count'  => 0,
+                        'due_total'  => 0.0,
+                        'high_count' => 0,
                     ];
                 }
                 $report[$gkey]['checked']++;
@@ -191,7 +199,12 @@ if ($exam) {
                     $report[$gkey]['due_count']++;
                     $report[$gkey]['due_total'] += $due;
                 }
-                if ($due > 0 || $f_all) $report[$gkey]['rows'][] = $row;
+                if ($row['high']) $report[$gkey]['high_count']++;
+                if ($f_high) {
+                    if ($row['high']) $report[$gkey]['rows'][] = $row;
+                } elseif ($due > 0 || $f_all) {
+                    $report[$gkey]['rows'][] = $row;
+                }
             }
         }
     }
@@ -203,9 +216,10 @@ if ($exam) {
             if ($c !== 0) return $c;
             return strcmp((string)$a['full_name'], (string)$b['full_name']);
         });
-        $tot['checked']   += $dep['checked'];
-        $tot['due_count'] += $dep['due_count'];
-        $tot['due_total'] += $dep['due_total'];
+        $tot['checked']    += $dep['checked'];
+        $tot['due_count']  += $dep['due_count'];
+        $tot['due_total']  += $dep['due_total'];
+        $tot['high_count'] += $dep['high_count'];
     }
     unset($dep);
 }
@@ -303,7 +317,8 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-3 col-lg-2">
                 <label class="form-label small text-muted mb-1">Show</label>
                 <select name="show" class="form-select">
-                    <option value="due" <?= !$f_all ? 'selected' : '' ?>>Only students with due</option>
+                    <option value="due" <?= $f_show === 'due' ? 'selected' : '' ?>>Only students with due</option>
+                    <option value="high" <?= $f_high ? 'selected' : '' ?>>Only high due (৳<?= number_format(SDL_HIGH_DUE_THRESHOLD) ?>+, may be dropped)</option>
                     <option value="all" <?= $f_all ? 'selected' : '' ?>>All admit-card students</option>
                 </select>
             </div>
@@ -361,6 +376,7 @@ require_once __DIR__ . '/../includes/header.php';
             <?= count($report) ?> <?= h($group_noun) ?>(s) &nbsp;·&nbsp;
             <?= (int)$tot['checked'] ?> student(s) checked &nbsp;·&nbsp;
             <?= (int)$tot['due_count'] ?> student(s) with due &nbsp;·&nbsp;
+            <?= (int)$tot['high_count'] ?> student(s) over ৳<?= number_format(SDL_HIGH_DUE_THRESHOLD) ?> (may be dropped) &nbsp;·&nbsp;
             Total due ৳<?= number_format($tot['due_total'], 2) ?>
         </div>
     </div>
@@ -378,10 +394,22 @@ require_once __DIR__ . '/../includes/header.php';
         <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-3 py-2">
             <i class="fas fa-circle-xmark me-1"></i><?= (int)$tot['due_count'] ?> student(s) with due
         </span>
+        <span class="badge bg-danger text-white border border-danger px-3 py-2">
+            <i class="fas fa-triangle-exclamation me-1"></i><?= (int)$tot['high_count'] ?> student(s) over ৳<?= number_format(SDL_HIGH_DUE_THRESHOLD) ?> (may be dropped)
+        </span>
         <span class="badge bg-dark-subtle text-dark-emphasis border border-dark-subtle px-3 py-2">
             <i class="fas fa-coins me-1"></i>Total due ৳<?= number_format($tot['due_total'], 2) ?>
         </span>
     </div>
+
+    <?php if ((int)$tot['high_count'] > 0): ?>
+    <div class="alert alert-danger py-2 d-print-none">
+        <i class="fas fa-triangle-exclamation me-2"></i>
+        <strong><?= (int)$tot['high_count'] ?> student(s)</strong> owe more than
+        ৳<?= number_format(SDL_HIGH_DUE_THRESHOLD) ?> — these students may be dropped.
+        They are highlighted in red below<?= $f_high ? '' : '; use Show → "Only high due" to list them separately' ?>.
+    </div>
+    <?php endif; ?>
 
     <?php if (!$report): ?>
         <div class="alert alert-secondary"><i class="fas fa-circle-info me-2"></i>No admit-card students found for this selection — generate admit cards for this exam first.</div>
@@ -394,6 +422,9 @@ require_once __DIR__ . '/../includes/header.php';
             <span class="small text-muted">
                 <?= (int)$dep['checked'] ?> student(s) checked ·
                 <span class="text-danger fw-semibold"><?= (int)$dep['due_count'] ?> with due</span> ·
+                <?php if ((int)$dep['high_count'] > 0): ?>
+                <span class="text-danger fw-bold"><?= (int)$dep['high_count'] ?> over ৳<?= number_format(SDL_HIGH_DUE_THRESHOLD) ?> (may be dropped)</span> ·
+                <?php endif; ?>
                 <?= h($group_noun) ?> due total <span class="fw-semibold">৳<?= number_format($dep['due_total'], 2) ?></span>
             </span>
         </div>
@@ -414,13 +445,18 @@ require_once __DIR__ . '/../includes/header.php';
                 </thead>
                 <tbody>
                 <?php if (!$dep['rows']): ?>
-                    <tr><td colspan="9" class="text-center text-muted py-3">No students with due in this <?= h($group_noun) ?></td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-3">No students with <?= $f_high ? 'a ৳' . number_format(SDL_HIGH_DUE_THRESHOLD) . '+ due' : 'due' ?> in this <?= h($group_noun) ?></td></tr>
                 <?php else: foreach ($dep['rows'] as $i => $s): ?>
-                    <tr>
+                    <tr<?= !empty($s['high']) ? ' class="sdl-high-due"' : '' ?>>
                         <td><?= $i + 1 ?></td>
                         <td><?= h($s['student_id']) ?></td>
                         <td>
                             <?= h($s['full_name']) ?>
+                            <?php if (!empty($s['high'])): ?>
+                                <span class="badge bg-danger text-white ms-1" title="Due exceeds ৳<?= number_format(SDL_HIGH_DUE_THRESHOLD) ?> — this student may be dropped">
+                                    <i class="fas fa-triangle-exclamation me-1"></i>may be dropped
+                                </span>
+                            <?php endif; ?>
                             <?php if (!empty($s['override'])): ?>
                                 <span class="badge bg-warning-subtle text-warning-emphasis border ms-1" title="Has an admit-card download override">override</span>
                             <?php endif; ?>
@@ -455,12 +491,17 @@ require_once __DIR__ . '/../includes/header.php';
         resolved exactly like the card generation/download path.
         "Due as of Today" counts fees fallen due through the current month minus payments
         (the same figure used by the admit-card download check and My Finances).
+        Students highlighted in red owe more than ৳<?= number_format(SDL_HIGH_DUE_THRESHOLD) ?> and may be dropped.
     </p>
 
     <?php endif; ?>
 <?php endif; ?>
 
 <style>
+/* ── High-due (may be dropped) row highlight ── */
+.sdl-high-due > td { background-color: #fde2e4 !important; }
+.sdl-high-due td, .sdl-high-due td.text-danger { color: #842029; }
+
 /* ── Print-only letterhead (screen hidden via d-none d-print-block) ── */
 .sdl-print-head { font-family: "Times New Roman", Georgia, serif; color: #000; margin-bottom: 10px; }
 .sdl-ph-table { width: 100%; border-collapse: collapse; }
@@ -519,6 +560,8 @@ require_once __DIR__ . '/../includes/header.php';
     .sdl-dept tbody tr { page-break-inside: avoid; }
     .sdl-dept .badge { border: 1px solid #999 !important; background: #fff !important; color: #000 !important; padding: 0 3px !important; font-size: 7pt !important; }
     .sdl-dept td.text-danger, .sdl-dept td.text-success { color: #000 !important; }
+    .sdl-high-due > td { background: #f2d7d9 !important; font-weight: 700; }
+    .sdl-high-due .badge { border: 1px solid #000 !important; font-weight: 700; }
 }
 @page { size: A4 portrait; margin: 12mm; }
 </style>
