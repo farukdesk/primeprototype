@@ -38,21 +38,27 @@ if ($error === '') {
                      JOIN ac_admit_card_courses cc ON cc.admit_card_id = ac.id
                 LEFT JOIN dept_academic_programs p ON p.id = ac.program_id ";
         $where = " WHERE ac.is_active = 1 AND cc.exam_date IS NOT NULL";
-        $legacy_join = " LEFT JOIN students s ON s.dept_id = ac.dept_id
+        $legacy_membership = "s.dept_id = ac.dept_id
                             AND s.program_id = ac.program_id
-                            AND (ac.batch_id IS NULL OR s.batch_id = ac.batch_id)
-                            AND s.status = 'Active'";
+                            AND (ac.batch_id IS NULL OR ac.batch_id = 0 OR s.batch_id = ac.batch_id)
+                            AND EXISTS (
+                                SELECT 1 FROM co_registrations cr WHERE cr.student_id = s.id)";
+        $legacy_join = " LEFT JOIN students s ON s.status = 'Active' AND " . $legacy_membership;
         if ($has_subject) {
             $subject_sql = $select . "
                 LEFT JOIN co_registrations r ON r.offer_subject_id = cc.offer_subject_id
                 LEFT JOIN students s ON s.id = r.student_id AND s.status = 'Active'"
                 . $where . ' AND cc.offer_subject_id IS NOT NULL';
-            // Mixed cards' unlinked courses stay visible, but must not enrol
-            // every student in the program alongside subject-linked courses.
-            $legacy_join .= " AND NOT EXISTS (
-                SELECT 1 FROM ac_admit_card_courses cx
-                 WHERE cx.admit_card_id = ac.id AND cx.offer_subject_id IS NOT NULL)";
-            $sql = $subject_sql . ' UNION ALL ' . $select . $legacy_join
+            // Unlinked courses cover the card's students, not the whole program.
+            $unlinked_join = " LEFT JOIN students s ON s.status = 'Active' AND (
+                EXISTS (
+                    SELECT 1 FROM ac_admit_card_courses cx
+                    JOIN co_registrations cr ON cr.offer_subject_id = cx.offer_subject_id
+                     WHERE cx.admit_card_id = ac.id AND cr.student_id = s.id)
+                OR (" . $legacy_membership . " AND NOT EXISTS (
+                    SELECT 1 FROM ac_admit_card_courses cx
+                     WHERE cx.admit_card_id = ac.id AND cx.offer_subject_id IS NOT NULL)))";
+            $sql = $subject_sql . ' UNION ALL ' . $select . $unlinked_join
                 . $where . ' AND cc.offer_subject_id IS NULL';
         } else {
             $sql = $select . $legacy_join . $where;
