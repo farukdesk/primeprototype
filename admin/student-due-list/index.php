@@ -19,6 +19,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_access('student-due-list');
 require_once __DIR__ . '/../admit-card/helpers.php';
+require_once __DIR__ . '/../accounting/helpers.php';
 
 $page_title = 'Student Due List';
 $db = db();
@@ -323,17 +324,51 @@ require_once __DIR__ . '/../includes/header.php';
     $group_noun = ['dept' => 'department', 'program' => 'program', 'batch' => 'batch'][$f_group];
     $group_icon = ['dept' => 'fa-building', 'program' => 'fa-graduation-cap', 'batch' => 'fa-users'][$f_group];
 ?>
-    <!-- Print-only heading -->
-    <div class="d-none d-print-block text-center mb-3">
-        <h4 class="mb-1">Student Due List (<?= h(ucfirst($group_noun)) ?>-wise)</h4>
-        <div><?= h($exam['exam_name']) ?> — <?= h($exam['semester']) ?></div>
-        <div class="small">Dues as of <?= h(date('d M Y')) ?></div>
+    <!-- Print-only letterhead -->
+    <?php
+    $print_logo    = acc_university_logo_url();
+    $print_filters = [];
+    if ($f_dept > 0 && isset($dept_opts[$f_dept]))          $print_filters[] = 'Dept: ' . $dept_opts[$f_dept];
+    if ($f_program > 0 && isset($program_opts[$f_program])) $print_filters[] = 'Program: ' . $program_opts[$f_program];
+    if ($f_batch > 0 && isset($batch_opts[$f_batch]))       $print_filters[] = 'Batch: ' . $batch_opts[$f_batch];
+    if ($f_section !== '')                                  $print_filters[] = 'Section: ' . $f_section;
+    if ($f_shift !== '')                                    $print_filters[] = 'Shift: ' . $f_shift;
+    ?>
+    <div class="d-none d-print-block sdl-print-head">
+        <table class="sdl-ph-table">
+            <tr>
+                <td class="sdl-ph-logo">
+                    <?php if ($print_logo): ?>
+                    <img src="<?= h($print_logo) ?>" alt="Prime University Logo">
+                    <?php endif; ?>
+                </td>
+                <td class="sdl-ph-center">
+                    <div class="sdl-ph-uni">Prime University</div>
+                    <div class="sdl-ph-addr"><?= h(acc_university_address()) ?></div>
+                    <div class="sdl-ph-title">Student Due List (<?= h(ucfirst($group_noun)) ?>-wise)</div>
+                    <div class="sdl-ph-exam"><?= h($exam['exam_name']) ?> &mdash; <?= h($exam['semester']) ?></div>
+                    <?php if ($print_filters): ?>
+                    <div class="sdl-ph-filters"><?= h(implode(' · ', $print_filters)) ?></div>
+                    <?php endif; ?>
+                </td>
+                <td class="sdl-ph-meta">
+                    Generated:<br><?= h(date('d M Y, h:i A')) ?><br>
+                    <span>Dues as of <?= h(date('d M Y')) ?></span>
+                </td>
+            </tr>
+        </table>
+        <div class="sdl-ph-summary">
+            <?= count($report) ?> <?= h($group_noun) ?>(s) &nbsp;·&nbsp;
+            <?= (int)$tot['checked'] ?> student(s) checked &nbsp;·&nbsp;
+            <?= (int)$tot['due_count'] ?> student(s) with due &nbsp;·&nbsp;
+            Total due ৳<?= number_format($tot['due_total'], 2) ?>
+        </div>
     </div>
 
     <h5 class="fw-semibold mb-3 d-print-none"><?= h($exam['exam_name']) ?> — <?= h($exam['semester']) ?></h5>
 
     <!-- Totals -->
-    <div class="d-flex flex-wrap gap-2 mb-3">
+    <div class="d-flex flex-wrap gap-2 mb-3 d-print-none">
         <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle px-3 py-2">
             <i class="fas <?= $group_icon ?> me-1"></i><?= count($report) ?> <?= h($group_noun) ?>(s)
         </span>
@@ -425,9 +460,67 @@ require_once __DIR__ . '/../includes/header.php';
     <?php endif; ?>
 <?php endif; ?>
 
-<style media="print">
-    .sdl-dept { page-break-inside: avoid; border: 1px solid #ccc !important; }
-    .sdl-dept .card-header { background: #f1f1f1 !important; }
+<style>
+/* ── Print-only letterhead (screen hidden via d-none d-print-block) ── */
+.sdl-print-head { font-family: "Times New Roman", Georgia, serif; color: #000; margin-bottom: 10px; }
+.sdl-ph-table { width: 100%; border-collapse: collapse; }
+.sdl-ph-logo { width: 20%; vertical-align: middle; }
+.sdl-ph-logo img { height: 58px; width: auto; }
+.sdl-ph-center { width: 60%; text-align: center; vertical-align: middle; }
+.sdl-ph-uni { font-size: 16pt; font-weight: 700; }
+.sdl-ph-addr { font-size: 9pt; }
+.sdl-ph-title { font-size: 12pt; font-weight: 700; margin-top: 3px; }
+.sdl-ph-exam { font-size: 10.5pt; margin-top: 1px; }
+.sdl-ph-filters { font-size: 9pt; margin-top: 1px; color: #333; }
+.sdl-ph-meta { width: 20%; text-align: right; vertical-align: middle; font-size: 8pt; color: #555; }
+.sdl-ph-meta span { color: #888; }
+.sdl-ph-summary { text-align: center; font-size: 9pt; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 3px 0; margin-top: 6px; }
+
+@media print {
+    #sidebar, #topbar, .d-print-none { display: none !important; }
+    #main-wrapper, .main-content, main { margin-left: 0 !important; padding: 0 !important; }
+    body { background: #fff !important; font-size: 9pt; color: #000; }
+    .container-fluid, .container { padding: 0 !important; max-width: 100% !important; }
+
+    /* Group cards → clean bordered sections */
+    .sdl-dept {
+        page-break-inside: avoid;
+        border: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        margin-bottom: 12px !important;
+    }
+    .sdl-dept .card-header {
+        background: #fff !important;
+        border: none !important;
+        border-bottom: 2px solid #000 !important;
+        border-radius: 0 !important;
+        padding: 2px 0 3px !important;
+        font-size: 10pt;
+        color: #000 !important;
+    }
+    .sdl-dept .card-header .text-muted,
+    .sdl-dept .card-header .text-danger { color: #000 !important; }
+    .sdl-dept .card-header i { display: none; }
+    .sdl-dept .table-responsive { overflow: visible !important; }
+
+    /* Compact bordered table that fits A4 */
+    .sdl-dept table { width: 100% !important; font-size: 8pt !important; border-collapse: collapse !important; margin-top: 3px; }
+    .sdl-dept th, .sdl-dept td {
+        border: 1px solid #999 !important;
+        padding: 2.5px 4px !important;
+        background: #fff !important;
+        color: #000 !important;
+        box-shadow: none !important;
+        white-space: normal !important;
+    }
+    .sdl-dept thead th { background: #eee !important; font-weight: 700; }
+    .sdl-dept tfoot td { background: #f5f5f5 !important; font-weight: 700; }
+    .sdl-dept tbody tr { page-break-inside: avoid; }
+    .sdl-dept .badge { border: 1px solid #999 !important; background: #fff !important; color: #000 !important; padding: 0 3px !important; font-size: 7pt !important; }
+    .sdl-dept td.text-danger, .sdl-dept td.text-success { color: #000 !important; }
+}
+@page { size: A4 portrait; margin: 12mm; }
 </style>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
