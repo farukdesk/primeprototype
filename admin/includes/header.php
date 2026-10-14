@@ -321,7 +321,8 @@ if (is_portal_student()) {
     $is_internal_active = strpos($current_path, '/file-manager/') !== false || strpos($current_path, '/notice-signing/') !== false || strpos($current_path, '/my-signature/') !== false;
     $is_seo_active      = strpos($current_path, '/seo/') !== false;
     $is_reports_active    = strpos($current_path, '/accounting/reports/') !== false;
-    $is_accounting_active = strpos($current_path, '/accounting/') !== false && !$is_reports_active;
+    $is_accounting_active = (strpos($current_path, '/accounting/') !== false && !$is_reports_active)
+                         || strpos($current_path, '/student-due-list/') !== false;
     $is_scholarship_active = strpos($current_path, '/scholarship/') !== false
                           || strpos($current_path, '/gpa-scholarship/') !== false;
     $is_vc_approval_active = strpos($current_path, '/vc-approval/') !== false;
@@ -341,8 +342,7 @@ if (is_portal_student()) {
                   || strpos($current_path, '/student-verification/') !== false
                   || strpos($current_path, '/cert-verifiers/') !== false
                   || $is_exam_invigilation_active || $is_admit_card_active
-                  || strpos($current_path, '/hall-management/') !== false
-                  || strpos($current_path, '/student-due-list/') !== false;
+                  || strpos($current_path, '/hall-management/') !== false;
     ?>
 
     <!-- ── Student Portal: show ONLY My Profile and My Finances for student users ── -->
@@ -939,7 +939,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Controller of Examinations ── -->
-    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('exam-routine') || can_access('admit-card') || can_access('hall-management') || can_access('student-due-list')): ?>
+    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('exam-routine') || can_access('admit-card') || can_access('hall-management')): ?>
     <button class="nav-group-toggle <?= $is_coe_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-coe"
             aria-expanded="<?= $is_coe_active ? 'true' : 'false' ?>">
@@ -1120,14 +1120,6 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/hall-management/unseated.php"
                    class="<?= strpos($current_path, '/hall-management/unseated') !== false ? 'active' : '' ?>">
                     <i class="fas fa-user-clock"></i> Unseated Students
-                </a>
-            </li>
-            <?php endif; ?>
-            <?php if (is_super_admin() || can_access('student-due-list')): ?>
-            <li class="nav-item">
-                <a href="<?= APP_URL ?>/student-due-list/index.php"
-                   class="<?= strpos($current_path, '/student-due-list/') !== false ? 'active' : '' ?>">
-                    <i class="fas fa-file-invoice-dollar"></i> Student Due List
                 </a>
             </li>
             <?php endif; ?>
@@ -1477,7 +1469,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Accounting ── -->
-    <?php if (is_super_admin() || can_access('accounting') || can_access('accounting-coa')): ?>
+    <?php if (is_super_admin() || can_access('accounting') || can_access('accounting-coa') || can_access('student-due-list')): ?>
     <button class="nav-group-toggle <?= $is_accounting_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-accounting"
             aria-expanded="<?= $is_accounting_active ? 'true' : 'false' ?>">
@@ -1520,6 +1512,14 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/accounting/vouchers.php"
                    class="<?= strpos($current_path, '/accounting/voucher') !== false ? 'active' : '' ?>">
                     <i class="fas fa-file-invoice"></i> All Vouchers
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('student-due-list')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/student-due-list/index.php"
+                   class="<?= strpos($current_path, '/student-due-list/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-invoice-dollar"></i> Student Due List
                 </a>
             </li>
             <?php endif; ?>
