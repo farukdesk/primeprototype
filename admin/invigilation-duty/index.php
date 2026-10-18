@@ -42,9 +42,6 @@ $duties      = ivd_duties_for_faculty($faculty_ids);
 $incoming_requests = ivd_incoming_requests($faculty_ids);
 $outgoing_requests = ivd_outgoing_requests($faculty_ids);
 
-// Department-wide duties: show all duties assigned to faculty of my dept(s).
-$my_dept_ids  = ivd_dept_ids_for_faculty($faculty_ids);
-$dept_duties  = ivd_dept_duties($my_dept_ids);
 $mine_set     = array_flip(array_map('intval', $faculty_ids));
 
 $today    = date('Y-m-d');
@@ -60,6 +57,14 @@ $past = array_reverse($past);
 $total_count    = count($duties);
 $upcoming_count = count($upcoming);
 $attended_count = count(array_filter($duties, static fn ($d) => $d['attended'] === 1));
+
+// Department-wide duties: only shown to faculty who have at least one duty of
+// their own. Faculty with no assigned duty should not see their colleagues' list.
+$dept_duties = [];
+if ($total_count > 0) {
+    $my_dept_ids = ivd_dept_ids_for_faculty($faculty_ids);
+    $dept_duties = ivd_dept_duties($my_dept_ids);
+}
 
 // Eligible swap/substitute targets for each upcoming slot (for the request modal).
 $slot_targets = [];
@@ -354,6 +359,7 @@ function ivd_render_duty_rows(array $rows, bool $allow_request = false): void
 </div>
 
 <!-- ── Department faculty duties ── -->
+<?php if ($dept_duties): ?>
 <div class="card mt-4">
     <div class="card-header bg-white">
         <h6 class="mb-0 fw-semibold"><i class="fas fa-users me-2 text-primary"></i>My Department's Duties
@@ -403,6 +409,7 @@ function ivd_render_duty_rows(array $rows, bool $allow_request = false): void
         </table>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- ── Request Swap / Substitute modal ── -->
 <div class="modal fade" id="ivdRequestModal" tabindex="-1" aria-hidden="true">
