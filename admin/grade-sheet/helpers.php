@@ -196,6 +196,7 @@ function gs_build(array $f): array
     $f_semester = trim((string)($f['semester'] ?? ''));
     $f_shift    = trim((string)($f['shift'] ?? ''));
     $f_section  = trim((string)($f['section'] ?? ''));
+    $f_sid      = trim((string)($f['sid'] ?? ''));
 
     $empty = ['meta' => [], 'courses' => [], 'students' => []];
     if ($exam_id <= 0) return $empty;
@@ -213,6 +214,7 @@ function gs_build(array $f): array
     if ($f_program > 0) { $where[] = 'o.program_id = ?'; $params[] = $f_program; }
     if ($f_batch > 0)   { $where[] = 'o.batch_id = ?';   $params[] = $f_batch; }
     if ($f_semester !== '') { $where[] = 'o.semester = ?'; $params[] = $f_semester; }
+    if ($f_sid !== '')  { $where[] = '(g.student_sid = ? OR s.student_id = ?)'; $params[] = $f_sid; $params[] = $f_sid; }
 
     try {
         $sql = "SELECT c.course_code, c.course_name, c.credit,
@@ -275,6 +277,7 @@ function gs_build_groups(array $f): array
     $f_semester = trim((string)($f['semester'] ?? ''));
     $f_shift    = trim((string)($f['shift'] ?? ''));
     $f_section  = trim((string)($f['section'] ?? ''));
+    $f_sid      = trim((string)($f['sid'] ?? ''));
 
     if ($exam_id <= 0) return [];
 
@@ -291,6 +294,7 @@ function gs_build_groups(array $f): array
     if ($f_program > 0) { $where[] = 'o.program_id = ?'; $params[] = $f_program; }
     if ($f_batch > 0)   { $where[] = 'o.batch_id = ?';   $params[] = $f_batch; }
     if ($f_semester !== '') { $where[] = 'o.semester = ?'; $params[] = $f_semester; }
+    if ($f_sid !== '')  { $where[] = '(g.student_sid = ? OR s.student_id = ?)'; $params[] = $f_sid; $params[] = $f_sid; }
 
     try {
         $sql = "SELECT c.course_code, c.course_name, c.credit,
