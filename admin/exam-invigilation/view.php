@@ -60,7 +60,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
     if ($_POST['_action'] === 'delete_slot') {
         require_access('exam-invigilation', 'can_delete');
         $sid = (int)($_POST['slot_id'] ?? 0);
+        $before_duties = ei_capture_duty_state($id);
         db()->prepare('DELETE FROM ei_slots WHERE id = ? AND exam_id = ?')->execute([$sid, $id]);
+        ei_notify_duty_changes($before_duties, $id);
         flash_set('success', 'Slot deleted.');
         redirect($view_url);
     }
@@ -72,8 +74,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         $slot_row = db()->prepare('SELECT room_number, slot_date FROM ei_slots WHERE id = ? AND exam_id = ?');
         $slot_row->execute([$sid, $id]);
         $slot_info = $slot_row->fetch();
+        $before_duties = ei_capture_duty_state($id);
         db()->prepare('UPDATE ei_slots SET faculty1_id=NULL, faculty2_id=NULL WHERE id = ? AND exam_id = ?')
            ->execute([$sid, $id]);
+        ei_notify_duty_changes($before_duties, $id);
         if ($slot_info) {
             $room_label = $slot_info['room_number'] . ' (' . date('d M Y', strtotime($slot_info['slot_date'])) . ')';
             ei_save_assignment_snapshot($id, 'clear_slot', "Cleared assignment – Room {$room_label}");
@@ -119,12 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         }
 
         // Apply each slot's saved state
+        $before_duties = ei_capture_duty_state($id);
         $upd = db()->prepare(
             'UPDATE ei_slots SET faculty1_id=?, faculty2_id=? WHERE id=? AND exam_id=?'
         );
         foreach ($snap_slots as $ss) {
             $upd->execute([$ss['faculty1_id'], $ss['faculty2_id'], (int)$ss['slot_id'], $id]);
         }
+        ei_notify_duty_changes($before_duties, $id);
 
         // Save a new snapshot recording this revert
         ei_save_assignment_snapshot($id, 'revert', "Reverted to V{$snap['version_number']} (saved " . date('d M Y h:i A', strtotime($snap['created_at'])) . ")");
@@ -137,6 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
     if ($_POST['_action'] === 'auto_assign') {
         require_access('exam-invigilation', 'can_edit');
 
+        $before_duties = ei_capture_duty_state($id);
         $scope = isset($_POST['reassign']) ? 'all' : 'unassigned';
 
         // Fetch all slots for this exam (optionally only unassigned)
@@ -528,6 +535,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['_action'])) {
         // Save a version snapshot after the auto-assign operation
         $scope_label = ($scope === 'all') ? 'Re-assign all' : 'Assign unassigned';
         ei_save_assignment_snapshot($id, 'auto_assign', "{$scope_label} – {$assigned_count} fully, {$partial_count} partially, {$failed_count} failed");
+        ei_notify_duty_changes($before_duties, $id);
 
         redirect($view_url);
     }

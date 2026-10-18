@@ -251,10 +251,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (empty($errors)) {
+            $before_duties = ei_capture_duty_state($exam_id);
             db()->prepare(
                 'INSERT INTO ei_slots (exam_id, slot_date, time_slot, room_number, dept_id, faculty1_id, faculty2_id)
                  VALUES (?,?,?,?,?,?,?)'
             )->execute([$exam_id, $slot_date, $time_slot, $room_number, $dept_id, $faculty1_id, $faculty2_id]);
+            ei_notify_duty_changes($before_duties, $exam_id);
             flash_set('success', 'Slot added.');
             if (isset($_POST['add_another'])) {
                 save_old(['slot_date' => $slot_date, 'start_time' => $start_time, 'end_time' => $end_time]);
