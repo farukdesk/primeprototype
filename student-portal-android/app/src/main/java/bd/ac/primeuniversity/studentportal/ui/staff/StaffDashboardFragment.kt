@@ -26,6 +26,7 @@ import bd.ac.primeuniversity.studentportal.ui.staff.invigilation.InvigilationDut
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveApprovalsActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
+import com.bumptech.glide.Glide
 import kotlinx.coroutines.launch
 
 /**
@@ -125,6 +126,19 @@ class StaffDashboardFragment : Fragment() {
     private fun render(me: StaffMeResponse?) {
         binding.staffName.text = me?.user?.fullName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.employee)
+
+        // Profile photo in the hero avatar; falls back to the person icon.
+        val photoUrl = me?.user?.photoUrl?.takeIf { it.isNotBlank() }
+        if (photoUrl != null) {
+            binding.avatarPhoto.visibility = View.VISIBLE
+            Glide.with(this)
+                .load(photoUrl)
+                .circleCrop()
+                .into(binding.avatarPhoto)
+        } else {
+            Glide.with(this).clear(binding.avatarPhoto)
+            binding.avatarPhoto.visibility = View.GONE
+        }
 
         val meta = listOfNotNull(
             me?.employee?.designation?.takeIf { it.isNotBlank() },

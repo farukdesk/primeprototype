@@ -24,6 +24,7 @@ import bd.ac.primeuniversity.studentportal.ui.results.ResultsActivity
 import bd.ac.primeuniversity.studentportal.ui.settings.SettingsActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
 import bd.ac.primeuniversity.studentportal.util.Formatters
+import com.bumptech.glide.Glide
 import kotlinx.coroutines.launch
 
 /**
@@ -142,6 +143,19 @@ class DashboardFragment : Fragment() {
     private fun renderStudent(student: Student?) {
         binding.studentName.text = student?.fullName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.student)
+
+        // Profile picture in the hero avatar; falls back to the person icon.
+        val photoUrl = student?.photoUrl?.takeIf { it.isNotBlank() }
+        if (photoUrl != null) {
+            binding.avatarPhoto.visibility = View.VISIBLE
+            Glide.with(this)
+                .load(photoUrl)
+                .circleCrop()
+                .into(binding.avatarPhoto)
+        } else {
+            Glide.with(this).clear(binding.avatarPhoto)
+            binding.avatarPhoto.visibility = View.GONE
+        }
 
         // Floating glass badge chips: ID and Department.
         val id = student?.studentId?.takeIf { it.isNotBlank() }

@@ -23,6 +23,21 @@ $ctx      = sp_api_auth();
 $student  = $ctx['student'];
 $batch_id = (int)($student['batch_id'] ?? 0);
 $sid      = (int)$student['student_db_id'];
+$my_shift   = trim((string)($student['shift'] ?? ''));
+$my_section = trim((string)($student['section'] ?? ''));
+
+// Shift/section targeting (admin/course-offer-shift-section.sql): students may
+// only register for offers that match their shift/section (or that target the
+// whole batch). Fails open when the columns are missing.
+$offer_target_sql    = '';
+$offer_target_params = [];
+try {
+    db()->query('SELECT shift, section FROM co_offers LIMIT 1');
+    $offer_target_sql = " AND (o.shift IS NULL OR o.shift = '' OR o.shift = ?)
+                          AND (o.section IS NULL OR o.section = '' OR o.section = ?)";
+    $offer_target_params = [$my_shift, $my_section];
+} catch (Throwable $e) {
+}
 
 // Accept JSON or form-encoded bodies.
 $input = $_POST;
@@ -86,10 +101,11 @@ if ($action === 'register_all') {
         sp_api_error(422, 'A valid offer_id is required.');
     }
     $ost = db()->prepare(
-        "SELECT registration_open FROM co_offers
-          WHERE id = ? AND batch_id = ? AND status = 'active' LIMIT 1"
+        "SELECT o.registration_open FROM co_offers o
+          WHERE o.id = ? AND o.batch_id = ? AND o.status = 'active'{$offer_target_sql}
+          LIMIT 1"
     );
-    $ost->execute([$offer_id, $batch_id]);
+    $ost->execute(array_merge([$offer_id, $batch_id], $offer_target_params));
     $offer = $ost->fetch();
     if (!$offer) {
         sp_api_error(404, 'This course offer is not available for your batch.');
@@ -144,10 +160,10 @@ $st = db()->prepare(
     "SELECT o.registration_open
        FROM co_offer_subjects cos
        JOIN co_offers o ON o.id = cos.offer_id
-      WHERE cos.id = ? AND o.batch_id = ? AND o.status = 'active'
+      WHERE cos.id = ? AND o.batch_id = ? AND o.status = 'active'{$offer_target_sql}
       LIMIT 1"
 );
-$st->execute([$offer_subject_id, $batch_id]);
+$st->execute(array_merge([$offer_subject_id, $batch_id], $offer_target_params));
 $row = $st->fetch();
 
 if (!$row) {
