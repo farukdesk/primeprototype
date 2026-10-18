@@ -299,6 +299,12 @@ $holidays = array_filter(
 );
 $sched    = att_effective_schedule($user_id);
 
+// Approved schedule to display read-only: the weekly-off day(s) and the Thu/Fri
+// On Campus / Online Class slots effective for this member as of today.
+$day_names        = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday', 6 => 'Saturday', 7 => 'Sunday'];
+$sched_off_days   = att_weekly_off_days_for($user_id, date('Y-m-d')) ?? ($sched['weekly_off_days'] ?? []);
+$sched_slots_day  = att_user_slots($user_id); // effective TODAY, keyed by weekday (4=Thu, 5=Fri)
+
 $dates = [];
 for ($d = strtotime($from); $d <= strtotime($to); $d = strtotime('+1 day', $d)) {
     $dates[] = date('Y-m-d', $d);
@@ -475,6 +481,52 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             <div class="card-body py-2 px-1">
                 <div class="fw-bold text-primary"><?= h(att_format_hours((int)$sum['minutes'])) ?></div>
                 <div class="small text-muted">Total Hours</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Approved schedule (read-only) -->
+<div class="card mb-3" style="border-radius:12px;">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-calendar-check me-2 text-muted"></i>Approved Schedule</h6>
+        <?php if ($self_only || (int)auth_user()['id'] === $user_id): ?>
+        <a href="<?= APP_URL ?>/staff-attendance/my-schedule.php" class="btn btn-outline-primary btn-sm no-print"><i class="fas fa-calendar-week me-1"></i> Manage My Schedule</a>
+        <?php endif; ?>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="small text-muted mb-1">Working hours</div>
+                <div class="fw-semibold">
+                    <?= h($sched['start_time']) ?>–<?= h($sched['close_time']) ?>
+                    <?php if (!empty($sched['custom'])): ?><span class="badge bg-info text-dark ms-1">override</span><?php endif; ?>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="small text-muted mb-1">Weekly off</div>
+                <div class="fw-semibold">
+                    <?= h(implode(', ', array_map(fn($n) => $day_names[$n] ?? $n, $sched_off_days)) ?: 'None') ?>
+                    <?php if (!empty($sched['weekly_off_custom'])): ?><span class="badge bg-info text-dark ms-1">own</span><?php endif; ?>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="small text-muted mb-1">Thu / Fri slots (On Campus / Online Class)</div>
+                <?php
+                $has_slots = false;
+                foreach ([4, 5] as $wd):
+                    $rows = $sched_slots_day[$wd] ?? [];
+                    if (empty($rows)) continue;
+                    $has_slots = true;
+                ?>
+                <div class="mb-1">
+                    <span class="fw-semibold small"><?= h($day_names[$wd]) ?>:</span>
+                    <?php foreach ($rows as $s): ?>
+                        <span class="badge bg-light text-dark border"><?= ($s['location'] ?? '') === 'online' ? 'Online Class' : 'On Campus' ?> <?= h(att_normalize_time($s['start_time'] ?? '') ?? '') ?>–<?= h(att_normalize_time($s['end_time'] ?? '') ?? '') ?></span>
+                    <?php endforeach; ?>
+                </div>
+                <?php endforeach; ?>
+                <?php if (!$has_slots): ?><div class="text-muted small">Standard hours (no custom slots)</div><?php endif; ?>
             </div>
         </div>
     </div>
