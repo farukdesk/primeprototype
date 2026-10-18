@@ -249,10 +249,13 @@ $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
         </tbody>
     </table>
 
-    <?php if ($pi + 1 === $total_pages): ?>
     <div class="sig-section">
         <div class="sig-block">
-            <div class="sig-line">Examination Committee</div>
+            <div class="sig-line">Program Coordinator</div>
+            <div class="sig-subtitle"><?= $meta['program_name'] !== '' ? h($meta['program_name']) : 'Program' ?></div>
+        </div>
+        <div class="sig-block">
+            <div class="sig-line">Head</div>
             <div class="sig-subtitle"><?= $meta['dept_name'] !== '' ? 'Dept. of ' . h($meta['dept_name']) : 'Department' ?></div>
         </div>
         <div class="sig-block">
@@ -260,15 +263,10 @@ $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
             <div class="sig-subtitle"><?= $meta['faculty_label'] !== '' ? h($meta['faculty_label']) : 'Faculty' ?></div>
         </div>
         <div class="sig-block">
-            <div class="sig-line">Program Coordinator</div>
-            <div class="sig-subtitle"><?= $meta['program_name'] !== '' ? h($meta['program_name']) : 'Program' ?></div>
-        </div>
-        <div class="sig-block">
             <div class="sig-line">Controller of Examinations</div>
             <div class="sig-subtitle">Office of the Controller</div>
         </div>
     </div>
-    <?php endif; ?>
 
 </div>
 <?php endforeach; ?>
