@@ -125,6 +125,10 @@ foreach ($staff as $s) {
                 $cls .= ' off';
                 $html = '<span class="tag">EX</span>';
                 break;
+            case 'exam_duty':
+                $cls .= ' off';
+                $html = '<span class="tag">DUTY</span>';
+                break;
             case 'online_class':
                 $cls .= ' off';
                 $html = '<span class="tag">ONL</span>';

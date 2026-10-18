@@ -162,6 +162,7 @@ if (($_GET['export'] ?? '') === 'csv') {
         'leave' => 'On Leave', 'absent' => 'Absent', 'holiday' => 'Holiday',
         'weekly_off' => 'Weekend', 'off' => 'Weekend',
         'exam_excuse' => 'Exam Excuse',
+        'exam_duty' => 'Exam Duty',
         'online_class' => 'Online Class',
         'short_hours' => 'Insufficient Hours',
     ];
