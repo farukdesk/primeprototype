@@ -856,17 +856,6 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         return ($exam_exempt || $short_leave) ? 'present' : 'short_hours';
     }
 
-    // Exam Excuse: while a university exam is running, Saturdays and Sundays are
-    // not counted Absent (exams continue over the weekend). A member who did not
-    // clock in on a Sat/Sun inside a running exam period is excused rather than
-    // marked Absent or a plain Weekend. Clocking in still counts as Present.
-    if ($slot_win === null && !$has_in) {
-        $iso = (int)date('N', strtotime($date)); // 6 = Sat, 7 = Sun
-        if (($iso === 6 || $iso === 7) && att_exam_period_active($date)) {
-            return 'exam_excuse';
-        }
-    }
-
     if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
     if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
@@ -877,7 +866,18 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         $now   = (int)date('G') * 60 + (int)date('i');
         if ($now <= $limit) return 'upcoming';
     }
-    if (!$has_in)                           return 'absent';
+    if (!$has_in) {
+        // Exam Excuse: while a university exam is running, Saturdays and Sundays
+        // are not counted Absent (exams continue over the weekend). Only a day
+        // that would otherwise be a full-day Absent (no clock-in, not a weekly
+        // off / leave / upcoming) is converted to Exam Excuse. Clocking in still
+        // counts as Present.
+        $iso = (int)date('N', strtotime($date)); // 6 = Sat, 7 = Sun
+        if (($iso === 6 || $iso === 7) && att_exam_period_active($date)) {
+            return 'exam_excuse';
+        }
+        return 'absent';
+    }
 
     // Present with an in-time: check late-in / early-out against the schedule.
 
