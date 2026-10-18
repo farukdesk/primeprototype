@@ -2,6 +2,7 @@ package bd.ac.primeuniversity.studentportal.data.api
 
 import bd.ac.primeuniversity.studentportal.data.model.AppNotificationsResponse
 import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
+import bd.ac.primeuniversity.studentportal.data.model.InvigilationDutyResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApprovalsResponse
 import bd.ac.primeuniversity.studentportal.data.model.NoticeDetailResponse
@@ -127,6 +128,11 @@ interface StaffApiService {
         @Field("class_date") classDate: String,
         @Field("statuses") statusesJson: String,
     ): Response<SaveStudentAttendanceResponse>
+
+    // ── Faculty: invigilation duty ──
+
+    @GET("staff/invigilation-duty.php")
+    suspend fun getInvigilationDuties(): Response<InvigilationDutyResponse>
 
     // Public endpoint at admin/api/app-version.php (no auth required).
     @GET("app-version.php")

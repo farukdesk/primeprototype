@@ -22,6 +22,7 @@ import bd.ac.primeuniversity.studentportal.ui.notifications.NotificationsActivit
 import bd.ac.primeuniversity.studentportal.ui.settings.SettingsActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.attendance.StaffAttendanceActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.attendance.StudentAttendanceActivity
+import bd.ac.primeuniversity.studentportal.ui.staff.invigilation.InvigilationDutyActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveActivity
 import bd.ac.primeuniversity.studentportal.ui.staff.leave.LeaveApprovalsActivity
 import bd.ac.primeuniversity.studentportal.util.AppResult
@@ -97,6 +98,8 @@ class StaffDashboardFragment : Fragment() {
                 startActivity(Intent(requireContext(), StaffAttendanceActivity::class.java))
             Feature.STUDENT_ATTENDANCE ->
                 startActivity(Intent(requireContext(), StudentAttendanceActivity::class.java))
+            Feature.INVIGILATION_DUTY ->
+                startActivity(Intent(requireContext(), InvigilationDutyActivity::class.java))
             Feature.LEAVE_MANAGEMENT ->
                 startActivity(Intent(requireContext(), LeaveActivity::class.java))
             Feature.LEAVE_APPROVALS ->

@@ -14,6 +14,7 @@ import bd.ac.primeuniversity.studentportal.data.model.AppVersionResponse
 import bd.ac.primeuniversity.studentportal.data.model.BaseResponse
 import bd.ac.primeuniversity.studentportal.data.model.CourseOffersResponse
 import bd.ac.primeuniversity.studentportal.data.model.FinancesResponse
+import bd.ac.primeuniversity.studentportal.data.model.InvigilationDutyResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApplyResponse
 import bd.ac.primeuniversity.studentportal.data.model.LeaveApprovalsResponse
 import bd.ac.primeuniversity.studentportal.data.model.LoginResponse
@@ -392,6 +393,12 @@ class StudentRepository private constructor(context: Context) {
         statuses: Map<Int, String>,
     ): AppResult<SaveStudentAttendanceResponse> =
         call { staffApi.saveStudentAttendance(subjectId, date, Gson().toJson(statuses)) }
+
+    // ── Faculty: invigilation duty ──────────────────────────────────────
+
+    /** The signed-in faculty member's invigilation duties (upcoming + past). */
+    suspend fun getInvigilationDuties(): AppResult<InvigilationDutyResponse> =
+        call { staffApi.getInvigilationDuties() }
 
     // ── Push notifications ────────────────────────────────────────────────────────────
 

@@ -139,6 +139,11 @@
             android:parentActivityName=".ui.staff.attendance.StudentAttendanceActivity" />
 
         <activity
+            android:name=".ui.staff.invigilation.InvigilationDutyActivity"
+            android:exported="false"
+            android:parentActivityName=".ui.staff.StaffMainActivity" />
+
+        <activity
             android:name=".ui.staff.leave.LeaveActivity"
             android:exported="false"
             android:parentActivityName=".ui.staff.StaffMainActivity" />

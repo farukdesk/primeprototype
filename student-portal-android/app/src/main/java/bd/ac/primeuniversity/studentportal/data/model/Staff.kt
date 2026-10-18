@@ -206,3 +206,33 @@ data class LeaveApplyResponse(
     @SerializedName("message") val message: String? = null,
     @SerializedName("request_id") val requestId: Int? = null,
 ) : BaseResponse()
+
+/** One invigilation duty slot assigned to the signed-in faculty member. */
+data class InvigilationDuty(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("date") val date: String = "",
+    @SerializedName("date_label") val dateLabel: String = "",
+    @SerializedName("weekday") val weekday: String = "",
+    @SerializedName("time_slot") val timeSlot: String = "",
+    @SerializedName("exam_name") val examName: String = "",
+    @SerializedName("exam_year") val examYear: String? = null,
+    @SerializedName("room_number") val roomNumber: String = "",
+    @SerializedName("my_position") val myPosition: Int = 1,
+    @SerializedName("co_name") val coName: String? = null,
+    @SerializedName("attended") val attended: Int? = null,
+    @SerializedName("status") val status: String = "pending",
+)
+
+/** Counts shown on the Invigilation Duty summary cards. */
+data class InvigilationSummary(
+    @SerializedName("total") val total: Int = 0,
+    @SerializedName("upcoming") val upcoming: Int = 0,
+    @SerializedName("attended") val attended: Int = 0,
+)
+
+data class InvigilationDutyResponse(
+    @SerializedName("has_profile") val hasProfile: Boolean = false,
+    @SerializedName("summary") val summary: InvigilationSummary? = null,
+    @SerializedName("upcoming") val upcoming: List<InvigilationDuty> = emptyList(),
+    @SerializedName("past") val past: List<InvigilationDuty> = emptyList(),
+) : BaseResponse()
