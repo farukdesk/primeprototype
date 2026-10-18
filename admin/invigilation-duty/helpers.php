@@ -195,31 +195,32 @@ function ivd_dept_ids_for_faculty(array $faculty_ids): array
 }
 
 /**
- * Whether any of the given ei_faculty records holds a departmental oversight
- * role — i.e. its designation contains "coordinator", "head", "dean" or
- * "section officer". Only these roles may see the department-wide "My
+ * Whether the given user belongs to a user group that grants departmental
+ * oversight — i.e. a group whose name contains "coordinator", "head", "dean"
+ * or "section officer". Only these groups may see the department-wide "My
  * Department's Duties" overview; ordinary faculty see only their own duties.
  *
- * @param int[] $faculty_ids
+ * @param array $user The logged-in user (from auth_user()).
  */
-function ivd_can_view_dept_duties(array $faculty_ids): bool
+function ivd_can_view_dept_duties(array $user): bool
 {
-    $faculty_ids = array_values(array_unique(array_map('intval', $faculty_ids)));
-    if (!$faculty_ids) return false;
+    $group_ids = $user['group_ids'] ?? [(int)($user['group_id'] ?? 0)];
+    $group_ids = array_values(array_unique(array_filter(array_map('intval', $group_ids))));
+    if (!$group_ids) return false;
 
-    $ph = implode(',', array_fill(0, count($faculty_ids), '?'));
+    $ph = implode(',', array_fill(0, count($group_ids), '?'));
     try {
         $st = db()->prepare(
-            "SELECT 1 FROM ei_faculty
-             WHERE id IN ($ph) AND (
-                 LOWER(COALESCE(designation, '')) LIKE '%coordinator%'
-                 OR LOWER(COALESCE(designation, '')) LIKE '%head%'
-                 OR LOWER(COALESCE(designation, '')) LIKE '%dean%'
-                 OR LOWER(COALESCE(designation, '')) LIKE '%section officer%'
+            "SELECT 1 FROM user_groups
+             WHERE id IN ($ph) AND is_active = 1 AND (
+                 LOWER(COALESCE(name, '')) LIKE '%coordinator%'
+                 OR LOWER(COALESCE(name, '')) LIKE '%head%'
+                 OR LOWER(COALESCE(name, '')) LIKE '%dean%'
+                 OR LOWER(COALESCE(name, '')) LIKE '%section officer%'
              )
              LIMIT 1"
         );
-        $st->execute($faculty_ids);
+        $st->execute($group_ids);
         return (bool)$st->fetchColumn();
     } catch (Throwable $e) {
         return false;

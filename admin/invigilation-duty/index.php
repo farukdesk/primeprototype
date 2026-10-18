@@ -58,12 +58,12 @@ $total_count    = count($duties);
 $upcoming_count = count($upcoming);
 $attended_count = count(array_filter($duties, static fn ($d) => $d['attended'] === 1));
 
-// Department-wide duties: only shown to users holding a departmental oversight
-// role (ei_faculty designation contains "coordinator", "head", "dean" or
-// "section officer"). Ordinary faculty see only their own duties, not their
+// Department-wide duties: only shown to users whose user group grants
+// departmental oversight (group name contains "coordinator", "head", "dean"
+// or "section officer"). Ordinary faculty see only their own duties, not their
 // colleagues' list.
 $dept_duties = [];
-if (ivd_can_view_dept_duties($faculty_ids)) {
+if (ivd_can_view_dept_duties($user)) {
     $my_dept_ids = ivd_dept_ids_for_faculty($faculty_ids);
     $dept_duties = ivd_dept_duties($my_dept_ids);
 }
