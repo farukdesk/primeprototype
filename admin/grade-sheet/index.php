@@ -42,9 +42,13 @@ if ($f['exam_id'] <= 0 && !empty($exams)) {
 // deferred until a filter is applied.
 $has_filter = $f['dept_id'] > 0 || $f['program_id'] > 0 || $f['batch_id'] > 0 || $f['semester'] !== '';
 
-$data     = ($f['exam_id'] > 0 && $has_filter) ? gs_build($f) : ['meta' => [], 'courses' => [], 'students' => []];
-$courses  = $data['courses'];
-$students = $data['students'];
+// Each group is a self-contained grade sheet for one batch. When the selection
+// spans multiple batches we render (and print) a separate sheet per batch.
+$groups = ($f['exam_id'] > 0 && $has_filter) ? gs_build_groups($f) : [];
+$has_students = false;
+foreach ($groups as $g) {
+    if (!empty($g['students'])) { $has_students = true; break; }
+}
 
 $print_query = http_build_query(array_filter($f, static fn($v) => $v !== '' && $v !== 0));
 
@@ -66,7 +70,7 @@ require_once __DIR__ . '/../includes/header.php';
             <li class="breadcrumb-item active">Grade Sheet</li>
         </ol>
     </nav>
-    <?php if ($f['exam_id'] > 0 && !empty($students)): ?>
+    <?php if ($f['exam_id'] > 0 && $has_students): ?>
     <div class="d-flex gap-2 flex-wrap">
         <a href="<?= APP_URL ?>/grade-sheet/print.php?<?= h($print_query) ?>" target="_blank" class="btn btn-primary btn-sm" style="border-radius:10px;">
             <i class="fas fa-print me-1"></i> Print / Generate Grade Sheet
@@ -152,18 +156,30 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="alert alert-secondary">
     <i class="fas fa-filter me-1"></i> Choose a department, program, batch, or semester and click <strong>Apply</strong> to load the grade sheet.
 </div>
-<?php elseif (empty($students)): ?>
+<?php elseif (!$has_students): ?>
 <div class="alert alert-info">
     <i class="fas fa-info-circle me-1"></i> No published grades match the selected filters.
 </div>
 <?php else: ?>
-<div class="card" style="border-radius:12px;">
+<?php if (count($groups) > 1): ?>
+<div class="alert alert-secondary py-2 px-3 mb-3" style="font-size:.85rem;">
+    <i class="fas fa-layer-group me-1"></i> Multiple batches found — a <strong>separate grade sheet</strong> is shown (and printed) for each batch.
+</div>
+<?php endif; ?>
+<?php foreach ($groups as $gi => $group): ?>
+<?php $courses = $group['courses']; $students = $group['students']; if (empty($students)) continue; ?>
+<div class="card mb-4" style="border-radius:12px;">
     <div class="card-body px-4 py-3">
+        <?php if (count($groups) > 1): ?>
+        <h6 class="fw-bold mb-3" style="color:#1e3a5f;">
+            <i class="fas fa-users me-1"></i> Grade Sheet <?= $gi + 1 ?><?= $group['meta']['batch_name'] !== '' ? ' — Batch ' . h($group['meta']['batch_name']) : '' ?>
+        </h6>
+        <?php endif; ?>
         <div class="d-flex flex-wrap gap-3 mb-3" style="font-size:.85rem;">
-            <?php if ($data['meta']['dept_name'] !== ''): ?><div><span class="text-muted">Department:</span> <strong><?= h($data['meta']['dept_name']) ?></strong></div><?php endif; ?>
-            <?php if ($data['meta']['program_name'] !== ''): ?><div><span class="text-muted">Program:</span> <strong><?= h($data['meta']['program_name']) ?></strong></div><?php endif; ?>
-            <?php if ($data['meta']['batch_name'] !== ''): ?><div><span class="text-muted">Batch:</span> <strong><?= h($data['meta']['batch_name']) ?></strong></div><?php endif; ?>
-            <?php if ($data['meta']['semester'] !== ''): ?><div><span class="text-muted">Semester:</span> <strong><?= h($data['meta']['semester']) ?></strong></div><?php endif; ?>
+            <?php if ($group['meta']['dept_name'] !== ''): ?><div><span class="text-muted">Department:</span> <strong><?= h($group['meta']['dept_name']) ?></strong></div><?php endif; ?>
+            <?php if ($group['meta']['program_name'] !== ''): ?><div><span class="text-muted">Program:</span> <strong><?= h($group['meta']['program_name']) ?></strong></div><?php endif; ?>
+            <?php if ($group['meta']['batch_name'] !== ''): ?><div><span class="text-muted">Batch:</span> <strong><?= h($group['meta']['batch_name']) ?></strong></div><?php endif; ?>
+            <?php if ($group['meta']['semester'] !== ''): ?><div><span class="text-muted">Semester:</span> <strong><?= h($group['meta']['semester']) ?></strong></div><?php endif; ?>
             <div><span class="text-muted">Students:</span> <strong><?= count($students) ?></strong></div>
         </div>
         <div class="table-responsive">
@@ -213,6 +229,7 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     </div>
 </div>
+<?php endforeach; ?>
 <?php endif; ?>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
