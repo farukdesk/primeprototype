@@ -149,6 +149,30 @@ function gs_semesters(): array
     return $rows;
 }
 
+/** Distinct non-empty shifts from student records, alphabetical. */
+function gs_shifts(): array
+{
+    try {
+        $rows = db()->query("SELECT DISTINCT shift FROM students WHERE shift IS NOT NULL AND shift <> '' ORDER BY shift ASC")->fetchAll(PDO::FETCH_COLUMN);
+        return array_map('strval', $rows);
+    } catch (Throwable $_e) {
+        return [];
+    }
+}
+
+/** Distinct non-empty sections from student records, naturally sorted. */
+function gs_sections(): array
+{
+    try {
+        $rows = db()->query("SELECT DISTINCT section FROM students WHERE section IS NOT NULL AND section <> ''")->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $_e) {
+        return [];
+    }
+    $rows = array_map('strval', $rows);
+    usort($rows, 'strnatcasecmp');
+    return $rows;
+}
+
 // ── Core aggregator ───────────────────────────────────────────────────────────
 
 /**
