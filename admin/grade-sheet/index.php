@@ -31,12 +31,18 @@ $f = [
     'section'    => trim((string)($_GET['section']  ?? '')),
 ];
 
-// Default to the newest exam with published sheets so the page isn't empty.
+// Default to the newest exam with published sheets so the exam selector isn't empty.
 if ($f['exam_id'] <= 0 && !empty($exams)) {
     $f['exam_id'] = (int)$exams[0]['id'];
 }
 
-$data     = $f['exam_id'] > 0 ? gs_build($f) : ['meta' => [], 'courses' => [], 'students' => []];
+// Only run the (potentially heavy) aggregation once the user has narrowed the
+// selection with at least one of dept / program / batch / semester. Loading an
+// entire exam's published grades on first page open is slow, so the preview is
+// deferred until a filter is applied.
+$has_filter = $f['dept_id'] > 0 || $f['program_id'] > 0 || $f['batch_id'] > 0 || $f['semester'] !== '';
+
+$data     = ($f['exam_id'] > 0 && $has_filter) ? gs_build($f) : ['meta' => [], 'courses' => [], 'students' => []];
 $courses  = $data['courses'];
 $students = $data['students'];
 
@@ -142,7 +148,11 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- ── Preview ─────────────────────────────────────────────────────────────── -->
-<?php if (empty($students)): ?>
+<?php if (!$has_filter): ?>
+<div class="alert alert-secondary">
+    <i class="fas fa-filter me-1"></i> Choose a department, program, batch, or semester and click <strong>Apply</strong> to load the grade sheet.
+</div>
+<?php elseif (empty($students)): ?>
 <div class="alert alert-info">
     <i class="fas fa-info-circle me-1"></i> No published grades match the selected filters.
 </div>
