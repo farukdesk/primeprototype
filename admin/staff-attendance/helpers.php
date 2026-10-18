@@ -96,7 +96,7 @@ function att_policy_rules_html(): string
                         <li><strong>Faculty on Friday:</strong> flexible clock in/out — must complete a strict <strong>8 hours</strong> in total; never marked Late In or Early Out.</li>
                         <li><strong>Early birds:</strong> clock in by <strong>8:30 AM</strong> → may leave from <strong>4:30 PM</strong> without Early Out.</li>
                         <li><strong>Penalty:</strong> every <strong>4 Late In / Early Out days</strong> count as <strong>1 Absent day</strong> (salary may be deducted).</li>
-                        <li><strong>Exam period:</strong> during active exam dates (Exam Invigilation), Faculty and Controller Section members are never counted Late In / Early Out.</li>
+                        <li><strong>Invigilation duty:</strong> on days a faculty member has an exam <strong>invigilation duty</strong> (Exam Invigilation), they are never counted Late In / Early Out / Insufficient Hours for that day.</li>
                     </ul>
                 </div>
             </div>
@@ -454,166 +454,146 @@ function att_prime_month_range(string $month): array
     return ['from' => $from, 'to' => $to, 'label' => $label, 'month' => $month];
 }
 
-// -- Exam-period exemption (Exam Invigilation integration) ------------------
+// -- Invigilation-duty exemption (Exam Invigilation integration) ------------
 
 /**
- * During the date range of any ACTIVE exam (ei_exams.start_date -> end_date,
- * Exam Invigilation module), members of the exempt user groups are never
- * counted Late In or Early Out -- exam duty replaces their office schedule.
- * The group list is configurable in Attendance Settings (comma-separated
- * group names, matched case-insensitively).
+ * A faculty member is excused from Late In / Early Out / Insufficient Hours
+ * ONLY on the specific day(s) they actually have an invigilation (exam) duty
+ * assigned in the Exam Invigilation module -- exam duty replaces their office
+ * schedule for that day. Being inside an exam's overall date range is NOT
+ * enough; the member must be rostered (ei_slots.faculty1_id / faculty2_id) on
+ * an ACTIVE exam for that date.
  */
-const ATT_EXAM_EXEMPT_GROUPS_DEFAULT = 'Faculty, Controller Section';
-
-/** Exempt user-group names, normalised to lowercase. */
-function att_exam_exempt_group_names(): array
-{
-    $raw = (string)att_get_setting('exam_exempt_groups', ATT_EXAM_EXEMPT_GROUPS_DEFAULT);
-    $out = [];
-    foreach (explode(',', $raw) as $g) {
-        $g = strtolower(trim($g));
-        if ($g !== '') $out[] = $g;
-    }
-    return $out;
-}
 
 /**
- * Date ranges of ACTIVE exams from the Exam Invigilation module (cached).
- * The range comes from ei_exams.start_date/end_date; when either date is
- * missing (both are optional on the exam form), it falls back to the exam's
- * first/last invigilation slot date (ei_slots), so exams entered without an
- * end date are still covered.
+ * Resolve the ei_faculty row id(s) that belong to the given user. Mirrors the
+ * Invigilation Duty module: direct link via ei_faculty.user_id first, then a
+ * unique full-name match (users.full_name / dept_faculty.name), persisted back
+ * when unambiguous. Cached per request.
+ *
+ * @return int[] ei_faculty ids (may be empty)
  */
-function att_exam_date_ranges(): array
+function att_user_faculty_ids(int $user_id): array
 {
-    static $cache = null;
-    if ($cache !== null) return $cache;
-    $cache = [];
-    $clean = static function ($d): ?string {
-        $d = (string)$d;
-        return ($d === '' || $d === '0000-00-00') ? null : $d;
-    };
-    $rows = [];
+    static $cache = [];
+    if ($user_id <= 0) return [];
+    if (array_key_exists($user_id, $cache)) return $cache[$user_id];
+
+    // 1. Direct link.
     try {
-        $rows = db()->query(
-            'SELECT e.start_date, e.end_date, MIN(s.slot_date) AS first_slot, MAX(s.slot_date) AS last_slot FROM ei_exams e LEFT JOIN ei_slots s ON s.exam_id = e.id WHERE e.is_active = 1 GROUP BY e.id, e.start_date, e.end_date'
-        )->fetchAll();
+        $st = db()->prepare('SELECT id FROM ei_faculty WHERE user_id = ?');
+        $st->execute([$user_id]);
+        $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+        if ($ids) return $cache[$user_id] = $ids;
     } catch (Throwable $e) {
-        // ei_slots missing - fall back to the exam dates alone.
-        try {
-            $rows = db()->query(
-                'SELECT start_date, end_date, NULL AS first_slot, NULL AS last_slot FROM ei_exams WHERE is_active = 1'
-            )->fetchAll();
-        } catch (Throwable $e2) {
-            // Exam Invigilation module not installed - no exam exemption.
-        }
+        // ei_faculty / user_id column missing - no invigilation duty data.
+        return $cache[$user_id] = [];
     }
-    foreach ($rows as $r) {
-        $from = $clean($r['start_date']) ?? $clean($r['first_slot']);
-        $to   = $clean($r['end_date'])   ?? $clean($r['last_slot']) ?? $from;
-        if ($from === null) continue;
-        if ($to < $from) { [$from, $to] = [$to, $from]; }
-        $cache[] = ['from' => $from, 'to' => $to];
-    }
-    return $cache;
-}
 
-/** Whether a Y-m-d date falls inside any active exam period. */
-function att_is_exam_date(string $date): bool
-{
-    foreach (att_exam_date_ranges() as $r) {
-        if ($date >= $r['from'] && $date <= $r['to']) return true;
+    // 2. Fallback: unique name match (users.full_name + dept_faculty.name).
+    $candidates = [];
+    try {
+        $st = db()->prepare('SELECT full_name FROM users WHERE id = ?');
+        $st->execute([$user_id]);
+        $full_name = (string)$st->fetchColumn();
+        if ($full_name !== '') $candidates[] = $full_name;
+    } catch (Throwable $e) {}
+    try {
+        $st = db()->prepare('SELECT name FROM dept_faculty WHERE user_id = ? AND is_active = 1');
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            if ((string)$n !== '') $candidates[] = (string)$n;
+        }
+    } catch (Throwable $e) {}
+
+    $wanted = [];
+    foreach ($candidates as $c) {
+        $norm = att_normalize_person_name($c);
+        if ($norm !== '') $wanted[$norm] = true;
     }
-    return false;
+    if (!$wanted) return $cache[$user_id] = [];
+
+    $matches = [];
+    try {
+        foreach (db()->query('SELECT id, name, user_id FROM ei_faculty WHERE is_active = 1')->fetchAll() as $row) {
+            if (!empty($row['user_id'])) continue; // already linked to someone else
+            if (isset($wanted[att_normalize_person_name((string)$row['name'])])) {
+                $matches[] = (int)$row['id'];
+            }
+        }
+    } catch (Throwable $e) {
+        return $cache[$user_id] = [];
+    }
+
+    // Persist a unique, unambiguous match for future direct lookups.
+    if (count($matches) === 1) {
+        try {
+            db()->prepare('UPDATE ei_faculty SET user_id = ? WHERE id = ? AND user_id IS NULL')
+                ->execute([$user_id, $matches[0]]);
+        } catch (Throwable $e) {}
+    }
+
+    return $cache[$user_id] = $matches;
 }
 
 /**
- * Whether ANY of the user's groups is on the exempt list (cached per request).
- * Checks the primary group (users.group_id) AND every additional membership
- * in user_group_assignments (multi-group support), so members whose primary
- * group differs (e.g. Controller Section as a secondary group) are covered.
+ * Normalise a person name for matching: lowercase, strip common titles and
+ * punctuation, collapse whitespace. Mirrors ivd_normalize_name() in the
+ * Invigilation Duty module so the same accounts resolve consistently.
  */
-function att_user_exam_exempt(int $user_id): bool
+function att_normalize_person_name(string $name): string
 {
-    static $map = null;
-    if ($map === null) {
-        $map   = [];
-        $names = att_exam_exempt_group_names();
-        if (!empty($names)) {
-            // Primary group.
-            try {
-                $rows = db()->query(
-                    'SELECT u.id AS user_id, g.name FROM users u JOIN user_groups g ON g.id = u.group_id'
-                )->fetchAll();
-                foreach ($rows as $r) {
-                    if (in_array(strtolower(trim((string)$r['name'])), $names, true)) {
-                        $map[(int)$r['user_id']] = true;
-                    }
-                }
-            } catch (Throwable $e) {
-                // ignore - exemption simply does not apply
-            }
-            // Additional groups (multi-group accounts). Guarded: the junction
-            // table may not exist on legacy deployments.
-            try {
-                $rows = db()->query(
-                    'SELECT uga.user_id, g.name FROM user_group_assignments uga JOIN user_groups g ON g.id = uga.group_id WHERE g.is_active = 1'
-                )->fetchAll();
-                foreach ($rows as $r) {
-                    if (in_array(strtolower(trim((string)$r['name'])), $names, true)) {
-                        $map[(int)$r['user_id']] = true;
-                    }
-                }
-            } catch (Throwable $e) {
-                // ignore - primary-group matching above still applies
-            }
-            // "Faculty" also matches the staff-profile Employee Type
-            // (department_type = 'educational'): most faculty accounts belong
-            // to differently-named user groups, but the attendance module
-            // identifies faculty by employee type.
-            if (in_array('faculty', $names, true)) {
-                try {
-                    $rows = db()->query(
-                        "SELECT user_id FROM staff_profiles WHERE department_type = 'educational'"
-                    )->fetchAll();
-                    foreach ($rows as $r) {
-                        $map[(int)$r['user_id']] = true;
-                    }
-                } catch (Throwable $e) {
-                    // staff_profiles missing - group matching above still applies
-                }
-            }
-            // Exempt entries also match the member's STAFF DEPARTMENT name
-            // (e.g. a "Controller Section" staff department rather than a
-            // user group), via the module's fuzzy department-name matcher.
-            // The generic "faculty" entry is skipped here (handled above) so
-            // academic departments named "Faculty of X" do not exempt their
-            // administrative staff.
-            try {
-                $rows = db()->query(
-                    'SELECT sp.user_id, sd.name FROM staff_profiles sp JOIN staff_departments sd ON sd.id = sp.staff_dept_id'
-                )->fetchAll();
-                foreach ($rows as $r) {
-                    foreach ($names as $n) {
-                        if ($n === 'faculty') continue;
-                        if (att_dept_names_match((string)$r['name'], $n)) {
-                            $map[(int)$r['user_id']] = true;
-                            break;
-                        }
-                    }
-                }
-            } catch (Throwable $e) {
-                // staff departments missing - group matching above still applies
-            }
-        }
-    }
-    return $map[$user_id] ?? false;
+    $name = mb_strtolower(trim($name));
+    $name = str_replace(['.', ','], ' ', $name);
+    $name = preg_replace('/\b(dr|prof|professor|mr|ms|mrs|engr|md)\b/u', ' ', $name);
+    $name = preg_replace('/\s+/u', ' ', (string)$name);
+    return trim((string)$name);
 }
 
-/** Whether the exam-period Late In / Early Out exemption applies. */
+/**
+ * The set of Y-m-d dates on which the given user has an invigilation duty on an
+ * ACTIVE exam (ei_slots joined to active ei_exams). Returned as a lookup map
+ * (date => true). Cached per request.
+ *
+ * @return array<string,bool>
+ */
+function att_user_exam_duty_dates(int $user_id): array
+{
+    static $cache = [];
+    if (array_key_exists($user_id, $cache)) return $cache[$user_id];
+
+    $dates = [];
+    $fids  = att_user_faculty_ids($user_id);
+    if ($fids) {
+        $ph = implode(',', array_fill(0, count($fids), '?'));
+        try {
+            $st = db()->prepare(
+                "SELECT DISTINCT s.slot_date
+                   FROM ei_slots s
+                   JOIN ei_exams e ON e.id = s.exam_id AND e.is_active = 1
+                  WHERE s.faculty1_id IN ($ph) OR s.faculty2_id IN ($ph)"
+            );
+            $st->execute(array_merge($fids, $fids));
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) {
+                $d = (string)$d;
+                if ($d !== '' && $d !== '0000-00-00') $dates[$d] = true;
+            }
+        } catch (Throwable $e) {
+            // Exam Invigilation module not installed - no duty exemption.
+        }
+    }
+    return $cache[$user_id] = $dates;
+}
+
+/**
+ * Whether the invigilation-duty Late In / Early Out exemption applies: the
+ * member has an invigilation duty rostered on an active exam for this exact
+ * day.
+ */
 function att_exam_exempt(int $user_id, string $date): bool
 {
-    return att_is_exam_date($date) && att_user_exam_exempt($user_id);
+    $dates = att_user_exam_duty_dates($user_id);
+    return isset($dates[$date]);
 }
 
 /** Whether a given Y-m-d date is a GLOBAL weekly-off day. */
@@ -793,9 +773,9 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     $policy = att_policy_active($date);
     $etype  = $policy ? att_employee_type($user_id) : '';
 
-    // Exam-period exemption: during active exam dates (Exam Invigilation),
-    // members of the exempt groups (default: Faculty, Controller Section)
-    // are never counted Late In / Early Out / Insufficient Hours.
+    // Invigilation-duty exemption: on days the faculty member has an exam
+    // invigilation duty (Exam Invigilation), never count Late In / Early Out /
+    // Insufficient Hours -- the exam duty replaces their office schedule.
     $exam_exempt = att_exam_exempt($user_id, $date);
 
     // Approved short leave (Leave Management): the member was excused for part
@@ -874,8 +854,9 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         $early = false;
     }
 
-    // Exam-period exemption: never Late In / Early Out during active exams.
-    // An approved short leave likewise excuses the late arrival / early exit.
+    // Invigilation-duty exemption: never Late In / Early Out on a day the
+    // member has an exam invigilation duty. An approved short leave likewise
+    // excuses the late arrival / early exit.
     if ($exam_exempt || $short_leave) {
         $late  = false;
         $early = false;
