@@ -819,6 +819,13 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // of this day, so never count Late In / Early Out / Insufficient Hours.
     $short_leave = $has_in && att_short_leave($user_id, $date);
 
+    // Exam Duty takes precedence over an automatic Holiday / Weekend: a faculty
+    // member rostered for an invigilation duty on a day they did not clock in is
+    // marked "Exam Duty", even when the day would otherwise be a holiday or a
+    // weekly off. Clocking in still counts as Present (handled below). Explicit
+    // admin overrides (handled above) still win.
+    if (!$has_in && $exam_exempt) return 'exam_duty';
+
     // Group-restricted holidays only apply to members of the selected groups.
     if (isset($holidays[$date]) && att_holiday_applies($user_id, $date)) {
         return $has_in ? 'present' : 'holiday';
@@ -868,12 +875,6 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         if (att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES) return 'present';
         return ($exam_exempt || $short_leave) ? 'present' : 'short_hours';
     }
-
-    // Exam Duty: the member is rostered for an exam invigilation duty on this
-    // exact day. When they have not clocked in, the day is marked Exam Duty
-    // instead of Weekend / Upcoming / Absent — the invigilation duty replaces
-    // the office schedule. Clocking in still counts as Present (handled below).
-    if (!$has_in && $exam_exempt) return 'exam_duty';
 
     if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
