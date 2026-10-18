@@ -19,6 +19,8 @@ $departments = gs_departments();
 $programs    = gs_programs();
 $batches     = gs_batches();
 $semesters   = gs_semesters();
+$shifts      = gs_shifts();
+$sections    = gs_sections();
 
 // ── Filters ───────────────────────────────────────────────────────────────────
 $f = [
@@ -137,11 +139,21 @@ require_once __DIR__ . '/../includes/header.php';
             </div>
             <div class="col-6 col-lg-2">
                 <label class="form-label fw-medium mb-1" style="font-size:.8rem;">Shift</label>
-                <input type="text" name="shift" value="<?= h($f['shift']) ?>" class="form-control form-control-sm" style="border-radius:8px;" placeholder="e.g. Evening">
+                <select name="shift" class="form-select form-select-sm" style="border-radius:8px;">
+                    <option value="">All shifts</option>
+                    <?php foreach ($shifts as $sh): ?>
+                    <option value="<?= h($sh) ?>" <?= $f['shift'] === $sh ? 'selected' : '' ?>><?= h($sh) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-6 col-lg-2">
                 <label class="form-label fw-medium mb-1" style="font-size:.8rem;">Section</label>
-                <input type="text" name="section" value="<?= h($f['section']) ?>" class="form-control form-control-sm" style="border-radius:8px;" placeholder="e.g. A">
+                <select name="section" class="form-select form-select-sm" style="border-radius:8px;">
+                    <option value="">All sections</option>
+                    <?php foreach ($sections as $sec): ?>
+                    <option value="<?= h($sec) ?>" <?= $f['section'] === $sec ? 'selected' : '' ?>><?= h($sec) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="col-12 col-lg-4 d-flex gap-2 justify-content-lg-end">
                 <button class="btn btn-sm btn-primary" style="border-radius:8px;"><i class="fas fa-filter me-1"></i> Apply</button>
