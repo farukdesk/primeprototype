@@ -31,7 +31,7 @@ $days    = [];
 $summary = [
     'working_days' => 0, 'present' => 0, 'late_in' => 0, 'early_out' => 0,
     'late_and_early' => 0, 'incomplete' => 0, 'short_hours' => 0, 'absent' => 0,
-    'leave' => 0, 'holiday' => 0, 'weekly_off' => 0, 'upcoming' => 0,
+    'leave' => 0, 'holiday' => 0, 'weekly_off' => 0, 'exam_excuse' => 0, 'upcoming' => 0,
 ];
 
 for ($d = strtotime($range['from']); $d <= strtotime($range['to']); $d += 86400) {
@@ -40,7 +40,7 @@ for ($d = strtotime($range['from']); $d <= strtotime($range['to']); $d += 86400)
     $status = att_compute_status($rec, $uid, $date, $sched, $holidays, att_on_leave_user_ids($date));
 
     if (isset($summary[$status])) $summary[$status]++;
-    if (!in_array($status, ['holiday', 'weekly_off', 'upcoming'], true)) $summary['working_days']++;
+    if (!in_array($status, ['holiday', 'weekly_off', 'exam_excuse', 'upcoming'], true)) $summary['working_days']++;
 
     $worked = att_worked_minutes($rec['in_time'] ?? null, $rec['out_time'] ?? null);
     $days[] = [

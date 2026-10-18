@@ -596,6 +596,39 @@ function att_exam_exempt(int $user_id, string $date): bool
     return isset($dates[$date]);
 }
 
+/**
+ * Whether a running exam period (an active ei_exams row whose start_date ..
+ * end_date range covers the date) is in progress on the given Y-m-d date.
+ *
+ * Used so that weekends (Saturday / Sunday) falling inside a running exam are
+ * excused rather than counted Absent: the university keeps running exams over
+ * the weekend, so staff weekends during the exam are marked "Exam Excuse".
+ * Cached per request. Returns false when the Exam Invigilation tables are
+ * missing so the normal weekend/absent handling applies.
+ */
+function att_exam_period_active(string $date): bool
+{
+    static $cache = [];
+    if (!array_key_exists($date, $cache)) {
+        $active = false;
+        try {
+            $st = db()->prepare(
+                'SELECT 1 FROM ei_exams
+                  WHERE is_active = 1
+                    AND start_date IS NOT NULL AND end_date IS NOT NULL
+                    AND ? BETWEEN start_date AND end_date
+                  LIMIT 1'
+            );
+            $st->execute([$date]);
+            $active = (bool)$st->fetchColumn();
+        } catch (Throwable $e) {
+            // Exam Invigilation module not installed – no exam period.
+        }
+        $cache[$date] = $active;
+    }
+    return $cache[$date];
+}
+
 /** Whether a given Y-m-d date is a GLOBAL weekly-off day. */
 function att_is_weekly_off(string $date): bool
 {
@@ -823,6 +856,17 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         return ($exam_exempt || $short_leave) ? 'present' : 'short_hours';
     }
 
+    // Exam Excuse: while a university exam is running, Saturdays and Sundays are
+    // not counted Absent (exams continue over the weekend). A member who did not
+    // clock in on a Sat/Sun inside a running exam period is excused rather than
+    // marked Absent or a plain Weekend. Clocking in still counts as Present.
+    if ($slot_win === null && !$has_in) {
+        $iso = (int)date('N', strtotime($date)); // 6 = Sat, 7 = Sun
+        if (($iso === 6 || $iso === 7) && att_exam_period_active($date)) {
+            return 'exam_excuse';
+        }
+    }
+
     if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
     if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
@@ -899,6 +943,7 @@ function att_status_label(string $status): string
         'leave'          => 'On Leave',
         'holiday'        => 'Holiday',
         'weekly_off'     => 'Weekend',
+        'exam_excuse'    => 'Exam Excuse',
         default          => ucfirst(str_replace('_', ' ', $status)),
     };
 }
@@ -918,6 +963,7 @@ function att_status_badge(string $status): string
         'leave'          => 'bg-primary',
         'holiday'        => 'bg-secondary',
         'weekly_off'     => 'bg-light text-dark border',
+        'exam_excuse'    => 'bg-info-subtle text-info border border-info-subtle',
     ];
     $cls = $map[$status] ?? 'bg-light text-dark';
     return '<span class="badge ' . $cls . '">' . h(att_status_label($status)) . '</span>';
