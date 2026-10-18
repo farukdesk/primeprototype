@@ -422,7 +422,7 @@ function ei_capture_duty_state(int $exam_id): ?array
     try {
         $st = db()->prepare(
             'SELECT s.id, s.slot_date, s.time_slot, s.room_number,
-                    s.faculty1_id, s.faculty2_id, e.exam_name
+                    s.dept_id, s.faculty1_id, s.faculty2_id, e.exam_name
              FROM ei_slots s
              JOIN ei_exams e ON e.id = s.exam_id
              WHERE s.exam_id = ?'
@@ -456,7 +456,7 @@ function ei_notify_duty_changes(?array $before, int $exam_id): void
         foreach ($slot_ids as $slot_id) {
             $old = $before[$slot_id] ?? null;
             $new = $after[$slot_id] ?? null;
-            $fields = ['slot_date', 'time_slot', 'room_number', 'faculty1_id', 'faculty2_id'];
+            $fields = ['slot_date', 'time_slot', 'room_number', 'dept_id', 'faculty1_id', 'faculty2_id'];
             $old_values = $old ? array_map(static fn ($field) => (string)($old[$field] ?? ''), $fields) : null;
             $new_values = $new ? array_map(static fn ($field) => (string)($new[$field] ?? ''), $fields) : null;
             if ($old_values === $new_values) continue;
@@ -473,6 +473,24 @@ function ei_notify_duty_changes(?array $before, int $exam_id): void
 
         require_once __DIR__ . '/../invigilation-duty/helpers.php';
         require_once __DIR__ . '/../app-notifications/helpers.php';
+        ivd_ensure_user_column();
+
+        $faculty_ids = array_keys($changed_faculty);
+        $faculty_placeholders = implode(',', array_fill(0, count($faculty_ids), '?'));
+        $faculty_st = db()->prepare(
+            "SELECT id, user_id FROM ei_faculty WHERE id IN ($faculty_placeholders)"
+        );
+        $faculty_st->execute($faculty_ids);
+        $unlinked_faculty = [];
+        $recipient_ids = [];
+        foreach ($faculty_st->fetchAll(PDO::FETCH_ASSOC) as $faculty) {
+            $user_id = (int)($faculty['user_id'] ?? 0);
+            if ($user_id > 0) {
+                $recipient_ids[$user_id] = true;
+            } else {
+                $unlinked_faculty[(int)$faculty['id']] = true;
+            }
+        }
 
         $registered_users = db()->query(
             "SELECT DISTINCT t.user_id
@@ -481,13 +499,18 @@ function ei_notify_duty_changes(?array $before, int $exam_id): void
              WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''"
         )->fetchAll(PDO::FETCH_COLUMN);
 
-        $recipient_ids = [];
+        $registered_user_ids = array_fill_keys(array_map('intval', $registered_users), true);
+        $recipient_ids = array_intersect_key($recipient_ids, $registered_user_ids);
+
+        // If a linked faculty row has not yet been associated with a login,
+        // reuse the self-service name matching for registered app users.
         foreach ($registered_users as $user_id) {
+            if (!$unlinked_faculty) break;
             $user_id = (int)$user_id;
             foreach (ivd_faculty_ids_for_user($user_id) as $faculty_id) {
-                if (isset($changed_faculty[(int)$faculty_id])) {
+                if (isset($unlinked_faculty[(int)$faculty_id])) {
                     $recipient_ids[$user_id] = true;
-                    break;
+                    unset($unlinked_faculty[(int)$faculty_id]);
                 }
             }
         }
