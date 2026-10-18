@@ -44,6 +44,9 @@ class LeaveApplyActivity : AppCompatActivity() {
     private val selectedCategory: String
         get() = categories[binding.spCategory.selectedItemPosition].first
 
+    /** Whether the signed-in employee is Faculty; they must supply a makeup plan. */
+    private var isFaculty = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLeaveApplyBinding.inflate(layoutInflater)
@@ -74,6 +77,18 @@ class LeaveApplyActivity : AppCompatActivity() {
         binding.btnSubmit.setOnClickListener { submit() }
 
         onCategoryChanged()
+        loadFacultyFlag()
+    }
+
+    /** Fetch whether the user is Faculty; faculty must fill the makeup plan. */
+    private fun loadFacultyFlag() {
+        lifecycleScope.launch {
+            val result = app.repository.getStaffLeaves()
+            if (result is AppResult.Success) {
+                isFaculty = result.data.isFaculty
+                binding.makeupWrap.visibility = if (isFaculty) View.VISIBLE else View.GONE
+            }
+        }
     }
 
     private fun onCategoryChanged() {
@@ -107,6 +122,7 @@ class LeaveApplyActivity : AppCompatActivity() {
         val reason = binding.reason.text.toString().trim()
         val startTime = binding.startTime.text.toString().trim()
         val endTime = binding.endTime.text.toString().trim()
+        val makeupPlan = binding.makeupPlan.text.toString().trim()
 
         if (start.isEmpty()) {
             toast(getString(R.string.leave_err_start)); return
@@ -119,6 +135,9 @@ class LeaveApplyActivity : AppCompatActivity() {
         }
         if (reason.isEmpty()) {
             toast(getString(R.string.leave_err_reason)); return
+        }
+        if (isFaculty && makeupPlan.isEmpty()) {
+            toast(getString(R.string.leave_err_makeup)); return
         }
 
         val payType = if (cat == "additional") {
@@ -137,6 +156,7 @@ class LeaveApplyActivity : AppCompatActivity() {
                 payType = payType,
                 startTime = if (cat == "short") startTime else null,
                 endTime = if (cat == "short") endTime else null,
+                makeupPlan = if (isFaculty) makeupPlan else null,
             )
             binding.progress.visibility = View.GONE
             when (result) {

@@ -60,6 +60,7 @@ interface StaffApiService {
         @Field("pay_type") payType: String?,
         @Field("start_time") startTime: String?,
         @Field("end_time") endTime: String?,
+        @Field("makeup_plan") makeupPlan: String?,
     ): Response<LeaveApplyResponse>
 
     @FormUrlEncoded

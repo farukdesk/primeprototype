@@ -190,6 +190,7 @@ data class LeaveRequest(
     @SerializedName("end_time") val endTime: String? = null,
     @SerializedName("days") val days: Double = 0.0,
     @SerializedName("reason") val reason: String? = null,
+    @SerializedName("makeup_plan") val makeupPlan: String? = null,
     @SerializedName("status") val status: String = "pending",
     @SerializedName("current_step") val currentStep: Int = 1,
     @SerializedName("created_at") val createdAt: String? = null,
@@ -199,6 +200,7 @@ data class LeaveRequest(
 data class StaffLeavesResponse(
     @SerializedName("balance") val balance: LeaveBalance? = null,
     @SerializedName("categories") val categories: List<String> = emptyList(),
+    @SerializedName("is_faculty") val isFaculty: Boolean = false,
     @SerializedName("requests") val requests: List<LeaveRequest> = emptyList(),
 ) : BaseResponse()
 
