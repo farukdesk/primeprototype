@@ -461,6 +461,8 @@ function gs_assemble_dataset(array $rows, array $meta): array
             $letter = strtoupper(trim($ge['letter']));
             if ($letter === '' || $letter === 'INCOM') continue;
             $has_grade = true;
+            // A failing (F) course stays visible in its own subject cell, but is
+            // skipped here: SGPA is computed only from passed/completed courses.
             if ($letter === 'F') { $has_fail = true; continue; }
             $credit = $courses[$code]['credit'] ?? null;
             if ($ge['point'] !== null && $credit !== null && $credit > 0) {
@@ -471,11 +473,13 @@ function gs_assemble_dataset(array $rows, array $meta): array
 
         if (!$has_grade) {
             $sd['remark'] = 'Absent';
-        } elseif ($has_fail) {
-            // A failing grade means no SGPA until the course is cleared.
-            $sd['remark'] = 'F';
         } elseif ($total_cr > 0) {
-            $sd['sgpa'] = number_format($total_pts / $total_cr, 2);
+            // SGPA on the passed/completed courses; flag any F in the remark.
+            $sd['sgpa']   = number_format($total_pts / $total_cr, 2);
+            if ($has_fail) $sd['remark'] = 'F';
+        } elseif ($has_fail) {
+            // No completed course to average — only failing grade(s).
+            $sd['remark'] = 'F';
         } else {
             $sd['remark'] = 'N/A';
         }

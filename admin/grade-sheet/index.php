@@ -228,6 +228,9 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="center">
                             <?php if ($sd['sgpa'] !== null): ?>
                                 <span class="gs-sgpa"><?= h($sd['sgpa']) ?></span>
+                                <?php if (($sd['remark'] ?? '') === 'F'): ?>
+                                    <em class="text-danger">(F)</em>
+                                <?php endif; ?>
                             <?php elseif ($sd['remark'] === 'Absent'): ?>
                                 <em class="text-muted">Absent</em>
                             <?php else: ?>
