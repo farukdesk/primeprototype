@@ -19,10 +19,14 @@ $f = [
     'section'    => trim((string)($_GET['section']  ?? '')),
 ];
 
-$data     = gs_build($f);
-$meta     = $data['meta'];
-$courses  = $data['courses'];
-$students = array_values($data['students']);
+// One self-contained grade sheet per batch (separate sheets when multiple
+// batches match the selection).
+$groups = gs_build_groups($f);
+
+$has_students = false;
+foreach ($groups as $g) {
+    if (!empty($g['students'])) { $has_students = true; break; }
+}
 
 // Exam label for the title block.
 $exam_label = '';
@@ -36,23 +40,21 @@ if ($f['exam_id'] > 0) {
     } catch (Throwable $_e) {}
 }
 
-// ── Paginate students (rows per printed page) ─────────────────────────────────
 $rows_per_page = 20;
-$pages = array_chunk($students, $rows_per_page);
-if (empty($pages)) $pages = [[]];
-$total_pages = count($pages);
+$date_today    = date('d F Y');
 
-$date_today = date('d F Y');
-
-// Batch caption, e.g. "62nd (Group-A) (Evening)".
-$batch_caption = $meta['batch_name'];
-$extras = array_filter([
-    $meta['section'] !== '' ? 'Group-' . $meta['section'] : '',
-    $meta['shift'] !== ''   ? $meta['shift'] : '',
-]);
-if ($extras) {
-    $batch_caption = trim($batch_caption . ' (' . implode(') (', $extras) . ')');
-}
+// Batch caption helper, e.g. "62nd (Group-A) (Evening)".
+$gs_batch_caption = static function (array $meta): string {
+    $caption = (string)$meta['batch_name'];
+    $extras = array_filter([
+        $meta['section'] !== '' ? 'Group-' . $meta['section'] : '',
+        $meta['shift'] !== ''   ? $meta['shift'] : '',
+    ]);
+    if ($extras) {
+        $caption = trim($caption . ' (' . implode(') (', $extras) . ')');
+    }
+    return $caption;
+};
 
 $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
 ?>
@@ -152,7 +154,7 @@ $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
 
 <div class="print-wrapper">
 
-<?php if (empty($courses) && empty($students[0])): ?>
+<?php if (!$has_students): ?>
 <div class="sheet-page">
     <div class="univ-header">
         <img src="<?= LOGO_URL ?>" alt="Prime University" class="logo" onerror="this.style.display='none'">
@@ -165,6 +167,19 @@ $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
 </div>
 <?php else: ?>
 
+<?php foreach ($groups as $group): ?>
+<?php
+    $meta     = $group['meta'];
+    $courses  = $group['courses'];
+    $students = array_values($group['students']);
+    if (empty($students)) continue;
+
+    // Paginate this batch's students; each batch starts its own page sequence.
+    $pages = array_chunk($students, $rows_per_page);
+    if (empty($pages)) $pages = [[]];
+    $total_pages   = count($pages);
+    $batch_caption = $gs_batch_caption($meta);
+?>
 <?php foreach ($pages as $pi => $page_students): ?>
 <div class="sheet-page">
     <div class="page-indicator">Page <?= $pi + 1 ?> of <?= $total_pages ?></div>
@@ -252,6 +267,7 @@ $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
     <?php endif; ?>
 
 </div>
+<?php endforeach; ?>
 <?php endforeach; ?>
 
 <?php endif; ?>
