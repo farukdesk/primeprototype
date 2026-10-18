@@ -354,6 +354,10 @@ foreach ($dates as $d) {
         // Approved short leave: the status is excused to Present, but the day
         // still carries a visible "Short Leave" mark on the calendar/table.
         'short_lv' => !empty($rec['in_time']) && att_short_leave($user_id, $d),
+        // Exam invigilation duty rostered for this day. When the member clocks
+        // in the status becomes Present, so this flag keeps a visible "Exam
+        // Duty" mark alongside the clock in/out times.
+        'exam_duty' => att_exam_exempt($user_id, $d),
     ];
 }
 
@@ -610,6 +614,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                     elseif ($status === 'short_hours') echo '<span class="cal-tag text-warning">Short</span>';
                     elseif ($status === 'incomplete') echo '<span class="cal-tag text-info">No out</span>';
                     elseif ($info['short_lv']) echo '<span class="cal-tag text-primary">Short Leave</span>';
+                    if ($info['exam_duty']) echo '<span class="cal-tag" style="color:#3b5bdb;">Exam Duty</span>';
                 } elseif ($tag !== '') {
                     echo '<div class="cal-io">' . $tag . '</div>';
                 }
@@ -660,6 +665,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                                 ? '<span class="badge bg-secondary">Holiday: ' . h($info['holiday']) . '</span>'
                                 : att_status_badge($info['status']);
                             if ($info['short_lv']) echo ' <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Short Leave</span>';
+                            if ($info['exam_duty'] && $info['status'] !== 'exam_duty') echo ' <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Exam Duty</span>';
                         ?></td>
                         <?php if ($can_edit): ?>
                         <td class="text-end pe-3 no-print">
