@@ -400,6 +400,58 @@ function att_user_group_ids(int $user_id): array
 }
 
 /**
+ * Names of the user groups a member belongs to (primary users.group_id plus any
+ * user_group_assignments junction rows). Cached per request.
+ *
+ * @return string[]
+ */
+function att_user_group_names(int $user_id): array
+{
+    static $names = null;
+    if ($names === null) {
+        $names = [];
+        try {
+            foreach (db()->query('SELECT id, name FROM user_groups')->fetchAll() as $r) {
+                $names[(int)$r['id']] = (string)$r['name'];
+            }
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
+    $out = [];
+    foreach (att_user_group_ids($user_id) as $gid) {
+        if (isset($names[$gid])) $out[] = $names[$gid];
+    }
+    return $out;
+}
+
+/**
+ * Whether the member belongs to a group whose NAME contains one of the
+ * exam-management roles (Coordinator, Head, Dean, Section Officer, Controller).
+ * These roles run and oversee running exams, so during an active exam period
+ * their Late In / Early Out / Insufficient Hours is never counted (any weekday,
+ * including Thursday and Friday). Cached per request.
+ */
+function att_exam_group_exempt(int $user_id, string $date): bool
+{
+    static $cache = [];
+    if (array_key_exists($user_id, $cache)) {
+        $is_role = $cache[$user_id];
+    } else {
+        $is_role = false;
+        $needles = ['coordinator', 'head', 'dean', 'section officer', 'controller'];
+        foreach (att_user_group_names($user_id) as $name) {
+            $lc = mb_strtolower($name);
+            foreach ($needles as $needle) {
+                if (mb_strpos($lc, $needle) !== false) { $is_role = true; break 2; }
+            }
+        }
+        $cache[$user_id] = $is_role;
+    }
+    return $is_role && att_exam_period_active($date);
+}
+
+/**
  * Whether the holiday on $date applies to $user_id: unrestricted holidays
  * apply to everyone; group-restricted holidays only to members of one of the
  * selected user groups.
@@ -805,6 +857,14 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // Insufficient Hours -- the exam duty replaces their office schedule.
     $exam_exempt = att_exam_exempt($user_id, $date);
 
+    // Running-exam role exemption: members of exam-management groups (names
+    // containing Coordinator, Head, Dean, Section Officer or Controller) are
+    // excused Late In / Early Out / Insufficient Hours on EVERY day of a running
+    // exam period (including Thursday and Friday). This does not grant the
+    // "Exam Duty" status given to rostered invigilators who skip clocking in,
+    // so it is tracked separately from $exam_exempt.
+    $late_exempt = $exam_exempt || att_exam_group_exempt($user_id, $date);
+
     // Exam Duty ALWAYS wins: a faculty member rostered for an invigilation duty
     // on a day they did not clock in is marked "Exam Duty", even when the day is
     // a holiday or a weekend, and even when an admin has quick-marked the day as
@@ -874,7 +934,7 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     if ($policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
         if (!$has_out) return 'incomplete';
         if (att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES) return 'present';
-        return ($exam_exempt || $short_leave) ? 'present' : 'short_hours';
+        return ($late_exempt || $short_leave) ? 'present' : 'short_hours';
     }
 
     if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
@@ -920,9 +980,10 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     }
 
     // Invigilation-duty exemption: never Late In / Early Out on a day the
-    // member has an exam invigilation duty. An approved short leave likewise
-    // excuses the late arrival / early exit.
-    if ($exam_exempt || $short_leave) {
+    // member has an exam invigilation duty, nor for exam-management roles
+    // (Coordinator/Head/Dean/Section Officer/Controller) during a running exam.
+    // An approved short leave likewise excuses the late arrival / early exit.
+    if ($late_exempt || $short_leave) {
         $late  = false;
         $early = false;
     }
@@ -936,7 +997,7 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // and on Fridays (handled above with the strict 8-hour rule).
     if ($policy && $etype === 'educational' && $slot_win === null) {
         if (att_worked_minutes($record['in_time'], $record['out_time']) < ATT_POLICY_FACULTY_MIN_MINUTES) {
-            if ($exam_exempt) return 'present'; // exam duty replaces the office schedule
+            if ($late_exempt) return 'present'; // exam duty / running-exam role replaces the office schedule
             if ($short_leave) return 'present'; // short leave covers the missing hours
             return $late ? 'late_in' : 'short_hours';
         }
