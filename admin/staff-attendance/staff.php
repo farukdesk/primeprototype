@@ -211,6 +211,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
         } catch (Throwable $e) {
             flash_set('error', 'Could not save the leave. Please make sure the Leave Management module is installed.');
         }
+    } elseif ($act === 'clear_times') {
+        $db = db();
+        try {
+            $db->beginTransaction();
+            try {
+                $db->prepare('DELETE FROM att_punch_log WHERE user_id = ? AND work_date = ?')
+                    ->execute([$user_id, $pdate]);
+            } catch (PDOException $e) {
+                // Raw device punches are optional when the ADMS module is not installed.
+                if (($e->errorInfo[1] ?? null) !== 1146 && $e->getCode() !== '42S02') {
+                    throw $e;
+                }
+            }
+            $db->prepare('DELETE FROM att_records WHERE user_id = ? AND work_date = ?')
+                ->execute([$user_id, $pdate]);
+            $db->commit();
+            log_change('staff-attendance', 'DELETE', $user_id, 'Attendance ' . $pdate, null, null,
+                'clock times and raw punches cleared');
+            flash_set('success', 'Clock in/out times cleared for ' . date('d M Y', strtotime($pdate)) . '.');
+        } catch (Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            flash_set('error', 'Could not clear clock in/out times for this day.');
+        }
     } elseif ($act === 'reset') {
         db()->prepare('DELETE FROM att_records WHERE user_id = ? AND work_date = ?')->execute([$user_id, $pdate]);
         try {
@@ -662,7 +685,17 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                 </form>
 
                 <hr class="my-2">
-                <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                    <form method="POST" onsubmit="return confirm('Permanently delete this day’s clock-in/out times and raw device punches? Day marks and leave will be kept.');">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="day_action" value="clear_times">
+                        <input type="hidden" name="date" class="dam-date" value="">
+                        <input type="hidden" name="report" value="<?= h($report) ?>">
+                        <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                        <input type="hidden" name="q" value="<?= h($search) ?>">
+                        <button class="btn btn-outline-danger btn-sm"><i class="fas fa-clock me-1"></i> Delete Clock In/Out</button>
+                    </form>
                     <form method="POST" onsubmit="return confirm('Remove the times and any day mark for this date?');">
                         <?= csrf_field() ?>
                         <input type="hidden" name="day_action" value="reset">
@@ -672,8 +705,10 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                         <input type="hidden" name="q" value="<?= h($search) ?>">
                         <button class="btn btn-outline-dark btn-sm"><i class="fas fa-eraser me-1"></i> Reset Day</button>
                     </form>
+                    </div>
                     <a href="#" id="damFull" class="small">Open full editor</a>
                 </div>
+                <div class="form-text mt-2">Delete Clock In/Out removes only this day’s times and raw device punches; day marks and leave are kept. Reset Day also removes calendar marks and calendar-created leave.</div>
             </div>
         </div>
     </div>
