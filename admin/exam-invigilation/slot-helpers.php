@@ -414,6 +414,123 @@ function ei_is_faculty_eligible_for_slot(array $faculty, array $slot, array $bus
 // ── Version-control helpers ────────────────────────────────────────────────────
 
 /**
+ * Capture the current duty details for an exam before changing its slots.
+ * Returns null on failure so notification checks fail closed.
+ */
+function ei_capture_duty_state(int $exam_id): ?array
+{
+    try {
+        $st = db()->prepare(
+            'SELECT s.id, s.slot_date, s.time_slot, s.room_number,
+                    s.faculty1_id, s.faculty2_id, e.exam_name
+             FROM ei_slots s
+             JOIN ei_exams e ON e.id = s.exam_id
+             WHERE s.exam_id = ?'
+        );
+        $st->execute([$exam_id]);
+        $state = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $state[(int)$row['id']] = $row;
+        }
+        return $state;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/**
+ * Notify faculty whose assignment or assigned slot details changed.
+ * Delivery is best-effort and never interrupts the admin's save operation.
+ */
+function ei_notify_duty_changes(?array $before, int $exam_id): void
+{
+    if ($before === null) return;
+
+    try {
+        $after = ei_capture_duty_state($exam_id);
+        if ($after === null) return;
+
+        $changed_faculty = [];
+        $exam_name = '';
+        $slot_ids = array_unique(array_merge(array_keys($before), array_keys($after)));
+        foreach ($slot_ids as $slot_id) {
+            $old = $before[$slot_id] ?? null;
+            $new = $after[$slot_id] ?? null;
+            $fields = ['slot_date', 'time_slot', 'room_number', 'faculty1_id', 'faculty2_id'];
+            $old_values = $old ? array_map(static fn ($field) => (string)($old[$field] ?? ''), $fields) : null;
+            $new_values = $new ? array_map(static fn ($field) => (string)($new[$field] ?? ''), $fields) : null;
+            if ($old_values === $new_values) continue;
+
+            $exam_name = (string)($new['exam_name'] ?? $old['exam_name'] ?? $exam_name);
+            foreach (['faculty1_id', 'faculty2_id'] as $field) {
+                foreach ([$old[$field] ?? 0, $new[$field] ?? 0] as $faculty_id) {
+                    $faculty_id = (int)$faculty_id;
+                    if ($faculty_id > 0) $changed_faculty[$faculty_id] = true;
+                }
+            }
+        }
+        if (!$changed_faculty) return;
+
+        require_once __DIR__ . '/../invigilation-duty/helpers.php';
+        require_once __DIR__ . '/../app-notifications/helpers.php';
+
+        $registered_users = db()->query(
+            "SELECT DISTINCT t.user_id
+             FROM api_push_tokens t
+             JOIN users u ON u.id = t.user_id AND u.is_active = 1
+             WHERE t.fcm_token IS NOT NULL AND t.fcm_token != ''"
+        )->fetchAll(PDO::FETCH_COLUMN);
+
+        $recipient_ids = [];
+        foreach ($registered_users as $user_id) {
+            $user_id = (int)$user_id;
+            foreach (ivd_faculty_ids_for_user($user_id) as $faculty_id) {
+                if (isset($changed_faculty[(int)$faculty_id])) {
+                    $recipient_ids[$user_id] = true;
+                    break;
+                }
+            }
+        }
+        if (!$recipient_ids) return;
+
+        $sa = apn_fcm_service_account();
+        if ($sa === null) return;
+        $access_token = apn_fcm_access_token($sa);
+        if ($access_token === null) return;
+
+        $recipient_ids = array_keys($recipient_ids);
+        $placeholders = implode(',', array_fill(0, count($recipient_ids), '?'));
+        $st = db()->prepare(
+            "SELECT DISTINCT t.fcm_token
+             FROM api_push_tokens t
+             JOIN users u ON u.id = t.user_id AND u.is_active = 1
+             WHERE t.user_id IN ($placeholders)
+               AND t.fcm_token IS NOT NULL AND t.fcm_token != ''"
+        );
+        $st->execute($recipient_ids);
+
+        $title = 'Invigilation duty updated';
+        $body = 'Your invigilation duty schedule' . ($exam_name !== '' ? ' for ' . $exam_name : '') .
+            ' has changed. Open Invigilation Duty in the app to review it.';
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $token) {
+            $result = apn_fcm_send_single(
+                $access_token,
+                $sa['project_id'],
+                (string)$token,
+                $title,
+                $body,
+                ['type' => 'invigilation_duty', 'exam_id' => (string)$exam_id]
+            );
+            if (!empty($result['unregister'])) {
+                db()->prepare('DELETE FROM api_push_tokens WHERE fcm_token = ?')->execute([(string)$token]);
+            }
+        }
+    } catch (Throwable $e) {
+        // Push delivery must never block invigilation duty updates.
+    }
+}
+
+/**
  * Save a full snapshot of all current slot assignments for the given exam.
  *
  * This is called AFTER each operation that modifies assignments so that every

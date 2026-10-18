@@ -63,9 +63,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
+        $before_duties = ei_capture_duty_state($exam_id);
         db()->prepare(
             'UPDATE ei_slots SET slot_date=?, time_slot=?, room_number=?, dept_id=?, faculty1_id=?, faculty2_id=? WHERE id=?'
         )->execute([$slot_date, $time_slot, $room_number, $dept_id, $faculty1_id, $faculty2_id, $sid]);
+        ei_notify_duty_changes($before_duties, $exam_id);
         $room_label = $room_number . ' (' . date('d M Y', strtotime($slot_date)) . ')';
         ei_save_assignment_snapshot($exam_id, 'manual_edit', "Manual edit – Room {$room_label}");
         flash_set('success', 'Slot updated.');
