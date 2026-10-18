@@ -171,6 +171,65 @@ function ivd_duties_for_faculty(array $faculty_ids): array
     return $rows;
 }
 
+/**
+ * Resolve the department id(s) of the given ei_faculty ids.
+ *
+ * @param int[] $faculty_ids
+ * @return int[] dept ids (may be empty)
+ */
+function ivd_dept_ids_for_faculty(array $faculty_ids): array
+{
+    $faculty_ids = array_values(array_unique(array_map('intval', $faculty_ids)));
+    if (!$faculty_ids) return [];
+
+    $ph = implode(',', array_fill(0, count($faculty_ids), '?'));
+    try {
+        $st = db()->prepare(
+            "SELECT DISTINCT dept_id FROM ei_faculty WHERE id IN ($ph) AND dept_id IS NOT NULL"
+        );
+        $st->execute($faculty_ids);
+        return array_values(array_filter(array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN))));
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Fetch all invigilation duty slots assigned to faculty of the given
+ * department(s), in date order. Each row carries both invigilators' names,
+ * the exam and slot details and the department name. Used for the faculty
+ * self-service "My Department's Duties" overview.
+ *
+ * @param int[] $dept_ids
+ */
+function ivd_dept_duties(array $dept_ids): array
+{
+    $dept_ids = array_values(array_unique(array_filter(array_map('intval', $dept_ids))));
+    if (!$dept_ids) return [];
+
+    $ph = implode(',', array_fill(0, count($dept_ids), '?'));
+    try {
+        $st = db()->prepare(
+            "SELECT s.id, s.slot_date, s.time_slot, s.room_number,
+                    s.faculty1_id, s.faculty2_id,
+                    e.exam_name, e.exam_year,
+                    f1.name AS faculty1_name, f2.name AS faculty2_name,
+                    d.name AS dept_name
+             FROM ei_slots s
+             JOIN ei_exams e        ON e.id = s.exam_id
+             LEFT JOIN ei_faculty f1 ON f1.id = s.faculty1_id
+             LEFT JOIN ei_faculty f2 ON f2.id = s.faculty2_id
+             LEFT JOIN dept_departments d ON d.id = s.dept_id
+             WHERE f1.dept_id IN ($ph) OR f2.dept_id IN ($ph)
+             ORDER BY s.slot_date ASC, s.time_slot ASC, s.room_number ASC"
+        );
+        $st->execute(array_merge($dept_ids, $dept_ids));
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 // ── Duty swap / substitute requests ─────────────────────────────────────────
 
 /**

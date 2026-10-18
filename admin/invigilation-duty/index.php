@@ -42,6 +42,11 @@ $duties      = ivd_duties_for_faculty($faculty_ids);
 $incoming_requests = ivd_incoming_requests($faculty_ids);
 $outgoing_requests = ivd_outgoing_requests($faculty_ids);
 
+// Department-wide duties: show all duties assigned to faculty of my dept(s).
+$my_dept_ids  = ivd_dept_ids_for_faculty($faculty_ids);
+$dept_duties  = ivd_dept_duties($my_dept_ids);
+$mine_set     = array_flip(array_map('intval', $faculty_ids));
+
 $today    = date('Y-m-d');
 $upcoming = [];
 $past     = [];
@@ -342,6 +347,57 @@ function ivd_render_duty_rows(array $rows, bool $allow_request = false): void
             <tbody>
                 <?php if ($past): ivd_render_duty_rows($past); else: ?>
                 <tr><td colspan="7" class="text-center text-muted py-4">No past invigilation duty.</td></tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ── Department faculty duties ── -->
+<div class="card mt-4">
+    <div class="card-header bg-white">
+        <h6 class="mb-0 fw-semibold"><i class="fas fa-users me-2 text-primary"></i>My Department's Duties
+            <?php if ($dept_duties): ?><span class="badge bg-light text-dark border ms-1"><?= count($dept_duties) ?></span><?php endif; ?>
+        </h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Exam</th>
+                    <th>Room</th>
+                    <th>Invigilator 1</th>
+                    <th>Invigilator 2</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($dept_duties): foreach ($dept_duties as $d): ?>
+                <tr>
+                    <td>
+                        <span class="fw-semibold"><?= h(date('d M Y', strtotime((string)$d['slot_date']))) ?></span>
+                        <div class="text-muted" style="font-size:.78rem;"><?= h(date('l', strtotime((string)$d['slot_date']))) ?></div>
+                    </td>
+                    <td><?= h($d['time_slot']) ?></td>
+                    <td>
+                        <?= h($d['exam_name']) ?>
+                        <?php if (!empty($d['exam_year'])): ?>
+                            <span class="text-muted" style="font-size:.8rem;">(<?= h($d['exam_year']) ?>)</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><span class="badge bg-light text-dark border">Room <?= h($d['room_number']) ?></span></td>
+                    <td>
+                        <?= $d['faculty1_name'] !== null && $d['faculty1_name'] !== '' ? h($d['faculty1_name']) : '<span class="text-muted">—</span>' ?>
+                        <?php if (isset($mine_set[(int)$d['faculty1_id']])): ?><span class="badge bg-primary ms-1">You</span><?php endif; ?>
+                    </td>
+                    <td>
+                        <?= $d['faculty2_name'] !== null && $d['faculty2_name'] !== '' ? h($d['faculty2_name']) : '<span class="text-muted">—</span>' ?>
+                        <?php if (isset($mine_set[(int)$d['faculty2_id']])): ?><span class="badge bg-primary ms-1">You</span><?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; else: ?>
+                <tr><td colspan="6" class="text-center text-muted py-4">No invigilation duty found for your department.</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
