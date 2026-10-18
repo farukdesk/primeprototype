@@ -58,10 +58,11 @@ $total_count    = count($duties);
 $upcoming_count = count($upcoming);
 $attended_count = count(array_filter($duties, static fn ($d) => $d['attended'] === 1));
 
-// Department-wide duties: only shown to faculty who have at least one duty of
-// their own. Faculty with no assigned duty should not see their colleagues' list.
+// Department-wide duties: only shown to department coordinators (ei_faculty
+// designation contains "coordinator"). Ordinary faculty see only their own
+// duties, not their colleagues' list.
 $dept_duties = [];
-if ($total_count > 0) {
+if (ivd_is_coordinator($faculty_ids)) {
     $my_dept_ids = ivd_dept_ids_for_faculty($faculty_ids);
     $dept_duties = ivd_dept_duties($my_dept_ids);
 }
