@@ -35,6 +35,7 @@ class LeaveApplyActivity : AppCompatActivity() {
         "additional" to "Additional Leave",
         "short" to "Short Leave",
         "duty" to "Duty Leave",
+        "alternative" to "Alternative Leave",
         "extraordinary" to "Extra Ordinary Leave",
         "maternity" to "Maternity Leave",
         "paternity" to "Paternity Leave",

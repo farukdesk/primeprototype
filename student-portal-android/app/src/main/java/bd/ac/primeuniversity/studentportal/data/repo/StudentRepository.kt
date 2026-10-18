@@ -401,6 +401,26 @@ class StudentRepository private constructor(context: Context) {
     suspend fun getInvigilationDuties(): AppResult<InvigilationDutyResponse> =
         call { staffApi.getInvigilationDuties() }
 
+    /** Request a swap / substitute for one of my upcoming invigilation duties. */
+    suspend fun requestInvigilationSwap(
+        slotId: Int,
+        requestType: String,
+        targetFacultyId: Int,
+        message: String?,
+    ): AppResult<SimpleResponse> =
+        call {
+            staffApi.createInvigilationRequest(
+                slotId = slotId,
+                requestType = requestType,
+                targetFacultyId = targetFacultyId,
+                message = message?.takeIf { it.isNotBlank() },
+            )
+        }
+
+    /** Accept / reject / cancel an invigilation swap / substitute request. */
+    suspend fun actOnInvigilationRequest(requestId: Int, action: String): AppResult<SimpleResponse> =
+        call { staffApi.actOnInvigilationRequest(action = action, requestId = requestId) }
+
     // ── Push notifications ────────────────────────────────────────────────────────────
 
     /**
