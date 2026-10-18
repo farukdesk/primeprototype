@@ -329,6 +329,7 @@ if (is_portal_student()) {
     $is_medical_active = strpos($current_path, '/medical-center/') !== false;
     $is_student_portal_active = strpos($current_path, '/accounting/student-portal') !== false;
     $is_exam_invigilation_active = strpos($current_path, '/exam-invigilation/') !== false;
+    $is_invigilation_duty_active = strpos($current_path, '/invigilation-duty/') !== false;
     $is_portal_global_notice_active = strpos($current_path, '/students/portal-global-notice') !== false;
     $is_admit_card_active = strpos($current_path, '/admit-card/') !== false
                          || strpos($current_path, '/students/my-admit-card') !== false;
@@ -341,7 +342,7 @@ if (is_portal_student()) {
                   || strpos($current_path, '/final-result-publish/') !== false
                   || strpos($current_path, '/student-verification/') !== false
                   || strpos($current_path, '/cert-verifiers/') !== false
-                  || $is_exam_invigilation_active || $is_admit_card_active
+                  || $is_exam_invigilation_active || $is_invigilation_duty_active || $is_admit_card_active
                   || strpos($current_path, '/hall-management/') !== false;
     ?>
 
@@ -939,7 +940,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Controller of Examinations ── -->
-    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('exam-routine') || can_access('admit-card') || can_access('hall-management')): ?>
+    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('invigilation-duty') || can_access('exam-routine') || can_access('admit-card') || can_access('hall-management')): ?>
     <button class="nav-group-toggle <?= $is_coe_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-coe"
             aria-expanded="<?= $is_coe_active ? 'true' : 'false' ?>">
@@ -1065,6 +1066,14 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/exam-invigilation/remuneration-bills.php"
                    class="<?= strpos($current_path, '/exam-invigilation/remuneration-bills') !== false ? 'active' : '' ?>">
                     <i class="fas fa-file-invoice-dollar"></i> Remuneration Bills
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('invigilation-duty')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/invigilation-duty/index.php"
+                   class="<?= $is_invigilation_duty_active ? 'active' : '' ?>">
+                    <i class="fas fa-user-clock"></i> My Invigilation Duty
                 </a>
             </li>
             <?php endif; ?>
