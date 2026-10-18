@@ -58,6 +58,7 @@ enum class Feature(
     LEAVE_MANAGEMENT(R.string.feat_leave_management, R.drawable.ic_event, R.color.icon_leave, R.string.feat_leave_management_desc, R.color.tint_leave),
     LEAVE_APPROVALS(R.string.feat_leave_approvals, R.drawable.ic_check_circle, R.color.icon_approvals, R.string.feat_leave_approvals_desc, R.color.tint_approvals),
     STUDENT_ATTENDANCE(R.string.feat_student_attendance, R.drawable.ic_university_logo, R.color.icon_approvals, R.string.feat_student_attendance_desc, R.color.tint_approvals),
+    INVIGILATION_DUTY(R.string.feat_invigilation_duty, R.drawable.ic_schedule, R.color.icon_attendance, R.string.feat_invigilation_duty_desc, R.color.tint_attendance),
     STAFF_NOTICES(R.string.feat_notices, R.drawable.ic_notifications, R.color.icon_notices, containerRes = R.color.tint_notices),
     STAFF_PROFILE(R.string.feat_my_profile, R.drawable.ic_person, R.color.icon_profile, containerRes = R.color.tint_profile),
 }
@@ -121,6 +122,7 @@ fun buildStaffDashboardMenu(
     add(MenuRow.Header(R.string.section_staff_workspace))
     add(MenuRow.Item(Feature.MY_ATTENDANCE))
     if (canTakeStudentAttendance) add(MenuRow.Item(Feature.STUDENT_ATTENDANCE))
+    if (canTakeStudentAttendance) add(MenuRow.Item(Feature.INVIGILATION_DUTY))
     add(MenuRow.Item(Feature.LEAVE_MANAGEMENT))
     if (canApproveLeaves) add(MenuRow.Item(Feature.LEAVE_APPROVALS))
     add(MenuRow.Item(Feature.STAFF_NOTICES))
