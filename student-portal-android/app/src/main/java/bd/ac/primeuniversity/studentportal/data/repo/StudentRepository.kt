@@ -192,11 +192,12 @@ class StudentRepository private constructor(context: Context) {
         call { api.getCourseOffers() }
 
     /**
-     * Submits registration for ALL subjects of an offer at once.
+     * Submits registration for the selected subjects of an offer. When
+     * [subjectIds] is empty the server registers every offered subject.
      * The registration awaits departmental approval.
      */
-    suspend fun registerAllCourses(offerId: Int): AppResult<SimpleResponse> =
-        call { api.registerAllCourses(offerId = offerId) }
+    suspend fun registerAllCourses(offerId: Int, subjectIds: List<Int> = emptyList()): AppResult<SimpleResponse> =
+        call { api.registerAllCourses(offerId = offerId, subjectIds = subjectIds) }
 
     // ── Admit cards (students only) ────────────────────────────────────────────────
 
