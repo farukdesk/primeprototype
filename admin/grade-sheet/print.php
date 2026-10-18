@@ -126,6 +126,7 @@ $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
         table.grade-table tbody tr:nth-child(even) td { background: #f5f7fc; }
 
         .sgpa-cell { font-weight: 700; color: #1e3a5f; }
+        .remark-fail { color: #b91c1c; font-weight: 700; }
         .grade-dash { color: #bbb; letter-spacing: 1px; }
         .remark-absent { color: #6b7280; font-style: italic; }
 
@@ -234,6 +235,9 @@ $page_title = 'Grade Sheet' . ($exam_label !== '' ? ' – ' . $exam_label : '');
                 <td class="center">
                     <?php if ($sd['sgpa'] !== null): ?>
                         <span class="sgpa-cell"><?= h($sd['sgpa']) ?></span>
+                        <?php if (($sd['remark'] ?? '') === 'F'): ?>
+                            <span class="remark-fail">(F)</span>
+                        <?php endif; ?>
                     <?php elseif ($sd['remark'] === 'Absent'): ?>
                         <span class="remark-absent">Absent</span>
                     <?php else: ?>
