@@ -3,7 +3,7 @@
  * Student Portal – Course Registration
  * =====================================
  * Lists the course offers of the student's batch that are open for
- * self-registration (Course Offer module). The student must select ALL
+ * self-registration (Course Offer module). The student may select any of the
  * offered courses and submit – the registration is stored as PENDING and
  * approved by the department in Course Offer → Registrations.
  */
@@ -66,7 +66,7 @@ if ($has_shift_section) {
     $offer_target_params = [$my_shift, $my_section];
 }
 
-// ── Submit registration (ALL offered courses required) ─────────────────────
+// ── Submit registration (selected courses) ─────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'register_all') {
     csrf_check();
 
@@ -98,10 +98,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
         redirect($self_url);
     }
 
-    // The student must register for EVERY offered course.
+    // Students may select freely: register only the subjects they chose.
     $selected = array_map('intval', (array)($_POST['subject_ids'] ?? []));
-    if (count(array_intersect($all_subject_ids, $selected)) !== count($all_subject_ids)) {
-        flash_set('error', 'You must select ALL offered courses to submit your registration.');
+    $selected = array_values(array_intersect($all_subject_ids, $selected));
+    if (empty($selected)) {
+        flash_set('error', 'Please select at least one course to register.');
         redirect($self_url);
     }
 
@@ -116,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
                  (offer_subject_id, student_id, source, registered_by)
              VALUES (?, ?, 'self', NULL)"
         );
-    foreach ($all_subject_ids as $osid) {
+    foreach ($selected as $osid) {
         $ins->execute([$osid, $sid]);
     }
 
@@ -280,7 +281,7 @@ $visible = array_filter($offers, function ($o) use ($subjects_by_offer, $my_regs
         </div>
         <?php endif; ?>
         <?php elseif ((int)$o['registration_open'] === 1): ?>
-        <!-- Registration form: ALL courses must be selected -->
+        <!-- Registration form: select any of the offered courses -->
         <form method="POST" class="course-reg-form">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="register_all">
@@ -309,11 +310,11 @@ $visible = array_filter($offers, function ($o) use ($subjects_by_offer, $my_regs
             </div>
             <div class="text-muted small mb-3">
                 <i class="fas fa-info-circle me-1"></i>
-                You must select <strong>all <?= $total ?> offered courses</strong> to submit your registration.
-                It will then be sent to your department for approval.
+                Select the courses you want to register for.
+                Your registration will then be sent to your department for approval.
             </div>
             <button type="submit" class="btn btn-primary reg-submit" disabled style="border-radius:10px;">
-                <i class="fas fa-check me-1"></i>Register (<?= $total ?> courses)
+                <i class="fas fa-check me-1"></i>Register
             </button>
         </form>
         <?php else: ?>
@@ -330,8 +331,9 @@ document.querySelectorAll('.course-reg-form').forEach(function (form) {
     var submit = form.querySelector('.reg-submit');
 
     function refresh() {
+        var anyChecked = checks.some(function (c) { return c.checked; });
         var allChecked = checks.length > 0 && checks.every(function (c) { return c.checked; });
-        submit.disabled = !allChecked;
+        submit.disabled = !anyChecked;
         all.checked = allChecked;
     }
     checks.forEach(function (c) { c.addEventListener('change', refresh); });
@@ -341,7 +343,8 @@ document.querySelectorAll('.course-reg-form').forEach(function (form) {
     });
     form.addEventListener('submit', function (e) {
         if (submit.disabled) { e.preventDefault(); return; }
-        if (!confirm('Register for all ' + checks.length + ' offered courses? Your registration will be sent for departmental approval.')) {
+        var count = checks.filter(function (c) { return c.checked; }).length;
+        if (!confirm('Register for ' + count + ' selected course' + (count === 1 ? '' : 's') + '? Your registration will be sent for departmental approval.')) {
             e.preventDefault();
         }
     });

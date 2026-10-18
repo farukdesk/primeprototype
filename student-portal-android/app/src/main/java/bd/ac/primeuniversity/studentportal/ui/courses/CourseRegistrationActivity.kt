@@ -25,7 +25,7 @@ import kotlinx.coroutines.launch
  * Course Registration screen.
  *
  * Lists the course offers currently open for self-registration for the
- * student's batch. The student must select ALL offered courses before the
+ * student's batch. The student may select any of the offered courses before the
  * Register button unlocks; the submitted registration awaits departmental
  * approval, and the status (pending/approved) is shown afterwards.
  */
@@ -167,9 +167,9 @@ class CourseRegistrationActivity : AppCompatActivity() {
         }
     }
 
-    /** Open offer: checkbox per course; Register unlocks only when ALL are ticked. */
+    /** Open offer: checkbox per course; Register unlocks when at least one is ticked. */
     private fun addRegistrationForm(body: LinearLayout, offer: CourseOffer) {
-        val checks = mutableListOf<CheckBox>()
+        val checks = mutableListOf<Pair<CheckBox, Int>>()
 
         val selectAll = CheckBox(this).apply {
             text = getString(R.string.course_reg_select_all)
@@ -186,57 +186,61 @@ class CourseRegistrationActivity : AppCompatActivity() {
                 setTextColor(color(R.color.text_primary))
             }
             body.addView(cb)
-            checks.add(cb)
+            checks.add(cb to s.offerSubjectId)
         }
 
         body.addView(TextView(this).apply {
-            text = getString(R.string.course_reg_must_select_all)
+            text = getString(R.string.course_reg_select_hint)
             setTextColor(color(R.color.text_secondary))
             textSize = 12f
             setPadding(0, dp(8), 0, 0)
         })
 
         val btn = MaterialButton(this).apply {
-            text = getString(R.string.course_reg_register, offer.subjects.size)
+            text = getString(R.string.course_reg_register_action)
             isEnabled = false
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(12) }
-            setOnClickListener { confirmAndRegister(offer) }
+            setOnClickListener {
+                val selected = checks.filter { it.first.isChecked }.map { it.second }
+                if (selected.isNotEmpty()) confirmAndRegister(offer, selected)
+            }
         }
         body.addView(btn)
 
         var syncing = false
         fun refresh() {
-            val all = checks.isNotEmpty() && checks.all { it.isChecked }
-            btn.isEnabled = all && !submitting
+            val any = checks.any { it.first.isChecked }
+            val all = checks.isNotEmpty() && checks.all { it.first.isChecked }
+            btn.isEnabled = any && !submitting
             syncing = true
             selectAll.isChecked = all
             syncing = false
         }
-        checks.forEach { cb -> cb.setOnCheckedChangeListener { _, _ -> refresh() } }
+        checks.forEach { (cb, _) -> cb.setOnCheckedChangeListener { _, _ -> refresh() } }
         selectAll.setOnCheckedChangeListener { _, checked ->
             if (syncing) return@setOnCheckedChangeListener
-            checks.forEach { it.isChecked = checked }
+            checks.forEach { it.first.isChecked = checked }
         }
     }
 
-    private fun confirmAndRegister(offer: CourseOffer) {
+    private fun confirmAndRegister(offer: CourseOffer, subjectIds: List<Int>) {
         AlertDialog.Builder(this)
             .setTitle(R.string.course_reg_confirm_title)
-            .setMessage(getString(R.string.course_reg_confirm_body, offer.subjects.size))
+            .setMessage(getString(R.string.course_reg_confirm_body, subjectIds.size))
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.course_reg_register_action) { _, _ -> register(offer.id) }
+            .setPositiveButton(R.string.course_reg_register_action) { _, _ -> register(offer.id, subjectIds) }
             .show()
     }
 
-    private fun register(offerId: Int) {
+    private fun register(offerId: Int, subjectIds: List<Int>) {
         if (submitting) return
         submitting = true
         binding.progress.visibility = View.VISIBLE
 
         lifecycleScope.launch {
-            when (val result = app.repository.registerAllCourses(offerId)) {
+            when (val result = app.repository.registerAllCourses(offerId, subjectIds)) {
                 is AppResult.Success -> Toast.makeText(
                     this@CourseRegistrationActivity,
                     result.data.message ?: getString(R.string.course_reg_submitted),

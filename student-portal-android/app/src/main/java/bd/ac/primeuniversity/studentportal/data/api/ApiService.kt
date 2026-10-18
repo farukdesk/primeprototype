@@ -92,13 +92,15 @@ interface ApiService {
     suspend fun getIdCard(): Response<IdCardResponse>
 
     /**
-     * Registers the student for ALL subjects of a course offer at once.
+     * Registers the student for the selected subjects of a course offer.
      * The registration is created as pending and approved by the department.
+     * When [subjectIds] is empty the server registers every offered subject.
      */
     @FormUrlEncoded
     @POST("course-register.php")
     suspend fun registerAllCourses(
         @Field("offer_id") offerId: Int,
+        @Field("subject_ids[]") subjectIds: List<Int> = emptyList(),
         @Field("action") action: String = "register_all",
     ): Response<SimpleResponse>
 

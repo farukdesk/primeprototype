@@ -121,6 +121,18 @@ if ($action === 'register_all') {
         sp_api_error(422, 'This offer has no courses yet.');
     }
 
+    // Students may select freely: register only the subjects they chose. When
+    // no selection is sent, fall back to registering every offered subject
+    // (keeps older clients working).
+    $selected = array_map('intval', (array)($input['subject_ids'] ?? []));
+    $selected = array_values(array_intersect($all_subject_ids, $selected));
+    $target_subject_ids = empty($selected) && empty($input['subject_ids'])
+        ? $all_subject_ids
+        : $selected;
+    if (empty($target_subject_ids)) {
+        sp_api_error(422, 'Please select at least one course to register.');
+    }
+
     $ins = $has_status
         ? db()->prepare(
             "INSERT IGNORE INTO co_registrations
@@ -133,14 +145,14 @@ if ($action === 'register_all') {
              VALUES (?, ?, 'self', NULL)"
         );
     $added = 0;
-    foreach ($all_subject_ids as $osid) {
+    foreach ($target_subject_ids as $osid) {
         $ins->execute([$osid, $sid]);
         $added += (int)$ins->rowCount();
     }
 
     sp_api_ok([
         'offer_id'   => $offer_id,
-        'registered' => count($all_subject_ids),
+        'registered' => count($target_subject_ids),
         'new'        => $added,
         'status'     => $has_status ? 'pending' : 'approved',
         'message'    => $has_status
