@@ -329,6 +329,7 @@ foreach ($dates as $d) {
         case 'absent':         $sum['absent']++;  break;
         case 'holiday':
         case 'weekly_off':     $sum['off']++;     break;
+        case 'exam_excuse':    $sum['off']++;     break;
     }
     // Policy (from 01 Jun 2026): each late-in/early-out day counts toward the penalty.
     if (att_policy_active($d) && in_array($status, ['late_in', 'early_out', 'late_and_early'], true)) {
@@ -360,6 +361,7 @@ $status_cell_class = static function (string $status): string {
         'upcoming'                    => 'cal-upcoming',
         'leave'                       => 'cal-leave',
         'holiday', 'weekly_off'       => 'cal-off',
+        'exam_excuse'                 => 'cal-exam',
         default                       => '',
     };
 };
@@ -387,6 +389,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     .cal-absent     { background:#f8d7da; }
     .cal-leave      { background:#cfe2ff; }
     .cal-off        { background:#f1f3f5; color:#868e96; }
+    .cal-exam       { background:#e7f5ff; color:#1971c2; }
     .cal-upcoming   { background:#ffffff; color:#adb5bd; }
     .cal-today .cal-day { color:#0d6efd; }
     .cal-today { box-shadow:inset 0 0 0 2px #0d6efd; }
@@ -485,6 +488,7 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             <span class="badge cal-early text-dark">Early</span>
             <span class="badge cal-leave text-dark">Leave</span>
             <span class="badge cal-absent text-dark">Absent</span>
+            <span class="badge cal-exam">Exam Excuse</span>
             <span class="badge cal-off">Weekend</span>
         </div>
     </div>
@@ -514,6 +518,8 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                     $tag = '<span class="cal-tag">' . ($status === 'holiday' ? 'Holiday' : 'Weekend') . '</span>';
                 } elseif ($status === 'absent') {
                     $tag = '<span class="cal-tag text-danger">Absent</span>';
+                } elseif ($status === 'exam_excuse') {
+                    $tag = '<span class="cal-tag" style="color:#1971c2;">Exam Excuse</span>';
                 } elseif ($status === 'leave') {
                     $tag = '<span class="cal-tag text-primary">Leave</span>';
                 }

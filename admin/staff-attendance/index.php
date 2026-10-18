@@ -161,6 +161,7 @@ if (($_GET['export'] ?? '') === 'csv') {
         'late_and_early' => 'Late In + Early Out', 'incomplete' => 'Incomplete',
         'leave' => 'On Leave', 'absent' => 'Absent', 'holiday' => 'Holiday',
         'weekly_off' => 'Weekend', 'off' => 'Weekend',
+        'exam_excuse' => 'Exam Excuse',
         'short_hours' => 'Insufficient Hours',
     ];
     $status_text = static fn(string $s): string => $status_labels[$s] ?? ucwords(str_replace('_', ' ', $s));

@@ -121,6 +121,10 @@ foreach ($staff as $s) {
                 $cls .= ' off';
                 $html = '<span class="tag">' . ($status === 'holiday' ? 'HOL' : 'WE') . '</span>';
                 break;
+            case 'exam_excuse':
+                $cls .= ' off';
+                $html = '<span class="tag">EX</span>';
+                break;
             case 'leave':
                 $cls .= ' leave';
                 $html = '<span class="tag">Leave</span>';
