@@ -865,6 +865,12 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
         return ($exam_exempt || $short_leave) ? 'present' : 'short_hours';
     }
 
+    // Exam Duty: the member is rostered for an exam invigilation duty on this
+    // exact day. When they have not clocked in, the day is marked Exam Duty
+    // instead of Weekend / Upcoming / Absent — the invigilation duty replaces
+    // the office schedule. Clocking in still counts as Present (handled below).
+    if (!$has_in && $exam_exempt) return 'exam_duty';
+
     if ($slot_win === null && att_is_weekly_off_for($sched, $date)) return $has_in ? 'present' : 'weekly_off';
     if (!$has_in && in_array($user_id, $on_leave, true)) return 'leave';
     if (!$has_in && $date > date('Y-m-d')) return 'upcoming';
@@ -953,6 +959,7 @@ function att_status_label(string $status): string
         'holiday'        => 'Holiday',
         'weekly_off'     => 'Weekend',
         'exam_excuse'    => 'Exam Excuse',
+        'exam_duty'      => 'Exam Duty',
         'online_class'   => 'Online Class',
         default          => ucfirst(str_replace('_', ' ', $status)),
     };
@@ -974,6 +981,7 @@ function att_status_badge(string $status): string
         'holiday'        => 'bg-secondary',
         'weekly_off'     => 'bg-light text-dark border',
         'exam_excuse'    => 'bg-info-subtle text-info border border-info-subtle',
+        'exam_duty'      => 'bg-primary-subtle text-primary border border-primary-subtle',
         'online_class'   => 'bg-info-subtle text-info border border-info-subtle',
     ];
     $cls = $map[$status] ?? 'bg-light text-dark';
