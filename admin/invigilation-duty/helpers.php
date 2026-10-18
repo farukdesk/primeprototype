@@ -195,6 +195,33 @@ function ivd_dept_ids_for_faculty(array $faculty_ids): array
 }
 
 /**
+ * Whether any of the given ei_faculty records is a department coordinator,
+ * i.e. its designation contains "coordinator". Only coordinators may see the
+ * department-wide "My Department's Duties" overview; ordinary faculty see only
+ * their own duties.
+ *
+ * @param int[] $faculty_ids
+ */
+function ivd_is_coordinator(array $faculty_ids): bool
+{
+    $faculty_ids = array_values(array_unique(array_map('intval', $faculty_ids)));
+    if (!$faculty_ids) return false;
+
+    $ph = implode(',', array_fill(0, count($faculty_ids), '?'));
+    try {
+        $st = db()->prepare(
+            "SELECT 1 FROM ei_faculty
+             WHERE id IN ($ph) AND LOWER(COALESCE(designation, '')) LIKE '%coordinator%'
+             LIMIT 1"
+        );
+        $st->execute($faculty_ids);
+        return (bool)$st->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
  * Fetch all invigilation duty slots assigned to faculty of the given
  * department(s), in date order. Each row carries both invigilators' names,
  * the exam and slot details and the department name. Used for the faculty
