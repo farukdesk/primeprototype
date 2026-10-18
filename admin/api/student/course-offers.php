@@ -35,10 +35,26 @@ $ctx      = sp_api_auth();
 $student  = $ctx['student'];
 $batch_id = (int)($student['batch_id'] ?? 0);
 $sid      = (int)$student['student_db_id'];
+$my_shift   = trim((string)($student['shift'] ?? ''));
+$my_section = trim((string)($student['section'] ?? ''));
 
 if ($batch_id <= 0) {
     sp_api_ok(['offers' => [], 'message' => 'No batch is assigned to your profile yet.']);
     return;
+}
+
+// Shift/section targeting (admin/course-offer-shift-section.sql). Offers tied to
+// a specific shift/section are only shown to matching students; offers with no
+// shift/section stay open to the whole batch. Fails open when the columns are
+// missing (migration not yet run).
+$offer_target_sql    = '';
+$offer_target_params = [];
+try {
+    db()->query('SELECT shift, section FROM co_offers LIMIT 1');
+    $offer_target_sql = " AND (o.shift IS NULL OR o.shift = '' OR o.shift = ?)
+                          AND (o.section IS NULL OR o.section = '' OR o.section = ?)";
+    $offer_target_params = [$my_shift, $my_section];
+} catch (Throwable $e) {
 }
 
 // ── Offers for this batch ──────────────────────────────────────────────────
@@ -49,10 +65,10 @@ $st = db()->prepare(
        JOIN dept_departments       d ON d.id = o.dept_id
        JOIN dept_academic_programs p ON p.id = o.program_id
        JOIN student_batches        b ON b.id = o.batch_id
-      WHERE o.batch_id = ? AND o.status = 'active'
+      WHERE o.batch_id = ? AND o.status = 'active'{$offer_target_sql}
       ORDER BY o.id DESC"
 );
-$st->execute([$batch_id]);
+$st->execute(array_merge([$batch_id], $offer_target_params));
 $offers = $st->fetchAll();
 
 if (empty($offers)) {

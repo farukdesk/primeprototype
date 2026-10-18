@@ -88,6 +88,7 @@ function sp_api_auth(): array
                 s.student_id, s.full_name AS student_name,
                 s.phone, s.email AS student_email,
                 s.photo, s.status, s.dept_id, s.program_id, s.batch_id,
+                s.shift, s.section,
                 d.name AS dept_name, d.code AS dept_code,
                 p.program_name, p.program_type,
                 b.name AS batch_name
