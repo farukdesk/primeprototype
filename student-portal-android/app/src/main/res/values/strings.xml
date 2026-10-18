@@ -321,6 +321,30 @@
     <string name="invigilation_attended_badge">Attended</string>
     <string name="invigilation_absent_badge">Absent</string>
     <string name="invigilation_pending_badge">Pending</string>
+    <!-- Faculty: invigilation duty swap / substitute -->
+    <string name="invigilation_swap_action">Swap / Substitute</string>
+    <string name="invigilation_section_incoming">Requests Awaiting Your Response</string>
+    <string name="invigilation_section_my_requests">My Requests</string>
+    <string name="invigilation_none_incoming">No requests awaiting your response.</string>
+    <string name="invigilation_none_outgoing">You have not sent any requests.</string>
+    <string name="invigilation_request_title">Request Swap / Substitute</string>
+    <string name="invigilation_request_type">Request type</string>
+    <string name="invigilation_type_substitute">Substitute — someone covers for me</string>
+    <string name="invigilation_type_swap">Swap — exchange this duty with a colleague</string>
+    <string name="invigilation_target">Faculty to request</string>
+    <string name="invigilation_target_hint">Only faculty free at this duty\'s date and time are listed.</string>
+    <string name="invigilation_no_targets">No available faculty for this slot.</string>
+    <string name="invigilation_message">Message (optional)</string>
+    <string name="invigilation_message_hint">Add a short note for your colleague…</string>
+    <string name="invigilation_send_request">Send Request</string>
+    <string name="invigilation_accept">Accept</string>
+    <string name="invigilation_decline">Decline</string>
+    <string name="invigilation_cancel_request">Cancel</string>
+    <string name="invigilation_badge_swap">Swap</string>
+    <string name="invigilation_badge_substitute">Substitute</string>
+    <string name="invigilation_from_fmt">From: %1$s</string>
+    <string name="invigilation_to_fmt">To: %1$s</string>
+    <string name="invigilation_request_err_target">Please select a faculty member.</string>
 
     <!-- Staff: leave management -->
     <string name="leave_title">Leave Management</string>

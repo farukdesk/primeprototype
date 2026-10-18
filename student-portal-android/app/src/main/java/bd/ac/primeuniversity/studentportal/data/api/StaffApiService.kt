@@ -135,6 +135,25 @@ interface StaffApiService {
     @GET("staff/invigilation-duty.php")
     suspend fun getInvigilationDuties(): Response<InvigilationDutyResponse>
 
+    // Request a swap / substitute for one of my upcoming duties.
+    @FormUrlEncoded
+    @POST("staff/invigilation-duty.php")
+    suspend fun createInvigilationRequest(
+        @Field("action") action: String = "create",
+        @Field("slot_id") slotId: Int,
+        @Field("request_type") requestType: String,
+        @Field("target_faculty_id") targetFacultyId: Int,
+        @Field("message") message: String?,
+    ): Response<SimpleResponse>
+
+    // Accept / reject / cancel a swap / substitute request.
+    @FormUrlEncoded
+    @POST("staff/invigilation-duty.php")
+    suspend fun actOnInvigilationRequest(
+        @Field("action") action: String,
+        @Field("request_id") requestId: Int,
+    ): Response<SimpleResponse>
+
     // Public endpoint at admin/api/app-version.php (no auth required).
     @GET("app-version.php")
     suspend fun getAppVersion(): Response<AppVersionResponse>

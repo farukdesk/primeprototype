@@ -238,4 +238,38 @@ data class InvigilationDutyResponse(
     @SerializedName("summary") val summary: InvigilationSummary? = null,
     @SerializedName("upcoming") val upcoming: List<InvigilationDuty> = emptyList(),
     @SerializedName("past") val past: List<InvigilationDuty> = emptyList(),
+    @SerializedName("incoming") val incoming: List<InvigilationSwapRequest> = emptyList(),
+    @SerializedName("outgoing") val outgoing: List<InvigilationSwapRequest> = emptyList(),
+    @SerializedName("eligible_targets") val eligibleTargets: Map<String, List<InvigilationTarget>> = emptyMap(),
 ) : BaseResponse()
+
+/** A faculty member eligible to receive a swap/substitute request for a slot. */
+data class InvigilationTarget(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("name") val name: String = "",
+    @SerializedName("designation") val designation: String? = null,
+    @SerializedName("dept_name") val deptName: String? = null,
+) {
+    /** Picker label: name, with designation / department appended when present. */
+    val label: String
+        get() = buildString {
+            append(name)
+            if (!designation.isNullOrBlank()) append(" (").append(designation).append(")")
+            if (!deptName.isNullOrBlank()) append(" — ").append(deptName)
+        }
+}
+
+/** A swap / substitute request (incoming to respond to, or outgoing to track). */
+data class InvigilationSwapRequest(
+    @SerializedName("id") val id: Int = 0,
+    @SerializedName("request_type") val requestType: String = "substitute",
+    @SerializedName("status") val status: String = "pending",
+    @SerializedName("requester_name") val requesterName: String? = null,
+    @SerializedName("target_name") val targetName: String? = null,
+    @SerializedName("exam_name") val examName: String = "",
+    @SerializedName("date") val date: String = "",
+    @SerializedName("date_label") val dateLabel: String = "",
+    @SerializedName("time_slot") val timeSlot: String = "",
+    @SerializedName("room_number") val roomNumber: String = "",
+    @SerializedName("message") val message: String? = null,
+)
