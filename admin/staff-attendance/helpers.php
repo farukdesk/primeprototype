@@ -462,7 +462,7 @@ function att_prime_month_range(string $month): array
  * assigned in the Exam Invigilation module -- exam duty replaces their office
  * schedule for that day. Being inside an exam's overall date range is NOT
  * enough; the member must be rostered (ei_slots.faculty1_id / faculty2_id) on
- * an ACTIVE exam for that date.
+ * an exam for that date.
  */
 
 /**
@@ -551,9 +551,10 @@ function att_normalize_person_name(string $name): string
 }
 
 /**
- * The set of Y-m-d dates on which the given user has an invigilation duty on an
- * ACTIVE exam (ei_slots joined to active ei_exams). Returned as a lookup map
- * (date => true). Cached per request.
+ * The set of Y-m-d dates on which the given user has an invigilation duty
+ * (ei_slots). Mirrors the Invigilation Duty module, which does not filter on
+ * ei_exams.is_active, so every rostered duty day is included. Returned as a
+ * lookup map (date => true). Cached per request.
  *
  * @return array<string,bool>
  */
@@ -567,10 +568,13 @@ function att_user_exam_duty_dates(int $user_id): array
     if ($fids) {
         $ph = implode(',', array_fill(0, count($fids), '?'));
         try {
+            // Mirror the Invigilation Duty module (ivd_duties_for_faculty):
+            // join ei_exams without an is_active filter so EVERY rostered duty
+            // day is marked, including duties on exams no longer flagged active.
             $st = db()->prepare(
                 "SELECT DISTINCT s.slot_date
                    FROM ei_slots s
-                   JOIN ei_exams e ON e.id = s.exam_id AND e.is_active = 1
+                   JOIN ei_exams e ON e.id = s.exam_id
                   WHERE s.faculty1_id IN ($ph) OR s.faculty2_id IN ($ph)"
             );
             $st->execute(array_merge($fids, $fids));
