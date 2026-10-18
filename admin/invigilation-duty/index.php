@@ -40,7 +40,12 @@ function ivd_render_duty_rows(array $rows): void
                 <span class="text-muted" style="font-size:.8rem;">(<?= h($d['exam_year']) ?>)</span>
             <?php endif; ?>
         </td>
-        <td><span class="badge bg-light text-dark border">Room <?= h($d['room_number']) ?></span></td>
+        <td>
+            <span class="badge bg-light text-dark border">Room <?= h($d['room_number']) ?></span>
+            <?php if (!empty($d['dept_name'])): ?>
+                <div class="text-muted mt-1" style="font-size:.78rem;"><?= h($d['dept_name']) ?></div>
+            <?php endif; ?>
+        </td>
         <td><span class="badge <?= $d['my_position'] === 1 ? 'bg-primary' : 'bg-info text-dark' ?>">Invigilator <?= (int)$d['my_position'] ?></span></td>
         <td><?= $d['co_name'] !== null && $d['co_name'] !== '' ? h($d['co_name']) : '<span class="text-muted">—</span>' ?></td>
         <td>

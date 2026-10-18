@@ -44,6 +44,7 @@ $map = static function (array $d): array {
         'exam_name'   => (string)$d['exam_name'],
         'exam_year'   => $d['exam_year'] !== null ? (string)$d['exam_year'] : null,
         'room_number' => (string)$d['room_number'],
+        'dept_name'   => ($d['dept_name'] !== null && $d['dept_name'] !== '') ? (string)$d['dept_name'] : null,
         'my_position' => (int)$d['my_position'],
         'co_name'     => ($d['co_name'] !== null && $d['co_name'] !== '') ? (string)$d['co_name'] : null,
         'attended'    => $attended,
