@@ -32,14 +32,15 @@ define('LM_DEFAULT_SICK',   10.0);
 const LM_MATERNITY_DAYS = 120.0; // Maternity leave entitlement (days)
 const LM_PATERNITY_DAYS = 7.0;   // Paternity leave entitlement (days)
 
-const LM_CATEGORIES = ['casual', 'sick', 'additional', 'short', 'duty', 'extraordinary', 'maternity', 'paternity', 'study'];
-const LM_BALANCE_CATEGORIES = ['casual', 'sick'];   // consume a yearly balance
+const LM_CATEGORIES = ['casual', 'sick', 'additional', 'short', 'duty', 'alternative', 'extraordinary', 'maternity', 'paternity', 'study'];
+const LM_BALANCE_CATEGORIES = ['casual', 'sick'];   // consume a yearly balance (Alternative leave deliberately excluded: no balance deducted)
 const LM_PAYTYPE_CATEGORIES = ['additional'];       // user chooses paid/unpaid
 
 // Categories whose paid/unpaid status is fixed (not chosen by the requester).
 const LM_FIXED_PAY = [
     'short'         => 'paid',
     'duty'          => 'paid',
+    'alternative'   => 'paid',
     'study'         => 'unpaid',
     'extraordinary' => 'unpaid',
     'maternity'     => 'paid',
@@ -126,6 +127,7 @@ function lm_category_label(string $cat): string
         'additional' => 'Additional Leave',
         'short'      => 'Short Leave',
         'duty'       => 'Duty Leave',
+        'alternative' => 'Alternative Leave',
         'extraordinary' => 'Extra Ordinary Leave',
         'maternity'  => 'Maternity Leave',
         'paternity'  => 'Paternity Leave',
@@ -142,6 +144,7 @@ function lm_category_badge(string $cat): string
         'additional' => 'bg-primary',
         'short'      => 'bg-secondary',
         'duty'       => 'bg-success-subtle text-success border border-success',
+        'alternative' => 'bg-info-subtle text-info-emphasis border border-info',
         'extraordinary' => 'bg-danger-subtle text-danger border border-danger',
         'maternity'  => 'bg-danger',
         'paternity'  => 'bg-success',
