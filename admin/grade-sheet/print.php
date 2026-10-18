@@ -17,6 +17,7 @@ $f = [
     'semester'   => trim((string)($_GET['semester'] ?? '')),
     'shift'      => trim((string)($_GET['shift']    ?? '')),
     'section'    => trim((string)($_GET['section']  ?? '')),
+    'sid'        => trim((string)($_GET['sid']      ?? '')),
 ];
 
 // One self-contained grade sheet per batch (separate sheets when multiple

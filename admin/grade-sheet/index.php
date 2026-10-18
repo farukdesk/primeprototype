@@ -31,6 +31,7 @@ $f = [
     'semester'   => trim((string)($_GET['semester'] ?? '')),
     'shift'      => trim((string)($_GET['shift']    ?? '')),
     'section'    => trim((string)($_GET['section']  ?? '')),
+    'sid'        => trim((string)($_GET['sid']      ?? '')),
 ];
 
 // Default to the newest exam with published sheets so the exam selector isn't empty.
@@ -42,7 +43,7 @@ if ($f['exam_id'] <= 0 && !empty($exams)) {
 // selection with at least one of dept / program / batch / semester. Loading an
 // entire exam's published grades on first page open is slow, so the preview is
 // deferred until a filter is applied.
-$has_filter = $f['dept_id'] > 0 || $f['program_id'] > 0 || $f['batch_id'] > 0 || $f['semester'] !== '';
+$has_filter = $f['dept_id'] > 0 || $f['program_id'] > 0 || $f['batch_id'] > 0 || $f['semester'] !== '' || $f['sid'] !== '';
 
 // Each group is a self-contained grade sheet for one batch. When the selection
 // spans multiple batches we render (and print) a separate sheet per batch.
@@ -155,6 +156,10 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label fw-medium mb-1" style="font-size:.8rem;">Student ID</label>
+                <input type="text" name="sid" value="<?= h($f['sid']) ?>" class="form-control form-control-sm" style="border-radius:8px;" placeholder="e.g. 01234567" autocomplete="off">
+            </div>
             <div class="col-12 col-lg-4 d-flex gap-2 justify-content-lg-end">
                 <button class="btn btn-sm btn-primary" style="border-radius:8px;"><i class="fas fa-filter me-1"></i> Apply</button>
                 <a href="<?= APP_URL ?>/grade-sheet/index.php?exam_id=<?= (int)$f['exam_id'] ?>" class="btn btn-sm btn-outline-secondary" style="border-radius:8px;">Reset</a>
@@ -166,7 +171,7 @@ require_once __DIR__ . '/../includes/header.php';
 <!-- ── Preview ─────────────────────────────────────────────────────────────── -->
 <?php if (!$has_filter): ?>
 <div class="alert alert-secondary">
-    <i class="fas fa-filter me-1"></i> Choose a department, program, batch, or semester and click <strong>Apply</strong> to load the grade sheet.
+    <i class="fas fa-filter me-1"></i> Choose a department, program, batch, or semester — or search a <strong>Student ID</strong> — and click <strong>Apply</strong> to load the grade sheet.
 </div>
 <?php elseif (!$has_students): ?>
 <div class="alert alert-info">
