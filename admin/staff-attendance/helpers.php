@@ -821,11 +821,19 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     }
 
     // Custom Thursday / Friday slots: when the member defined slots for this
-    // weekday (e.g. a slot On Campus + a slot for Online Class), the combined
-    // slot window (first slot start → last slot end) IS their expected
-    // clock-in/out time for the day, and the day counts as a working day.
+    // weekday (e.g. a slot On Campus + a slot for Online Class), the On Campus
+    // slot window (first campus slot start → last campus slot end) IS their
+    // expected clock-in/out time for the day, and the day counts as a working
+    // day. Online Class slots are remote (no physical punch) so they never set
+    // the expected in/out window.
     $slot_win = att_slot_window($user_id, $date);
     if ($slot_win !== null) {
+        // Online-only day: the approved schedule has only Online Class slots, so
+        // no physical presence is expected. Clocking in still counts as Present;
+        // otherwise the day is excused (Online Class), never Absent.
+        if (!empty($slot_win['online_only'])) {
+            return $has_in ? 'present' : 'online_class';
+        }
         $sched = array_merge($sched, [
             'start_time' => $slot_win['start_time'],
             'close_time' => $slot_win['close_time'],
@@ -944,6 +952,7 @@ function att_status_label(string $status): string
         'holiday'        => 'Holiday',
         'weekly_off'     => 'Weekend',
         'exam_excuse'    => 'Exam Excuse',
+        'online_class'   => 'Online Class',
         default          => ucfirst(str_replace('_', ' ', $status)),
     };
 }
@@ -964,6 +973,7 @@ function att_status_badge(string $status): string
         'holiday'        => 'bg-secondary',
         'weekly_off'     => 'bg-light text-dark border',
         'exam_excuse'    => 'bg-info-subtle text-info border border-info-subtle',
+        'online_class'   => 'bg-info-subtle text-info border border-info-subtle',
     ];
     $cls = $map[$status] ?? 'bg-light text-dark';
     return '<span class="badge ' . $cls . '">' . h(att_status_label($status)) . '</span>';
@@ -1345,9 +1355,20 @@ function att_slots_total_minutes(array $slots): int
 }
 
 /**
- * The combined slot window for a user on a date: first slot start → last slot
- * end, used as their expected clock-in/out time. Only Thursday (4) and Friday
- * (5) support custom slots. Returns null when the user has none for the day.
+ * The slot window for a user on a date, used as their expected clock-in/out
+ * time. Only Thursday (4) and Friday (5) support custom slots.
+ *
+ * Online Class slots are taught remotely and never require a physical punch, so
+ * the expected clock-in/out window is derived from the ON CAMPUS slots only:
+ * first campus slot start → last campus slot end. A faculty member therefore is
+ * never counted Late In / Early Out for an online class running outside their
+ * campus hours.
+ *
+ * When every slot for the day is an Online Class (no campus slot), there is no
+ * physical presence to expect: 'online_only' => true is returned with a null
+ * window, so att_compute_status() can excuse the day instead of marking Absent.
+ *
+ * Returns null when the user has no slots for the day at all.
  */
 function att_slot_window(int $user_id, string $date): ?array
 {
@@ -1355,17 +1376,24 @@ function att_slot_window(int $user_id, string $date): ?array
     if ($wd !== 4 && $wd !== 5) return null;
     $slots = att_slots_effective_on(att_all_slots()[$user_id][$wd] ?? [], $date);
     if (empty($slots)) return null;
+
+    // Expected clock-in/out comes from On Campus slots only — online classes
+    // are remote and carry no physical punch.
     $start = null;
     $end   = null;
     foreach ($slots as $s) {
+        if (($s['location'] ?? '') === 'online') continue;
         $st = att_normalize_time($s['start_time'] ?? null);
         $en = att_normalize_time($s['end_time'] ?? null);
         if ($st === null || $en === null) continue;
         if ($start === null || $st < $start) $start = $st;
         if ($end === null || $en > $end)     $end   = $en;
     }
-    if ($start === null || $end === null) return null;
-    return ['start_time' => $start, 'close_time' => $end, 'slots' => $slots];
+    if ($start === null || $end === null) {
+        // Slots exist for the day but none are on campus: an online-only day.
+        return ['start_time' => null, 'close_time' => null, 'slots' => $slots, 'online_only' => true];
+    }
+    return ['start_time' => $start, 'close_time' => $end, 'slots' => $slots, 'online_only' => false];
 }
 
 // ── Weekend (weekly-off) change requests + approval chain ───────────────────
