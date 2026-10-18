@@ -856,9 +856,10 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // Policy: faculty working on a FRIDAY are fully flexible — any clock in/out
     // time is fine, never marked Late In or Early Out, but the day must total a
     // strict 8 hours. Applies whether Friday is their weekend or a scheduled
-    // work day. Skipped when the member defined custom slots for the day (the
-    // slot window then defines their expected in/out times instead).
-    if ($slot_win === null && $policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
+    // work day, and even when the member has a custom (On Campus) Friday slot —
+    // the flexible 8-hour rule always wins over the slot window's in/out times.
+    // Online-only Fridays are already excused above.
+    if ($policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5 && $has_in) {
         if (!$has_out) return 'incomplete';
         if (att_worked_minutes($record['in_time'], $record['out_time']) >= ATT_POLICY_FRIDAY_MIN_MINUTES) return 'present';
         return ($exam_exempt || $short_leave) ? 'present' : 'short_hours';
