@@ -315,6 +315,7 @@
     <string name="invigilation_empty">No invigilation duty found.</string>
     <string name="invigilation_no_profile">Your account is not yet linked to a faculty record in the Exam Invigilation pool. Please contact the Controller of Examinations office to link your account.</string>
     <string name="invigilation_room_fmt">Room %1$s</string>
+    <string name="invigilation_dept_fmt">Department: %1$s</string>
     <string name="invigilation_role_fmt">Invigilator %1$d</string>
     <string name="invigilation_co_fmt">Co-Invigilator: %1$s</string>
     <string name="invigilation_attended_badge">Attended</string>

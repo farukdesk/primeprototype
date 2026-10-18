@@ -169,6 +169,14 @@ class InvigilationDutyActivity : AppCompatActivity() {
                 ContextCompat.getColor(ctx, if (d.myPosition == 1) R.color.primary else R.color.info)
             )
 
+            val dept = d.deptName?.takeIf { it.isNotBlank() }
+            if (dept != null) {
+                b.department.text = ctx.getString(R.string.invigilation_dept_fmt, dept)
+                b.department.visibility = View.VISIBLE
+            } else {
+                b.department.visibility = View.GONE
+            }
+
             b.coInvigilator.text = ctx.getString(
                 R.string.invigilation_co_fmt,
                 d.coName?.takeIf { it.isNotBlank() } ?: ctx.getString(R.string.dash),

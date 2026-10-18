@@ -217,6 +217,7 @@ data class InvigilationDuty(
     @SerializedName("exam_name") val examName: String = "",
     @SerializedName("exam_year") val examYear: String? = null,
     @SerializedName("room_number") val roomNumber: String = "",
+    @SerializedName("dept_name") val deptName: String? = null,
     @SerializedName("my_position") val myPosition: Int = 1,
     @SerializedName("co_name") val coName: String? = null,
     @SerializedName("attended") val attended: Int? = null,
