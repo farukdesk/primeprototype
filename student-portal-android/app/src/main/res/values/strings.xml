@@ -336,6 +336,10 @@
     <string name="leave_pick_time">Select time</string>
     <string name="leave_reason">Reason</string>
     <string name="leave_reason_hint">Briefly describe the reason for your leave</string>
+    <string name="leave_makeup_plan">Makeup Class Schedule Plan *</string>
+    <string name="leave_makeup_plan_hint">e.g. CSE-101 (Sec A) class of 12 Aug will be made up on 16 Aug, 10:00 AM, Room 402</string>
+    <string name="leave_makeup_plan_help">Describe how and when you plan to make up the classes affected by this leave.</string>
+    <string name="leave_err_makeup">Please describe your makeup class schedule plan.</string>
     <string name="leave_submit">Submit Request</string>
     <string name="leave_submitted">Your leave request has been submitted.</string>
     <string name="leave_empty">No leave requests yet.</string>

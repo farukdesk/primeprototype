@@ -50,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             'end_time'       => $r['end_time']   ? substr((string)$r['end_time'], 0, 5)   : null,
             'days'           => (float)$r['days'],
             'reason'         => $r['reason'],
+            'makeup_plan'    => $r['makeup_plan'] ?? null,
             'status'         => $r['status'],
             'current_step'   => (int)$r['current_step'],
             'created_at'     => $r['created_at'],
@@ -60,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     api_ok([
         'balance'    => $balance,
         'categories' => LM_CATEGORIES,
+        'is_faculty' => lm_is_faculty($uid),
         'requests'   => $requests,
     ]);
     exit;
@@ -107,9 +109,15 @@ $start_t  = trim((string)($input['start_time'] ?? ''));
 $end_t    = trim((string)($input['end_time'] ?? ''));
 $pay_in   = (string)($input['pay_type'] ?? 'paid');
 
+// Faculty must describe how they will make up affected classes (same rule as
+// the admin-panel leave request form).
+$is_faculty = lm_is_faculty($uid);
+$makeup     = $is_faculty ? trim((string)($input['makeup_plan'] ?? '')) : '';
+
 if (!in_array($category, LM_CATEGORIES, true)) api_error(400, 'Please choose a valid leave category.');
 if ($start === '')  api_error(400, 'Start date is required.');
 if ($reason === '') api_error(400, 'Please provide a reason for the leave.');
+if ($is_faculty && $makeup === '') api_error(400, 'Please describe your makeup class schedule plan.');
 
 $pay_type = lm_fixed_pay($category);
 if ($pay_type === null && lm_category_needs_paytype($category)) {
@@ -160,14 +168,14 @@ $db->beginTransaction();
 try {
     $stmt = $db->prepare(
         'INSERT INTO leave_requests
-            (user_id, category, pay_type, start_date, end_date, start_time, end_time, days, reason, status, current_step)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+            (user_id, category, pay_type, start_date, end_date, start_time, end_time, days, reason, makeup_plan, status, current_step)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
     );
     $stmt->execute([
         $uid, $category, $pay_type, $start, $end,
         $start_t !== '' ? $start_t : null,
         $end_t   !== '' ? $end_t   : null,
-        $days, $reason, 'pending', 1,
+        $days, $reason, $makeup !== '' ? $makeup : null, 'pending', 1,
     ]);
     $rid = (int)$db->lastInsertId();
     lm_snapshot_flow_for_request($rid, lm_flow_group_for_user($lm_user));

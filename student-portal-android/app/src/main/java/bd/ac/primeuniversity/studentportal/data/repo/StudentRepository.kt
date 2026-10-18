@@ -345,8 +345,9 @@ class StudentRepository private constructor(context: Context) {
         payType: String? = null,
         startTime: String? = null,
         endTime: String? = null,
+        makeupPlan: String? = null,
     ): AppResult<LeaveApplyResponse> =
-        call { staffApi.applyLeave(category, startDate, endDate, reason, payType, startTime, endTime) }
+        call { staffApi.applyLeave(category, startDate, endDate, reason, payType, startTime, endTime, makeupPlan) }
 
     /** Cancel one of the employee's own pending leave requests. */
     suspend fun cancelStaffLeave(id: Int): AppResult<SimpleResponse> =
