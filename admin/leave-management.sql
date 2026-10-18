@@ -66,7 +66,7 @@ ALTER TABLE `leave_approval_flow`
 CREATE TABLE IF NOT EXISTS `leave_requests` (
     `id`           int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
     `user_id`      int(10) UNSIGNED NOT NULL COMMENT 'Requesting staff user (FK users.id)',
-    `category`     enum('casual','sick','additional','short','maternity','paternity','study') NOT NULL,
+    `category`     enum('casual','sick','additional','short','duty','alternative','extraordinary','maternity','paternity','study') NOT NULL,
     `pay_type`     enum('paid','unpaid') DEFAULT NULL COMMENT 'Paid/unpaid marker (fixed for short/study/maternity/paternity, chosen for additional)',
     `start_date`   date             NOT NULL,
     `end_date`     date             NOT NULL,
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS `leave_requests` (
 -- Upgrade older installs: widen the category enum with the new leave types.
 ALTER TABLE `leave_requests`
     MODIFY COLUMN `category`
-        enum('casual','sick','additional','short','maternity','paternity','study') NOT NULL;
+        enum('casual','sick','additional','short','duty','alternative','extraordinary','maternity','paternity','study') NOT NULL;
 
 -- ── Per-request approval steps (snapshot of the flow at request time) ───────
 CREATE TABLE IF NOT EXISTS `leave_request_approvals` (
@@ -114,7 +114,7 @@ INSERT INTO `modules`
 SELECT
     'Leave Management',
     'leave-management',
-    'Staff leave requests (Casual, Sick, Additional, Short, Maternity, Paternity, Study) with per-user balances and a per-group, step-by-step signed approval workflow.',
+    'Staff leave requests (Casual, Sick, Additional, Short, Duty, Alternative, Extra Ordinary, Maternity, Paternity, Study) with per-user balances and a per-group, step-by-step signed approval workflow.',
     'fas fa-plane-departure',
     NULL,
     62,
