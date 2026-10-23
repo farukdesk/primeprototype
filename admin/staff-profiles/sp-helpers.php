@@ -76,7 +76,8 @@ const SP_SECTIONS = [
 
 /** Employee Status options. */
 const SP_EMPLOYEE_STATUSES = [
-    'Active', 'Inactive', 'On Leave', 'Study Leave', 'Closed',
+    'Active', 'Inactive', 'On Leave', 'Study Leave', 'Maternity Leave',
+    'Paternity Leave', 'Resigned', 'Retired', 'Terminated', 'Suspended', 'Closed',
 ];
 
 /** Gender options. */
@@ -198,13 +199,73 @@ function sp_dept_type_badge(string $type): string
 function sp_status_badge(?string $status): string
 {
     return match ($status) {
-        'Active'      => '<span class="badge bg-success">Active</span>',
-        'Inactive'    => '<span class="badge bg-secondary">Inactive</span>',
-        'On Leave'    => '<span class="badge bg-warning text-dark">On Leave</span>',
-        'Study Leave' => '<span class="badge bg-info text-dark">Study Leave</span>',
-        'Closed'      => '<span class="badge bg-dark">Closed</span>',
-        default       => '<span class="badge bg-light text-muted">—</span>',
+        'Active'          => '<span class="badge bg-success">Active</span>',
+        'Inactive'        => '<span class="badge bg-secondary">Inactive</span>',
+        'On Leave'        => '<span class="badge bg-warning text-dark">On Leave</span>',
+        'Study Leave'     => '<span class="badge bg-info text-dark">Study Leave</span>',
+        'Maternity Leave' => '<span class="badge" style="background:#d63384;">Maternity Leave</span>',
+        'Paternity Leave' => '<span class="badge" style="background:#6f42c1;">Paternity Leave</span>',
+        'Resigned'        => '<span class="badge bg-danger">Resigned</span>',
+        'Retired'         => '<span class="badge bg-dark">Retired</span>',
+        'Terminated'      => '<span class="badge bg-danger">Terminated</span>',
+        'Suspended'       => '<span class="badge bg-warning text-dark">Suspended</span>',
+        'Closed'          => '<span class="badge bg-dark">Closed</span>',
+        default           => '<span class="badge bg-light text-muted">—</span>',
     };
+}
+
+// ── Schema helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Ensure the HR filter columns (salary, last_promotion_date, last_designation)
+ * exist on staff_profiles and that employee_status covers all statuses. Safe
+ * to run on every request; mirrors admin/staff-profiles-hr-filters.sql.
+ */
+function sp_ensure_hr_columns(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $has = db()->query("SHOW COLUMNS FROM staff_profiles LIKE 'last_promotion_date'")->fetch();
+        if (!$has) {
+            db()->exec(
+                "ALTER TABLE staff_profiles
+                    ADD COLUMN salary decimal(12,2) DEFAULT NULL COMMENT 'Current monthly salary (BDT)' AFTER joining_date,
+                    ADD COLUMN last_promotion_date date DEFAULT NULL COMMENT 'Date of most recent promotion' AFTER salary,
+                    ADD COLUMN last_designation varchar(200) DEFAULT NULL COMMENT 'Designation before the current one' AFTER last_promotion_date"
+            );
+        }
+        $col = db()->query("SHOW COLUMNS FROM staff_profiles LIKE 'employee_status'")->fetch();
+        if ($col && stripos((string)($col['Type'] ?? ''), 'Resigned') === false) {
+            db()->exec(
+                "ALTER TABLE staff_profiles
+                    MODIFY COLUMN employee_status
+                        enum('Active','Inactive','On Leave','Study Leave','Maternity Leave',
+                             'Paternity Leave','Resigned','Retired','Terminated','Suspended','Closed')
+                        NOT NULL DEFAULT 'Active'"
+            );
+        }
+    } catch (Throwable $e) {
+        // Insufficient DDL privileges – run admin/staff-profiles-hr-filters.sql manually.
+    }
+}
+
+/**
+ * Distinct non-empty values of a staff_profiles column (for filter dropdowns).
+ * $col must be a trusted column name (never user input).
+ */
+function sp_distinct_values(string $col): array
+{
+    try {
+        return db()->query(
+            "SELECT DISTINCT `$col` FROM staff_profiles
+              WHERE `$col` IS NOT NULL AND `$col` <> '' AND department_type IS NOT NULL
+              ORDER BY `$col` ASC"
+        )->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 // ── Full profile loading & CV rendering ──────────────────────────────────────
@@ -434,6 +495,11 @@ function sp_render_cv_html(array $data, bool $for_pdf = false): string
         'Designation'  => h($designation),
         'Job Type'     => h($sp['job_type'] ?? ''),
         'Joining Date' => sp_fmt_date($sp['joining_date'] ?? null),
+        'Last Promotion Date' => sp_fmt_date($sp['last_promotion_date'] ?? null),
+        'Last Designation'    => h($sp['last_designation'] ?? ''),
+        // Salary stays off the downloadable CV – shown on the admin view only.
+        'Salary (Monthly)'    => (!$for_pdf && !empty($sp['salary']))
+            ? number_format((float)$sp['salary'], 2) . ' BDT' : '',
         'Finger / Device ID' => h($sp['finger_id'] ?? ''),
     ]);
 

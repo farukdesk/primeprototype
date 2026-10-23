@@ -285,6 +285,24 @@ function cv_save_profiles(int $user_id, string $emp_type, array $post, array $fi
         // Migration not applied yet – ignore.
     }
 
+    // HR fields used by the Employee Profiles list filters (salary, last
+    // promotion). Columns are auto-added by sp_ensure_hr_columns() / the
+    // admin/staff-profiles-hr-filters.sql migration.
+    sp_ensure_hr_columns();
+    $salary = $sp_val('salary');
+    if ($salary !== null && !is_numeric($salary)) {
+        $salary = null;
+    }
+    try {
+        $db->prepare(
+            'UPDATE staff_profiles
+                SET salary = ?, last_promotion_date = ?, last_designation = ?
+              WHERE user_id = ?'
+        )->execute([$salary, $sp_val('last_promotion_date'), $sp_val('last_designation'), $user_id]);
+    } catch (Throwable $e) {
+        // Migration not applied yet – ignore.
+    }
+
     // Academic qualifications & work experiences (shared by all employees).
     sp_save_qualifications($user_id, $post);
     sp_save_experiences($user_id, $post);
@@ -586,6 +604,9 @@ function cv_render_section(string $emp_type, array $sp, array $quals, array $exp
                     <?= cv_sp_select('job_type', 'Job Type / Category', SP_JOB_TYPES, $sp) ?>
                     <?= cv_sp_select('employee_status', 'Employee Status', SP_EMPLOYEE_STATUSES, $sp, 'Active') ?>
                     <?= cv_sp_input('joining_date', 'Joining Date', $sp, 'date') ?>
+                    <?= cv_sp_input('salary', 'Salary (Monthly, BDT)', $sp, 'number', 'min="0" step="any"') ?>
+                    <?= cv_sp_input('last_promotion_date', 'Last Promotion Date', $sp, 'date') ?>
+                    <?= cv_sp_input('last_designation', 'Last Designation (before current)', $sp, 'text', 'maxlength="200"') ?>
                     <?= cv_sp_input('finger_id', 'Finger / Device ID', $sp, 'text', 'maxlength="100"') ?>
                 </div>
             </div>
