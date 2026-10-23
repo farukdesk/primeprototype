@@ -98,6 +98,7 @@ foreach ($subjects as $subj) {
 
         if ($total < RM_MARKS_MIN) $total = RM_MARKS_MIN;
         if ($total > RM_MARKS_MAX) $total = RM_MARKS_MAX;
+        $total = rm_apply_grace($total);
         $grade = rm_compute_grade($total);
 
         $upsert->execute([
@@ -137,6 +138,7 @@ foreach ($subjects as $subj) {
         $marks = (float)$marks_raw;
         if ($marks < RM_MARKS_MIN) $marks = RM_MARKS_MIN;
         if ($marks > RM_MARKS_MAX) $marks = RM_MARKS_MAX;
+        $marks = rm_apply_grace($marks);
 
         $grade = rm_compute_grade($marks);
 

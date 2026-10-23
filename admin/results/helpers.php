@@ -33,6 +33,9 @@ function rm_can_delete(): bool
 const RM_MARKS_MIN = 0;
 const RM_MARKS_MAX = 100;
 
+/** Auto-grace: lift marks to the next grade boundary when within this margin. */
+const RM_GRACE_MARKS = 0.5;
+
 // ── Grading scale ─────────────────────────────────────────────────────────────
 
 /**
@@ -68,6 +71,23 @@ function rm_compute_grade(?float $marks): ?array
         }
     }
     return ['letter' => 'F', 'point' => 0.00];
+}
+
+/**
+ * Auto-grace: if adding up to RM_GRACE_MARKS (0.5) would lift the marks over
+ * the next grade boundary (e.g. 49.5 → 50 turns C into C+), the marks are
+ * raised to that boundary automatically. Otherwise the original marks are
+ * kept unchanged.
+ */
+function rm_apply_grace(?float $marks): ?float
+{
+    if ($marks === null) return null;
+    foreach (rm_grading_scale() as [$min, , ,]) {
+        if ($min > 0 && $marks < $min && $marks + RM_GRACE_MARKS >= $min) {
+            return (float)$min;
+        }
+    }
+    return $marks;
 }
 
 // ── Data fetchers ─────────────────────────────────────────────────────────────

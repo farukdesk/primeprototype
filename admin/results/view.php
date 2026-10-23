@@ -504,6 +504,17 @@ require_once __DIR__ . '/../includes/header.php';
         return { letter: 'F', point: 0 };
     }
 
+    // Auto-grace: lift the total to the next grade boundary when within 0.5 marks
+    // (e.g. 49.5 → 50 turns C into C+). Mirrors rm_apply_grace() on the server.
+    var GRACE_MARKS = 0.5;
+    function applyGrace(marks) {
+        for (var i = 0; i < gradeScale.length; i++) {
+            var min = gradeScale[i].min;
+            if (min > 0 && marks < min && marks + GRACE_MARKS >= min) return min;
+        }
+        return marks;
+    }
+
     function updateSubjectDisplay(sid) {
         var cats = subjectCats[sid];
         var total;
@@ -539,6 +550,7 @@ require_once __DIR__ . '/../includes/header.php';
             }
         }
         total = Math.min(Math.max(total, 0), 100);
+        total = applyGrace(total);
         var g = computeGrade(total);
         document.getElementById('total_' + sid).textContent = total.toFixed(2);
         document.getElementById('grade_' + sid).textContent = g.letter;
