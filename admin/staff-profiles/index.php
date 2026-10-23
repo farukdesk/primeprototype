@@ -13,13 +13,35 @@ if (!is_super_admin() && !sp_is_admin()) {
 
 $page_title = 'Employee Profiles';
 
+sp_ensure_hr_columns();
+
 // ── Filters ───────────────────────────────────────────────────────────────────
 $search      = trim($_GET['search'] ?? '');
 $f_type      = $_GET['dept_type'] ?? '';
 $f_dept      = (int)($_GET['dept'] ?? 0);
 $f_edu_dept  = (int)($_GET['edu_dept_id'] ?? 0);
+$f_desig     = trim($_GET['designation'] ?? '');
+$f_last_des  = trim($_GET['last_designation'] ?? '');
+$f_job_type  = trim($_GET['job_type'] ?? '');
+$f_status    = trim($_GET['status'] ?? '');
+$f_join_from = trim($_GET['join_from'] ?? '');
+$f_join_to   = trim($_GET['join_to'] ?? '');
+$f_prom_from = trim($_GET['promo_from'] ?? '');
+$f_prom_to   = trim($_GET['promo_to'] ?? '');
+$f_sal_min   = trim($_GET['salary_min'] ?? '');
+$f_sal_max   = trim($_GET['salary_max'] ?? '');
 $page        = max(1, (int)($_GET['page'] ?? 1));
 $per_page    = 20;
+
+// Normalise date / number inputs (ignore garbage values).
+$valid_date = static fn(string $d): string =>
+    preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) ? $d : '';
+$f_join_from = $valid_date($f_join_from);
+$f_join_to   = $valid_date($f_join_to);
+$f_prom_from = $valid_date($f_prom_from);
+$f_prom_to   = $valid_date($f_prom_to);
+if ($f_sal_min !== '' && !is_numeric($f_sal_min)) $f_sal_min = '';
+if ($f_sal_max !== '' && !is_numeric($f_sal_max)) $f_sal_max = '';
 
 // Only show users who have a registered employee profile (staff_profiles row
 // with an employee type set). This lists every registered staff / employee /
@@ -46,6 +68,28 @@ if ($f_edu_dept > 0) {
     $where[]  = 'sp.department_type = \'educational\' AND sd.dept_id = ?';
     $params[] = $f_edu_dept;
 }
+if ($f_desig !== '') {
+    $where[]  = 'sp.designation = ?';
+    $params[] = $f_desig;
+}
+if ($f_last_des !== '') {
+    $where[]  = 'sp.last_designation = ?';
+    $params[] = $f_last_des;
+}
+if ($f_job_type !== '' && in_array($f_job_type, SP_JOB_TYPES, true)) {
+    $where[]  = 'sp.job_type = ?';
+    $params[] = $f_job_type;
+}
+if ($f_status !== '' && in_array($f_status, SP_EMPLOYEE_STATUSES, true)) {
+    $where[]  = 'sp.employee_status = ?';
+    $params[] = $f_status;
+}
+if ($f_join_from !== '') { $where[] = 'sp.joining_date >= ?'; $params[] = $f_join_from; }
+if ($f_join_to   !== '') { $where[] = 'sp.joining_date <= ?'; $params[] = $f_join_to; }
+if ($f_prom_from !== '') { $where[] = 'sp.last_promotion_date >= ?'; $params[] = $f_prom_from; }
+if ($f_prom_to   !== '') { $where[] = 'sp.last_promotion_date <= ?'; $params[] = $f_prom_to; }
+if ($f_sal_min   !== '') { $where[] = 'sp.salary >= ?'; $params[] = $f_sal_min; }
+if ($f_sal_max   !== '') { $where[] = 'sp.salary <= ?'; $params[] = $f_sal_max; }
 
 $where_sql = ' WHERE ' . implode(' AND ', $where);
 
@@ -64,7 +108,8 @@ $offset      = ($page - 1) * $per_page;
 $rows_stmt = db()->prepare(
     'SELECT u.id, u.full_name, u.username, u.email, u.phone,
             sp.photo, sp.employee_id, sp.department_type, sp.designation,
-            sp.job_type, sp.employee_status,
+            sp.job_type, sp.employee_status, sp.joining_date,
+            sp.last_promotion_date, sp.last_designation, sp.salary,
             sd.name AS dept_name
      ' . $base_sql . $where_sql .
     ' ORDER BY u.full_name ASC LIMIT ' . $per_page . ' OFFSET ' . $offset
@@ -76,6 +121,20 @@ $rows = $rows_stmt->fetchAll();
 $all_depts = db()->query(
     "SELECT id, name, type FROM staff_departments WHERE is_active = 1 ORDER BY type ASC, sort_order ASC, name ASC"
 )->fetchAll();
+
+// Dropdown option lists built from the data on record.
+$all_designations      = sp_distinct_values('designation');
+$all_last_designations = sp_distinct_values('last_designation');
+
+// True when any of the advanced filters is active (keeps the panel open).
+$adv_active = $f_desig !== '' || $f_last_des !== '' || $f_job_type !== '' || $f_status !== ''
+    || $f_join_from !== '' || $f_join_to !== '' || $f_prom_from !== '' || $f_prom_to !== ''
+    || $f_sal_min !== '' || $f_sal_max !== '';
+
+// Query string (minus page) reused by the pagination links.
+$qs_params = $_GET;
+unset($qs_params['page']);
+$qs_base = http_build_query($qs_params);
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -106,8 +165,8 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="col-md-3">
                 <select name="dept_type" class="form-select" style="border-radius:10px;">
                     <option value="">All Employee Types</option>
-                    <option value="administrative" <?= $f_type === 'administrative' ? 'selected' : '' ?>>Administrative</option>
-                    <option value="educational"    <?= $f_type === 'educational'    ? 'selected' : '' ?>>Faculty</option>
+                    <option value="educational"    <?= $f_type === 'educational'    ? 'selected' : '' ?>>Academic (Faculty)</option>
+                    <option value="administrative" <?= $f_type === 'administrative' ? 'selected' : '' ?>>Non-Academic (Administrative)</option>
                 </select>
             </div>
             <div class="col-md-3">
@@ -124,9 +183,85 @@ require_once __DIR__ . '/../includes/header.php';
                 <button type="submit" class="btn btn-primary w-100" style="border-radius:10px;">
                     <i class="fas fa-search"></i>
                 </button>
-                <a href="<?= APP_URL ?>/staff-profiles/index.php" class="btn btn-secondary" style="border-radius:10px;">
+                <a href="<?= APP_URL ?>/staff-profiles/index.php" class="btn btn-secondary" style="border-radius:10px;" title="Reset filters">
                     <i class="fas fa-times"></i>
-                </a>            </div>
+                </a>
+                <button type="button" class="btn btn-outline-secondary" style="border-radius:10px;"
+                        title="More filters" data-bs-toggle="collapse" data-bs-target="#sp-adv-filters"
+                        aria-expanded="<?= $adv_active ? 'true' : 'false' ?>">
+                    <i class="fas fa-sliders-h"></i>
+                </button>
+            </div>
+
+            <!-- Advanced filters -->
+            <div class="collapse <?= $adv_active ? 'show' : '' ?> col-12" id="sp-adv-filters">
+                <div class="row g-2 pt-2 mt-1 border-top">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Designation</label>
+                        <select name="designation" class="form-select" style="border-radius:10px;">
+                            <option value="">All Designations</option>
+                            <?php foreach ($all_designations as $des): ?>
+                            <option value="<?= h($des) ?>" <?= $f_desig === $des ? 'selected' : '' ?>><?= h($des) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Last Designation</label>
+                        <select name="last_designation" class="form-select" style="border-radius:10px;">
+                            <option value="">All</option>
+                            <?php foreach ($all_last_designations as $des): ?>
+                            <option value="<?= h($des) ?>" <?= $f_last_des === $des ? 'selected' : '' ?>><?= h($des) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Job Type</label>
+                        <select name="job_type" class="form-select" style="border-radius:10px;">
+                            <option value="">All Job Types</option>
+                            <?php foreach (SP_JOB_TYPES as $jt): ?>
+                            <option value="<?= h($jt) ?>" <?= $f_job_type === $jt ? 'selected' : '' ?>><?= h($jt) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Current Status</label>
+                        <select name="status" class="form-select" style="border-radius:10px;">
+                            <option value="">All Statuses</option>
+                            <?php foreach (SP_EMPLOYEE_STATUSES as $st): ?>
+                            <option value="<?= h($st) ?>" <?= $f_status === $st ? 'selected' : '' ?>><?= h($st) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Joining Date (from – to)</label>
+                        <div class="input-group">
+                            <input type="date" name="join_from" class="form-control" value="<?= h($f_join_from) ?>">
+                            <input type="date" name="join_to"   class="form-control" value="<?= h($f_join_to) ?>">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Last Promotion (from – to)</label>
+                        <div class="input-group">
+                            <input type="date" name="promo_from" class="form-control" value="<?= h($f_prom_from) ?>">
+                            <input type="date" name="promo_to"   class="form-control" value="<?= h($f_prom_to) ?>">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">Salary (min – max)</label>
+                        <div class="input-group">
+                            <input type="number" name="salary_min" class="form-control" min="0" step="any"
+                                   placeholder="Min" value="<?= h($f_sal_min) ?>">
+                            <input type="number" name="salary_max" class="form-control" min="0" step="any"
+                                   placeholder="Max" value="<?= h($f_sal_max) ?>">
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100" style="border-radius:10px;">
+                            <i class="fas fa-filter me-1"></i> Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
         </form>
     </div>
 </div>
@@ -152,6 +287,8 @@ require_once __DIR__ . '/../includes/header.php';
                         <th>Department</th>
                         <th>Designation</th>
                         <th>Job Type</th>
+                        <th>Joining Date</th>
+                        <th>Last Promotion</th>
                         <th>Status</th>
                         <th class="text-end">Actions</th>
                     </tr>
@@ -190,6 +327,13 @@ require_once __DIR__ . '/../includes/header.php';
                     </td>
                     <td><?= h($row['designation'] ?? '—') ?></td>
                     <td><?= h($row['job_type'] ?? '—') ?></td>
+                    <td class="text-nowrap"><?= sp_fmt_date($row['joining_date'] ?? null) ?></td>
+                    <td class="text-nowrap">
+                        <?= sp_fmt_date($row['last_promotion_date'] ?? null) ?>
+                        <?php if (!empty($row['last_designation'])): ?>
+                        <div class="text-muted small">from <?= h($row['last_designation']) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td><?= sp_status_badge($row['employee_status'] ?? null) ?></td>
                     <td class="text-end">
                         <a href="<?= APP_URL ?>/staff-profiles/view.php?id=<?= (int)$row['id'] ?>"
@@ -215,7 +359,7 @@ require_once __DIR__ . '/../includes/header.php';
                 <?php for ($p = 1; $p <= $total_pages; $p++): ?>
                 <li class="page-item <?= $p === $page ? 'active' : '' ?>">
                     <a class="page-link" style="border-radius:6px;"
-                       href="?page=<?= $p ?>&search=<?= urlencode($search) ?>&dept_type=<?= urlencode($f_type) ?>&dept=<?= $f_dept ?>">
+                       href="?page=<?= $p ?><?= $qs_base !== '' ? '&' . h($qs_base) : '' ?>">
                         <?= $p ?>
                     </a>
                 </li>
