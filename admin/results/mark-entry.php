@@ -207,6 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $dept_id          = (int)($_POST['dept_id']          ?? 0);
     $program_id       = (int)($_POST['program_id']       ?? 0);
     $exam_id          = (int)($_POST['exam_id']          ?? 0);
+    $sub_exam_id      = (int)($_POST['sub_exam_id']      ?? 0);
     $offer_subject_id = (int)($_POST['offer_subject_id'] ?? 0);
     $subject_code     = trim($_POST['subject_code']      ?? '');
     $subject_title    = trim($_POST['subject_title']     ?? '');
@@ -214,6 +215,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $exam_date        = trim($_POST['exam_date']         ?? '');
     // Accept only a valid YYYY-MM-DD exam date (empty allowed)
     if ($exam_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $exam_date)) $exam_date = '';
+
+    // ── Sub exam (re-sit) resolution ──────────────────────────────────────────
+    // The form selects the PRIMARY exam first; a supplementary/makeup re-sit of
+    // it may then be chosen as "Sub Exam". When a sub exam is picked, the sheet
+    // is stored under the SUB exam (that is the exam actually sat), while the
+    // link to the primary exam stays recorded in ei_exams.base_exam_id.
+    $primary_exam_id = $exam_id; // as posted — kept for error redisplay
+    if ($sub_exam_id > 0 && $sub_exam_id !== $exam_id) {
+        try {
+            $sechk = db()->prepare('SELECT base_exam_id FROM ei_exams WHERE id = ? LIMIT 1');
+            $sechk->execute([$sub_exam_id]);
+            $serow = $sechk->fetch();
+            if ($serow !== false && (int)($serow['base_exam_id'] ?? 0) === $exam_id && $exam_id > 0) {
+                $exam_id = $sub_exam_id; // effective exam: everything below stores under the sub exam
+            } else {
+                $errors[] = 'The selected Sub Exam does not belong to the selected primary exam. Please re-select and try again.';
+            }
+        } catch (Throwable $_e) {
+            // base_exam_id column not migrated yet — no sub exams can exist
+            $errors[] = 'Sub exams are not available yet (database migration pending). Please select the exam directly.';
+        }
+    } else {
+        $sub_exam_id = 0;
+    }
 
     // Curriculum + term label are derived authoritatively from the selected course
     // offer subject, so the client cannot spoof an unrelated subject/term.
@@ -622,8 +647,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/results/index.php?tab=my_sheets');
     }
 
-    save_old(compact('dept_id','program_id','exam_id','offer_subject_id',
-                     'subject_code','subject_title','credits','exam_date'));
+    save_old(compact('dept_id','program_id','offer_subject_id',
+                     'subject_code','subject_title','credits','exam_date')
+             + ['exam_id' => $primary_exam_id, 'sub_exam_id' => $sub_exam_id]);
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -646,25 +672,87 @@ try {
           ORDER BY exam_year DESC, exam_name ASC'
     )->fetchAll();
 }
+// ── Sub exam (re-sit) mapping ─────────────────────────────────────────────────
+// ei_exams.base_exam_id links a Supplementary/Makeup/Improvement re-sit exam to
+// the primary (regular) exam it re-sits. The "Select Exam" dropdown lists only
+// PRIMARY exams; mapped re-sits appear in a dependent "Sub Exam" dropdown once
+// their primary exam is selected. Missing column → empty map → old behaviour.
+$exam_base_map = []; // sub exam id => primary exam id
+try {
+    foreach (db()->query('SELECT id, base_exam_id FROM ei_exams WHERE base_exam_id IS NOT NULL')->fetchAll() as $bm) {
+        $exam_base_map[(int)$bm['id']] = (int)$bm['base_exam_id'];
+    }
+} catch (Throwable $_e) { /* base_exam_id column not migrated yet */ }
+
+// Split the open exams into primary options and sub-exam (re-sit) options.
+$sub_exam_options = [];
+foreach ($exam_options as $k => $eo) {
+    $eid = (int)$eo['id'];
+    if (isset($exam_base_map[$eid])) {
+        $eo['base_exam_id'] = $exam_base_map[$eid];
+        $sub_exam_options[] = $eo;
+        unset($exam_options[$k]);
+    }
+}
+$exam_options = array_values($exam_options);
+
+// Edit mode: the sheet's exam may itself be a SUB exam — then the primary
+// dropdown must restore its base exam and the sub dropdown the exam itself.
+$sheet_exam_id    = $sheet ? (int)$sheet['exam_id'] : 0;
+$sheet_is_sub     = $sheet_exam_id > 0 && isset($exam_base_map[$sheet_exam_id]);
+$v_exam_id        = $sheet ? ($sheet_is_sub ? $exam_base_map[$sheet_exam_id] : $sheet_exam_id)
+                           : (int)old('exam_id');
+$v_sub_exam_id    = $sheet ? ($sheet_is_sub ? $sheet_exam_id : 0)
+                           : (int)old('sub_exam_id');
+
 // Edit mode: keep the sheet's own exam selectable even if its entry window has
 // since closed, so a draft/returned sheet can still be revised and re-submitted.
-if ($sheet && $sheet['exam_id']) {
-    $sheet_exam_listed = false;
-    foreach ($exam_options as $eo) {
-        if ((int)$eo['id'] === (int)$sheet['exam_id']) { $sheet_exam_listed = true; break; }
-    }
-    if (!$sheet_exam_listed) {
-        $exam_options[] = [
-            'id'        => (int)$sheet['exam_id'],
-            'exam_name' => ($sheet['exam_name'] ?? ('Exam #' . $sheet['exam_id'])) . ' (entry closed)',
-            'exam_year' => $sheet['exam_year'] ?? '',
-        ];
+if ($sheet_exam_id > 0) {
+    if ($sheet_is_sub) {
+        // Ensure the sub exam itself is listed …
+        $listed = false;
+        foreach ($sub_exam_options as $so) {
+            if ((int)$so['id'] === $sheet_exam_id) { $listed = true; break; }
+        }
+        if (!$listed) {
+            $sub_exam_options[] = [
+                'id'           => $sheet_exam_id,
+                'exam_name'    => ($sheet['exam_name'] ?? ('Exam #' . $sheet_exam_id)) . ' (entry closed)',
+                'exam_year'    => $sheet['exam_year'] ?? '',
+                'base_exam_id' => $exam_base_map[$sheet_exam_id],
+            ];
+        }
+        // … and that its primary exam is in the primary dropdown.
+        $plisted = false;
+        foreach ($exam_options as $eo) {
+            if ((int)$eo['id'] === $v_exam_id) { $plisted = true; break; }
+        }
+        if (!$plisted) {
+            $pname = 'Exam #' . $v_exam_id; $pyear = '';
+            try {
+                $pst = db()->prepare('SELECT exam_name, exam_year FROM ei_exams WHERE id = ? LIMIT 1');
+                $pst->execute([$v_exam_id]);
+                if ($prow = $pst->fetch()) { $pname = (string)$prow['exam_name']; $pyear = (string)$prow['exam_year']; }
+            } catch (Throwable $_e) {}
+            $exam_options[] = ['id' => $v_exam_id, 'exam_name' => $pname . ' (entry closed)', 'exam_year' => $pyear];
+        }
+    } else {
+        $sheet_exam_listed = false;
+        foreach ($exam_options as $eo) {
+            if ((int)$eo['id'] === $sheet_exam_id) { $sheet_exam_listed = true; break; }
+        }
+        if (!$sheet_exam_listed) {
+            $exam_options[] = [
+                'id'        => $sheet_exam_id,
+                'exam_name' => ($sheet['exam_name'] ?? ('Exam #' . $sheet_exam_id)) . ' (entry closed)',
+                'exam_year' => $sheet['exam_year'] ?? '',
+            ];
+        }
     }
 }
 
 $v_dept_id          = $sheet ? $sheet['dept_id']          : (old('dept_id') ?: ($faculty_dept_id ?: null));
 $v_program_id       = $sheet ? $sheet['program_id']        : old('program_id');
-$v_exam_id          = $sheet ? $sheet['exam_id']           : old('exam_id');
 $v_offer_subject_id = $sheet ? $sheet['offer_subject_id']  : old('offer_subject_id');
 $v_curriculum_id    = $sheet ? $sheet['curriculum_id']     : old('curriculum_id');
 $v_subject_code     = $sheet ? $sheet['subject_code']      : old('subject_code');
@@ -841,6 +929,32 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 <?php else: ?>
                                 Only exams currently open for marks entry are listed.
                                 <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub exam (re-sit): shown only when the selected primary exam has
+                         supplementary/makeup exams mapped to it (ei_exams.base_exam_id).
+                         Leave on "None" for a regular primary-exam sheet. -->
+                    <div class="row g-3 mb-3 d-none" id="sub_exam_wrap">
+                        <div class="col-md-4 offset-md-8">
+                            <label class="form-label fw-medium">
+                                Sub Exam <span class="text-muted fw-normal">(Supplementary / Makeup re-sit)</span>
+                            </label>
+                            <select name="sub_exam_id" id="sub_exam_select" class="form-select" disabled>
+                                <option value="">— None (regular exam entry) —</option>
+                                <?php foreach ($sub_exam_options as $sx): ?>
+                                <option value="<?= (int)$sx['id'] ?>"
+                                        data-base="<?= (int)$sx['base_exam_id'] ?>"
+                                        <?= $v_sub_exam_id === (int)$sx['id'] ? 'selected' : '' ?>>
+                                    <?= h($sx['exam_name'] . ' ' . $sx['exam_year']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">
+                                This primary exam has re-sit exam(s). Pick one to enter
+                                supplementary/makeup marks — the primary exam's marks are
+                                pre-filled and the sheet is saved under the sub exam.
                             </div>
                         </div>
                     </div>
@@ -1228,6 +1342,8 @@ foreach ($creatable as $cr) {
     var deptSel       = document.getElementById('dept_select');
     var progSel       = document.getElementById('prog_select');
     var examSel       = document.getElementById('exam_select');
+    var subExamSel    = document.getElementById('sub_exam_select');
+    var subExamWrap   = document.getElementById('sub_exam_wrap');
     var currSel       = document.getElementById('curriculum_select');
     var subCode       = document.getElementById('subject_code');
     var subTitle      = document.getElementById('subject_title');
@@ -1282,11 +1398,53 @@ foreach ($creatable as $cr) {
 
     /** Whether the selected exam is a supplementary/makeup re-sit of a final. */
     function isSupplementaryExam() {
+        // Explicit sub-exam (re-sit) selection always counts as supplementary.
+        if (subExamSel && !subExamSel.disabled && subExamSel.value) return true;
         var txt = '';
         if (examSel && examSel.value && examSel.selectedIndex >= 0) {
             txt = (examSel.options[examSel.selectedIndex].textContent || '').toLowerCase();
         }
         return /\b(?:supplementary|supplement|suppl|supple|makeup|make[\s-]+up|improvement|improve|retake|re[\s-]+take)\b/.test(txt);
+    }
+
+    /** Exam the sheet is actually stored under: the sub exam when picked, else the primary. */
+    function effectiveExamId() {
+        if (subExamSel && !subExamSel.disabled && subExamSel.value) return subExamSel.value;
+        return examSel ? examSel.value : '';
+    }
+
+    /** `&exam_id=…` (+ `&base_exam_id=…` prefill source) fragment for roster requests. */
+    function examParams() {
+        var eid = effectiveExamId();
+        if (!eid) return '';
+        var q = '&exam_id=' + encodeURIComponent(eid);
+        // Sub exam selected → its marks are pre-filled from the primary exam.
+        if (subExamSel && !subExamSel.disabled && subExamSel.value && examSel && examSel.value) {
+            q += '&base_exam_id=' + encodeURIComponent(examSel.value);
+        }
+        return q;
+    }
+
+    /**
+     * Show the "Sub Exam" dropdown only when the selected primary exam has
+     * re-sit exams mapped to it (data-base = ei_exams.base_exam_id); its
+     * options are filtered down to that primary exam. Hidden → the select is
+     * disabled so it is never submitted.
+     */
+    function updateSubExamUI() {
+        if (!subExamSel || !subExamWrap) return;
+        var primary = examSel ? String(examSel.value || '') : '';
+        var anyVisible = false;
+        Array.prototype.forEach.call(subExamSel.options, function (o) {
+            if (!o.value) return;
+            var match = !!primary && o.getAttribute('data-base') === primary;
+            o.hidden = o.disabled = !match;
+            if (match) anyVisible = true;
+            if (!match && String(subExamSel.value) === String(o.value)) subExamSel.value = '';
+        });
+        subExamSel.disabled = !anyVisible;
+        subExamWrap.classList.toggle('d-none', !anyVisible);
+        if (!anyVisible) subExamSel.value = '';
     }
 
     function isMidDist(name) {
@@ -1314,8 +1472,10 @@ foreach ($creatable as $cr) {
             if (examMode === 'mid') {
                 hint.textContent = 'Mid Term entry — only Mid Term columns are editable; letter grades appear after the final exam';
                 hint.className   = 'badge bg-warning text-dark ms-2';
-            } else if (examMode === 'final' && isSupplementaryExam()) {
-                hint.textContent = 'Supplementary/Makeup entry — marks from the original Final exam are pre-filled and can be modified; saving stores results under this exam';
+            } else if (examSel && examSel.value && isSupplementaryExam()) {
+                hint.textContent = (subExamSel && !subExamSel.disabled && subExamSel.value)
+                    ? 'Sub Exam (re-sit) entry — marks from the primary exam are pre-filled and can be modified; saving stores results under the selected sub exam'
+                    : 'Supplementary/Makeup entry — marks from the original Final exam are pre-filled and can be modified; saving stores results under this exam';
                 hint.className   = 'badge bg-primary ms-2';
             } else if (examMode === 'final') {
                 hint.textContent = 'Final entry — Mid Term marks from the mid-term exam are pre-filled and can be modified';
@@ -1838,7 +1998,7 @@ foreach ($creatable as $cr) {
     function mergeRegisteredStudents(offerSubjectId) {
         if (!offerSubjectId) return;
         var url = APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId)
-                + (examSel && examSel.value ? '&exam_id=' + encodeURIComponent(examSel.value) : '')
+                + examParams()
                 + '&exclude_sheet_id=' + encodeURIComponent(currentSheetId);
         fetch(url)
             .then(function(r) { return r.json(); })
@@ -1924,7 +2084,7 @@ foreach ($creatable as $cr) {
     function loadRegisteredStudents(offerSubjectId, showAlert) {
         if (!offerSubjectId) return;
         var rosterUrl = APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId)
-                      + (examSel && examSel.value ? '&exam_id=' + encodeURIComponent(examSel.value) : '')
+                      + examParams()
                       + '&exclude_sheet_id=' + encodeURIComponent(currentSheetId);
         fetch(rosterUrl)
             .then(function(r) { return r.json(); })
@@ -1984,7 +2144,7 @@ foreach ($creatable as $cr) {
     }
 
     function checkDuplicate() {
-        var examId  = examSel ? examSel.value : '';
+        var examId  = effectiveExamId();
         var offerId = currSel ? currSel.value : '';
         if (!examId || !offerId) {
             if (dupWarning) dupWarning.classList.add('d-none');
@@ -2037,7 +2197,7 @@ foreach ($creatable as $cr) {
     var existingDraftShownFor = '';
     function checkExistingDraft() {
         if (isEditMode) return;
-        var examId  = examSel ? examSel.value : '';
+        var examId  = effectiveExamId();
         var offerId = currSel ? currSel.value : '';
         if (!examId || !offerId) return;
         var key = examId + ':' + offerId;
@@ -2082,11 +2242,23 @@ foreach ($creatable as $cr) {
     }
 
     if (examSel) examSel.addEventListener('change', function() {
+        updateSubExamUI();
         checkDuplicate();
         checkExistingDraft();
         applyExamMode();
         // Refresh the roster so students already marked for the newly selected exam get locked
         if (currSel.value && !isEditMode) loadRegisteredStudents(currSel.value, false);
+    });
+    // Sub exam changed → the sheet's effective exam changed: re-check duplicates
+    // and re-pull the roster/prefill. Edit mode merges into still-empty inputs
+    // only, so marks already entered or saved are never lost.
+    if (subExamSel) subExamSel.addEventListener('change', function() {
+        checkDuplicate();
+        checkExistingDraft();
+        applyExamMode();
+        if (!currSel.value) return;
+        if (isEditMode) mergeRegisteredStudents(currSel.value);
+        else            loadRegisteredStudents(currSel.value, false);
     });
     currSel.addEventListener('change', checkDuplicate);
     currSel.addEventListener('change', checkExistingDraft);
@@ -2330,6 +2502,7 @@ foreach ($creatable as $cr) {
     // Initial load: programs (and subjects + students if editing).
     // Edit mode: prefer the sheet's own saved department so a cross-department
     // sheet restores its saved program/exam/subject correctly.
+    updateSubExamUI();
     var initDept = savedDept || facultyDeptId;
     if (initDept) {
         loadPrograms(initDept, savedProg);

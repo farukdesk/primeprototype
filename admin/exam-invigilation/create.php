@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $end_date   = trim($_POST['end_date'] ?? '');
     $is_active  = isset($_POST['is_active']) ? 1 : 0;
     $marks_entry_open = isset($_POST['marks_entry_open']) ? 1 : 0;
+    $base_exam_id     = (int)($_POST['base_exam_id'] ?? 0);
 
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($exam_year < 2000 || $exam_year > 2100) $errors[] = 'Please enter a valid year (2000–2100).';
@@ -24,19 +25,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         try {
-            db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active, marks_entry_open) VALUES (?,?,?,?,?,?)')
-               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open]);
-        } catch (Throwable $_e) {
-            // `marks_entry_open` column not migrated yet — legacy insert
-            db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active) VALUES (?,?,?,?,?)')
-               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active]);
+            db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active, marks_entry_open, base_exam_id) VALUES (?,?,?,?,?,?,?)')
+               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open, $base_exam_id ?: null]);
+        } catch (Throwable $_e0) {
+            try {
+                // `base_exam_id` column not migrated yet
+                db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active, marks_entry_open) VALUES (?,?,?,?,?,?)')
+                   ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open]);
+            } catch (Throwable $_e) {
+                // `marks_entry_open` column not migrated yet — legacy insert
+                db()->prepare('INSERT INTO ei_exams (exam_name, exam_year, start_date, end_date, is_active) VALUES (?,?,?,?,?)')
+                   ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active]);
+            }
         }
         $new_id = (int)db()->lastInsertId();
         flash_set('success', 'Exam <strong>' . h($exam_name) . '</strong> created.');
         redirect(APP_URL . '/exam-invigilation/view.php?id=' . $new_id);
     }
-    save_old(compact('exam_name','exam_year','start_date','end_date','is_active','marks_entry_open'));
+    save_old(compact('exam_name','exam_year','start_date','end_date','is_active','marks_entry_open','base_exam_id'));
 }
+
+// Base-exam candidates for the optional Supplementary/Makeup mapping.
+$base_exam_options = db()->query(
+    'SELECT id, exam_name, exam_year FROM ei_exams ORDER BY exam_year DESC, exam_name ASC'
+)->fetchAll();
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -100,6 +112,23 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-medium">End Date</label>
                     <input type="date" name="end_date" class="form-control" style="border-radius:10px;"
                            value="<?= old('end_date') ?>">
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium">Primary Exam <span class="text-muted fw-normal">(only for Supplementary/Makeup re-sit exams — optional)</span></label>
+                    <select name="base_exam_id" class="form-select" style="border-radius:10px;">
+                        <option value="">— None —</option>
+                        <?php foreach ($base_exam_options as $bx): ?>
+                        <option value="<?= (int)$bx['id'] ?>" <?= (int)old('base_exam_id') === (int)$bx['id'] ? 'selected' : '' ?>>
+                            <?= h($bx['exam_name'] . ' ' . $bx['exam_year']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">
+                        If this exam is a Supplementary/Makeup (re-sit) exam, pick the primary
+                        (main) exam it is for. In Mark Entry teachers then select that primary
+                        exam first and this exam appears under its "Sub Exam" list, with the
+                        primary exam's marks pre-filled.
+                    </div>
                 </div>
             </div>
             <div class="d-flex gap-2 mt-4">
