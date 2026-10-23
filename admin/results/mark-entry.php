@@ -208,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $program_id       = (int)($_POST['program_id']       ?? 0);
     $exam_id          = (int)($_POST['exam_id']          ?? 0);
     $offer_subject_id = (int)($_POST['offer_subject_id'] ?? 0);
+    $base_exam_id     = (int)($_POST['base_exam_id']     ?? 0);
     $subject_code     = trim($_POST['subject_code']      ?? '');
     $subject_title    = trim($_POST['subject_title']     ?? '');
     $credits          = trim($_POST['credits']           ?? '');
@@ -360,6 +361,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db = db();
 
         $is_new_sheet = ($sheet_id <= 0);
+
+        // Persist the supplementary → base exam mapping chosen on the form so
+        // next time the base exam is pre-selected (and other tools know which
+        // exam this supplementary is for). Only touched when the optional
+        // "Base Exam" dropdown was submitted (it is disabled/absent for
+        // regular exams); an empty selection clears the mapping.
+        if ($exam_id > 0 && array_key_exists('base_exam_id', $_POST)) {
+            try {
+                $db->prepare('UPDATE ei_exams SET base_exam_id = ? WHERE id = ?')
+                   ->execute([($base_exam_id > 0 && $base_exam_id !== $exam_id) ? $base_exam_id : null, $exam_id]);
+            } catch (Throwable $_e) { /* base_exam_id column not migrated yet */ }
+        }
 
         // exam_date column exists only after exam-date-migration.sql has run;
         // keep saving working either way.
@@ -622,7 +635,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect(APP_URL . '/results/index.php?tab=my_sheets');
     }
 
-    save_old(compact('dept_id','program_id','exam_id','offer_subject_id',
+    save_old(compact('dept_id','program_id','exam_id','base_exam_id','offer_subject_id',
                      'subject_code','subject_title','credits','exam_date'));
 }
 
@@ -662,9 +675,33 @@ if ($sheet && $sheet['exam_id']) {
     }
 }
 
+// ── Base-exam data for supplementary/makeup entry ─────────────────────────────
+// When the selected exam is a supplementary/makeup/improvement re-sit, an
+// optional "Base Exam" dropdown lets the teacher say which regular exam it is
+// for; that exam's final marks are then pre-filled. The saved mapping
+// (ei_exams.base_exam_id) pre-selects the dropdown.
+$supp_kw_re        = '/\b(?:supplementary|supplement|suppl|supple|makeup|make[\s\-]+up|improvement|improve|retake|re[\s\-]+take)\b/i';
+$exam_base_map     = [];   // exam id => saved base exam id
+$base_exam_options = [];   // regular exams offered as base candidates
+try {
+    $bm = db()->query('SELECT id, base_exam_id FROM ei_exams WHERE base_exam_id IS NOT NULL')->fetchAll();
+    foreach ($bm as $r) $exam_base_map[(int)$r['id']] = (int)$r['base_exam_id'];
+} catch (Throwable $_e) { /* base_exam_id column not migrated yet */ }
+try {
+    // All exams (including inactive / entry-closed ones — the base final is
+    // usually already closed), minus other supplementary/makeup exams.
+    $all_ex = db()->query(
+        'SELECT id, exam_name, exam_year FROM ei_exams ORDER BY exam_year DESC, exam_name ASC'
+    )->fetchAll();
+    foreach ($all_ex as $r) {
+        if (!preg_match($supp_kw_re, (string)$r['exam_name'])) $base_exam_options[] = $r;
+    }
+} catch (Throwable $_e) {}
+
 $v_dept_id          = $sheet ? $sheet['dept_id']          : (old('dept_id') ?: ($faculty_dept_id ?: null));
 $v_program_id       = $sheet ? $sheet['program_id']        : old('program_id');
 $v_exam_id          = $sheet ? $sheet['exam_id']           : old('exam_id');
+$v_base_exam_id     = (int)(old('base_exam_id') ?: ($exam_base_map[(int)$v_exam_id] ?? 0));
 $v_offer_subject_id = $sheet ? $sheet['offer_subject_id']  : old('offer_subject_id');
 $v_curriculum_id    = $sheet ? $sheet['curriculum_id']     : old('curriculum_id');
 $v_subject_code     = $sheet ? $sheet['subject_code']      : old('subject_code');
@@ -830,7 +867,9 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                             <select name="exam_id" id="exam_select" class="form-select" required>
                                 <option value="">— Select Exam —</option>
                                 <?php foreach ($exam_options as $ex): ?>
-                                <option value="<?= (int)$ex['id'] ?>" <?= (int)$v_exam_id === (int)$ex['id'] ? 'selected' : '' ?>>
+                                <option value="<?= (int)$ex['id'] ?>"
+                                        data-base-exam-id="<?= (int)($exam_base_map[(int)$ex['id']] ?? 0) ?: '' ?>"
+                                        <?= (int)$v_exam_id === (int)$ex['id'] ? 'selected' : '' ?>>
                                     <?= h($ex['exam_name'] . ' ' . $ex['exam_year']) ?>
                                 </option>
                                 <?php endforeach; ?>
@@ -841,6 +880,30 @@ foreach (array_reverse($history) as $h) { if ($h['action'] === 'returned') { $la
                                 <?php else: ?>
                                 Only exams currently open for marks entry are listed.
                                 <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Base exam for Supplementary/Makeup entry: shown only when the
+                         selected exam is a supplementary/makeup/improvement re-sit.
+                         Optional — leave empty to enter marks without any pre-fill. -->
+                    <div class="row g-3 mb-3 d-none" id="base_exam_wrap">
+                        <div class="col-md-4 offset-md-8">
+                            <label class="form-label fw-medium">
+                                Base Exam <span class="text-muted fw-normal">(optional)</span>
+                            </label>
+                            <select name="base_exam_id" id="base_exam_select" class="form-select" disabled>
+                                <option value="">— No base exam / no pre-fill —</option>
+                                <?php foreach ($base_exam_options as $bx): ?>
+                                <option value="<?= (int)$bx['id'] ?>" <?= $v_base_exam_id === (int)$bx['id'] ? 'selected' : '' ?>>
+                                    <?= h($bx['exam_name'] . ' ' . $bx['exam_year']) ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">
+                                Which regular exam is this supplementary/makeup for? Its final
+                                marks are pre-filled below; the sheet is still saved under the
+                                supplementary exam. Leave empty for no pre-fill.
                             </div>
                         </div>
                     </div>
@@ -1228,6 +1291,8 @@ foreach ($creatable as $cr) {
     var deptSel       = document.getElementById('dept_select');
     var progSel       = document.getElementById('prog_select');
     var examSel       = document.getElementById('exam_select');
+    var baseExamSel   = document.getElementById('base_exam_select');
+    var baseExamWrap  = document.getElementById('base_exam_wrap');
     var currSel       = document.getElementById('curriculum_select');
     var subCode       = document.getElementById('subject_code');
     var subTitle      = document.getElementById('subject_title');
@@ -1289,6 +1354,48 @@ foreach ($creatable as $cr) {
         return /\b(?:supplementary|supplement|suppl|supple|makeup|make[\s-]+up|improvement|improve|retake|re[\s-]+take)\b/.test(txt);
     }
 
+    /**
+     * Show/hide the optional "Base Exam" dropdown: visible only when the
+     * selected exam is a supplementary/makeup re-sit. The saved mapping
+     * (ei_exams.base_exam_id, carried as data-base-exam-id on the exam option)
+     * pre-selects it; the teacher may change or clear it. Hidden → the select
+     * is disabled so it is not submitted and the stored mapping stays untouched.
+     */
+    function updateBaseExamUI() {
+        if (!baseExamSel || !baseExamWrap || !examSel) return;
+        if (examSel.value && isSupplementaryExam()) {
+            // The selected exam cannot be its own base exam.
+            Array.prototype.forEach.call(baseExamSel.options, function (o) {
+                if (!o.value) return;
+                var same = String(o.value) === String(examSel.value);
+                o.disabled = same;
+                o.hidden   = same;
+                if (same && String(baseExamSel.value) === String(o.value)) baseExamSel.value = '';
+            });
+            // Pre-select the saved mapping when nothing is picked yet.
+            if (!baseExamSel.value) {
+                var opt    = examSel.options[examSel.selectedIndex];
+                var mapped = opt ? (opt.getAttribute('data-base-exam-id') || '') : '';
+                if (mapped && String(mapped) !== String(examSel.value)) baseExamSel.value = mapped;
+            }
+            baseExamSel.disabled = false;
+            baseExamWrap.classList.remove('d-none');
+        } else {
+            baseExamSel.value    = '';
+            baseExamSel.disabled = true;
+            baseExamWrap.classList.add('d-none');
+        }
+    }
+
+    /** `&base_exam_id=…` query fragment for roster/prefill requests. */
+    function baseExamParam() {
+        if (!baseExamSel || baseExamSel.disabled) return '';
+        // Dropdown visible: always send the value (0 = explicitly no pre-fill),
+        // so the server never falls back to the stored mapping behind the
+        // teacher's back.
+        return '&base_exam_id=' + encodeURIComponent(baseExamSel.value || '0');
+    }
+
     function isMidDist(name) {
         return /mid/.test(String(name || '').toLowerCase());
     }
@@ -1307,6 +1414,7 @@ foreach ($creatable as $cr) {
      */
     function applyExamMode() {
         examMode = detectExamMode();
+        updateBaseExamUI();
 
         // Hint badge in the Student Marks card header
         var hint = document.getElementById('exam_mode_hint');
@@ -1314,8 +1422,10 @@ foreach ($creatable as $cr) {
             if (examMode === 'mid') {
                 hint.textContent = 'Mid Term entry — only Mid Term columns are editable; letter grades appear after the final exam';
                 hint.className   = 'badge bg-warning text-dark ms-2';
-            } else if (examMode === 'final' && isSupplementaryExam()) {
-                hint.textContent = 'Supplementary/Makeup entry — marks from the original Final exam are pre-filled and can be modified; saving stores results under this exam';
+            } else if (examSel && examSel.value && isSupplementaryExam()) {
+                hint.textContent = (baseExamSel && !baseExamSel.disabled && baseExamSel.value)
+                    ? 'Supplementary/Makeup entry — marks from the selected Base Exam are pre-filled and can be modified; saving stores results under this exam'
+                    : 'Supplementary/Makeup entry — select the optional Base Exam above to pre-fill its marks; saving stores results under this exam';
                 hint.className   = 'badge bg-primary ms-2';
             } else if (examMode === 'final') {
                 hint.textContent = 'Final entry — Mid Term marks from the mid-term exam are pre-filled and can be modified';
@@ -1839,6 +1949,7 @@ foreach ($creatable as $cr) {
         if (!offerSubjectId) return;
         var url = APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId)
                 + (examSel && examSel.value ? '&exam_id=' + encodeURIComponent(examSel.value) : '')
+                + baseExamParam()
                 + '&exclude_sheet_id=' + encodeURIComponent(currentSheetId);
         fetch(url)
             .then(function(r) { return r.json(); })
@@ -1925,6 +2036,7 @@ foreach ($creatable as $cr) {
         if (!offerSubjectId) return;
         var rosterUrl = APP_URL + '/results/get-offer-students.php?offer_subject_id=' + encodeURIComponent(offerSubjectId)
                       + (examSel && examSel.value ? '&exam_id=' + encodeURIComponent(examSel.value) : '')
+                      + baseExamParam()
                       + '&exclude_sheet_id=' + encodeURIComponent(currentSheetId);
         fetch(rosterUrl)
             .then(function(r) { return r.json(); })
@@ -2082,11 +2194,19 @@ foreach ($creatable as $cr) {
     }
 
     if (examSel) examSel.addEventListener('change', function() {
+        updateBaseExamUI();
         checkDuplicate();
         checkExistingDraft();
         applyExamMode();
         // Refresh the roster so students already marked for the newly selected exam get locked
         if (currSel.value && !isEditMode) loadRegisteredStudents(currSel.value, false);
+    });
+    // Base exam changed → re-pull the pre-fill marks. Edit mode merges into
+    // still-empty inputs only, so already entered/saved marks are never lost.
+    if (baseExamSel) baseExamSel.addEventListener('change', function() {
+        if (!currSel.value) return;
+        if (isEditMode) mergeRegisteredStudents(currSel.value);
+        else            loadRegisteredStudents(currSel.value, false);
     });
     currSel.addEventListener('change', checkDuplicate);
     currSel.addEventListener('change', checkExistingDraft);
@@ -2330,6 +2450,7 @@ foreach ($creatable as $cr) {
     // Initial load: programs (and subjects + students if editing).
     // Edit mode: prefer the sheet's own saved department so a cross-department
     // sheet restores its saved program/exam/subject correctly.
+    updateBaseExamUI();
     var initDept = savedDept || facultyDeptId;
     if (initDept) {
         loadPrograms(initDept, savedProg);

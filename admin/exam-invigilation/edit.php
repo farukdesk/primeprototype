@@ -24,6 +24,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $end_date   = trim($_POST['end_date'] ?? '');
     $is_active  = isset($_POST['is_active']) ? 1 : 0;
     $marks_entry_open = isset($_POST['marks_entry_open']) ? 1 : 0;
+    $base_exam_id     = (int)($_POST['base_exam_id'] ?? 0);
+    if ($base_exam_id === $id) $base_exam_id = 0; // an exam cannot be its own base
 
     if ($exam_name === '') $errors[] = 'Exam name is required.';
     if ($exam_year < 2000 || $exam_year > 2100) $errors[] = 'Please enter a valid year (2000–2100).';
@@ -33,18 +35,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         try {
-            db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=?, marks_entry_open=? WHERE id=?')
-               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open, $id]);
-        } catch (Throwable $_e) {
-            // `marks_entry_open` column not migrated yet — legacy update
-            db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=? WHERE id=?')
-               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $id]);
+            db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=?, marks_entry_open=?, base_exam_id=? WHERE id=?')
+               ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open, $base_exam_id ?: null, $id]);
+        } catch (Throwable $_e0) {
+            try {
+                // `base_exam_id` column not migrated yet
+                db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=?, marks_entry_open=? WHERE id=?')
+                   ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $marks_entry_open, $id]);
+            } catch (Throwable $_e) {
+                // `marks_entry_open` column not migrated yet — legacy update
+                db()->prepare('UPDATE ei_exams SET exam_name=?, exam_year=?, start_date=?, end_date=?, is_active=? WHERE id=?')
+                   ->execute([$exam_name, $exam_year, $start_date ?: null, $end_date ?: null, $is_active, $id]);
+            }
         }
         flash_set('success', 'Exam updated.');
         redirect(APP_URL . '/exam-invigilation/view.php?id=' . $id);
     }
-    save_old(compact('exam_name','exam_year','start_date','end_date','is_active','marks_entry_open'));
+    save_old(compact('exam_name','exam_year','start_date','end_date','is_active','marks_entry_open','base_exam_id'));
 }
+
+// Base-exam candidates for the optional Supplementary/Makeup mapping (excluding this exam).
+$base_exam_options = db()->query(
+    'SELECT id, exam_name, exam_year FROM ei_exams ORDER BY exam_year DESC, exam_name ASC'
+)->fetchAll();
+$v_base_exam_id = (int)(array_key_exists('base_exam_id', $_SESSION['old'] ?? [])
+    ? $_SESSION['old']['base_exam_id']
+    : ($exam['base_exam_id'] ?? 0));
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -107,6 +123,21 @@ require_once __DIR__ . '/../includes/header.php';
                     <label class="form-label fw-medium">End Date</label>
                     <input type="date" name="end_date" class="form-control" style="border-radius:10px;"
                            value="<?= old('end_date', $exam['end_date'] ?? '') ?>">
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium">Base Exam <span class="text-muted fw-normal">(for Supplementary/Makeup — optional)</span></label>
+                    <select name="base_exam_id" class="form-select" style="border-radius:10px;">
+                        <option value="">— None —</option>
+                        <?php foreach ($base_exam_options as $bx): if ((int)$bx['id'] === $id) continue; ?>
+                        <option value="<?= (int)$bx['id'] ?>" <?= $v_base_exam_id === (int)$bx['id'] ? 'selected' : '' ?>>
+                            <?= h($bx['exam_name'] . ' ' . $bx['exam_year']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text">
+                        If this is a Supplementary/Makeup exam, pick the regular exam it is for.
+                        Mark Entry pre-fills that exam's marks for teachers.
+                    </div>
                 </div>
             </div>
             <div class="d-flex gap-2 mt-4">
