@@ -78,17 +78,26 @@ if ($exam_id > 0 && $students) {
     } catch (Throwable $_e) { /* lookup unavailable — return plain roster */ }
 }
 
-// ── Mid-term marks pull ───────────────────────────────────────────────────────
-// When the selected exam is a FINAL exam, return each student's mid-term marks
-// previously entered for the same subject in a mid-term exam sheet (any
-// status; matched by offer, curriculum, or dept + subject code so marks
-// recorded under an earlier / re-created offer are found too) as `prev_marks`,
-// so the final-entry sheet pre-fills them and lets the teacher modify them.
+// ── Previous marks pull ───────────────────────────────────────────────────────
+// 1) FINAL exam selected → return each student's mid-term marks previously
+//    entered for the same subject in a mid-term exam sheet (any status;
+//    matched by offer, curriculum, or dept + subject code so marks recorded
+//    under an earlier / re-created offer are found too) as `prev_marks`, so
+//    the final-entry sheet pre-fills them and lets the teacher modify them.
+// 2) SUPPLEMENTARY / MAKEUP / IMPROVEMENT final selected → return each
+//    student's FULL marks from the base (regular) final exam of the same
+//    subject as `prev_marks`. These are only a pre-fill: saving/publishing
+//    still stores the sheet under the selected supplementary exam.
 if ($exam_id > 0 && $students) {
     try {
-        $ex = db()->prepare('SELECT exam_name FROM ei_exams WHERE id = ? LIMIT 1');
+        $ex = db()->prepare('SELECT exam_name, exam_year FROM ei_exams WHERE id = ? LIMIT 1');
         $ex->execute([$exam_id]);
-        $sel_exam_name = strtolower((string)$ex->fetchColumn());
+        $ex_row        = $ex->fetch(PDO::FETCH_ASSOC) ?: [];
+        $sel_exam_name = strtolower((string)($ex_row['exam_name'] ?? ''));
+        $sel_exam_year = trim((string)($ex_row['exam_year'] ?? ''));
+        // Keywords marking a re-sit exam held on the basis of a regular final.
+        $supp_kw_re = '/\b(?:supplementary|supplement|suppl|supple|makeup|make[\s\-]+up|improvement|improve|retake|re[\s\-]+take)\b/i';
+        $is_supplementary = (bool)preg_match($supp_kw_re, $sel_exam_name);
         if (strpos($sel_exam_name, 'final') !== false && strpos($sel_exam_name, 'mid') === false) {
             // Resolve the offer's curriculum / dept / course code so mid sheets
             // recorded under a DIFFERENT offer of the same subject (earlier
@@ -122,6 +131,79 @@ if ($exam_id > 0 && $students) {
                 $subj_params[] = $off_code;
             }
             $subj_where .= ')';
+
+            $prev_by_pk = []; $prev_by_sid = [];
+
+            if ($is_supplementary) {
+                // ── Supplementary/makeup final: pull FULL marks of the base final ──
+                // The base exam is the regular final whose name equals the selected
+                // exam name minus the supplementary keywords (same exam year
+                // preferred; falls back to any same-year regular final). Only a
+                // pre-fill — the sheet is still saved under the selected exam.
+                $norm = static function (string $n) use ($supp_kw_re): string {
+                    $n = (string)preg_replace($supp_kw_re, ' ', strtolower($n));
+                    $n = (string)preg_replace('/[^a-z0-9]+/', ' ', $n);
+                    return trim((string)preg_replace('/\s+/', ' ', $n));
+                };
+                $base_name = $norm($sel_exam_name);
+
+                $cand = db()->prepare(
+                    "SELECT id, exam_name, exam_year FROM ei_exams
+                      WHERE id <> ?
+                        AND LOWER(exam_name) LIKE '%final%'
+                        AND LOWER(exam_name) NOT LIKE '%mid%'"
+                );
+                $cand->execute([$exam_id]);
+                $exact_same_year = []; $exact = []; $same_year = [];
+                foreach ($cand->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                    // Skip other supplementary/makeup exams — only regular finals qualify.
+                    if (preg_match($supp_kw_re, (string)$c['exam_name'])) continue;
+                    $cid      = (int)$c['id'];
+                    $is_exact = ($base_name !== '' && $norm((string)$c['exam_name']) === $base_name);
+                    $is_year  = ($sel_exam_year !== '' && trim((string)$c['exam_year']) === $sel_exam_year);
+                    if ($is_exact && $is_year)  $exact_same_year[] = $cid;
+                    elseif ($is_exact)          $exact[] = $cid;
+                    elseif ($is_year)           $same_year[] = $cid;
+                }
+                $base_ids = $exact_same_year ?: ($exact ?: $same_year);
+
+                if ($base_ids) {
+                    $ephs = implode(',', array_fill(0, count($base_ids), '?'));
+                    // All sheet statuses are considered; the ORDER BY makes
+                    // published sheets overwrite pending/draft (later rows win).
+                    $fq = db()->prepare(
+                        "SELECT g.student_sid, g.student_id, g.marks_json,
+                                g.attendance, g.class_test, g.mid_term, g.final_exam
+                           FROM result_mark_sheets ms
+                           JOIN result_sheet_grades g ON g.sheet_id = ms.id
+                          WHERE $subj_where AND ms.exam_id IN ($ephs)
+                          ORDER BY FIELD(ms.workflow_status, 'draft', 'returned', 'pending', 'published') ASC,
+                                   ms.updated_at ASC"
+                    );
+                    $fq->execute(array_merge($subj_params, $base_ids));
+                    foreach ($fq->fetchAll(PDO::FETCH_ASSOC) as $m) {
+                        $marks = json_decode((string)$m['marks_json'], true);
+                        $prev  = [];
+                        if (is_array($marks)) {
+                            foreach ($marks as $i => $v) {
+                                if ($v !== null && $v !== '') $prev[(int)$i] = (float)$v;
+                            }
+                        }
+                        // Legacy fallback: fixed Att / CT / Mid / Final columns.
+                        if (empty($prev)) {
+                            foreach ([$m['attendance'], $m['class_test'], $m['mid_term'], $m['final_exam']] as $i => $v) {
+                                if ($v !== null && $v !== '') $prev[$i] = (float)$v;
+                            }
+                        }
+                        if (empty($prev)) continue;
+                        // Null-padded array aligned by distribution index (latest sheet wins)
+                        $out = array_fill(0, max(array_keys($prev)) + 1, null);
+                        foreach ($prev as $i => $v) $out[$i] = $v;
+                        if (!empty($m['student_id']))               $prev_by_pk[(int)$m['student_id']] = $out;
+                        if (trim((string)$m['student_sid']) !== '') $prev_by_sid[trim((string)$m['student_sid'])] = $out;
+                    }
+                }
+            } else {
 
             // All sheet statuses are considered; the ORDER BY makes published
             // sheets overwrite pending/draft values (later rows win below).
@@ -160,7 +242,7 @@ if ($exam_id > 0 && $students) {
                 return $mid_idx_cache[$cid] = $idx;
             };
 
-            $prev_by_pk = []; $prev_by_sid = [];
+            $prev_by_pk = []; $prev_by_sid = []; // reset: mid-pull result only
             foreach ($mq2->fetchAll(PDO::FETCH_ASSOC) as $m) {
                 $marks = json_decode((string)$m['marks_json'], true);
                 $mids  = $mid_indices((int)($m['curriculum_id'] ?? 0));
@@ -181,6 +263,8 @@ if ($exam_id > 0 && $students) {
                 if (!empty($m['student_id']))               $prev_by_pk[(int)$m['student_id']] = $out;
                 if (trim((string)$m['student_sid']) !== '') $prev_by_sid[trim((string)$m['student_sid'])] = $out;
             }
+
+            } // end mid-term pull (regular final)
 
             if ($prev_by_pk || $prev_by_sid) {
                 foreach ($students as &$s) {
