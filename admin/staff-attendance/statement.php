@@ -49,11 +49,14 @@ if (strtotime($to) - strtotime($from) > 366 * 86400) {
 }
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
+$type_f  = $_GET['type'] ?? '';
+if (!in_array($type_f, ['educational', 'administrative'], true)) $type_f = '';
+$desig_f = trim($_GET['designation'] ?? '');
 
 $range_label = date('d M Y', strtotime($from)) . ' to ' . date('d M Y', strtotime($to));
 
 // ── Data ─────────────────────────────────────────────────────────────────────
-$staff    = att_staff_list($dept_id, $search);
+$staff    = att_staff_list($dept_id, $search, $type_f, $desig_f);
 $user_ids = array_map(fn($s) => (int)$s['id'], $staff);
 $records  = att_records_map($user_ids, $from, $to);
 $holidays = att_holidays_in_range($from, $to);

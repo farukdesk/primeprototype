@@ -1119,7 +1119,7 @@ function att_dept_names_match(?string $a, ?string $b): bool
  *
  * Optional filters: department id and a name/username/employee-id search term.
  */
-function att_staff_list(int $dept_id = 0, string $search = ''): array
+function att_staff_list(int $dept_id = 0, string $search = '', string $type = '', string $designation = ''): array
 {
     $membership = "EXISTS (SELECT 1 FROM group_module_access gma
                    JOIN modules mm ON mm.id = gma.module_id AND mm.slug = 'staff-attendance'
@@ -1193,7 +1193,8 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
 
     $sql = 'SELECT u.id, u.full_name, u.username,
                    ' . $phone_expr . ' AS phone,
-                   ' . $emp_expr . ' AS employee_id, sp.designation, sp.staff_dept_id, sd.name AS dept_name,
+                   ' . $emp_expr . ' AS employee_id, sp.designation, sp.staff_dept_id,
+                   sp.department_type, sd.name AS dept_name, sd.type AS dept_type,
                    ' . $acad_expr . ' AS academic_dept_name
               FROM users u
               JOIN user_groups ug ON ug.id = u.group_id
@@ -1233,7 +1234,53 @@ function att_staff_list(int $dept_id = 0, string $search = ''): array
         }));
     }
 
+    // Staff type filter: 'educational' (academic) / 'administrative' (non-academic).
+    // Resolved from the staff department's type, falling back to the profile's
+    // own department_type, then to "educational" when the member only has an
+    // auto-synced academic department.
+    if ($type === 'educational' || $type === 'administrative') {
+        $rows = array_values(array_filter($rows, static function (array $r) use ($type): bool {
+            return att_staff_type($r) === $type;
+        }));
+    }
+
+    // Designation filter: exact (case-insensitive) match on the profile value.
+    if ($designation !== '') {
+        $want = mb_strtolower(trim($designation));
+        $rows = array_values(array_filter($rows, static function (array $r) use ($want): bool {
+            return mb_strtolower(trim((string)($r['designation'] ?? ''))) === $want;
+        }));
+    }
+
     return $rows;
+}
+
+/**
+ * Effective staff type for a staff-list row: 'educational' (academic),
+ * 'administrative' (non-academic) or '' when unknown.
+ */
+function att_staff_type(array $r): string
+{
+    $t = (string)($r['dept_type'] ?? '');
+    if ($t === '') $t = (string)($r['department_type'] ?? '');
+    if ($t === '' && !empty($r['academic_dept_name'])) $t = 'educational';
+    return $t;
+}
+
+/** Distinct non-empty designations of active staff, for filter dropdowns. */
+function att_designations(): array
+{
+    try {
+        return db()->query(
+            "SELECT DISTINCT TRIM(sp.designation) AS designation
+               FROM staff_profiles sp
+               JOIN users u ON u.id = sp.user_id AND u.is_active = 1
+              WHERE sp.designation IS NOT NULL AND TRIM(sp.designation) <> ''
+           ORDER BY designation ASC"
+        )->fetchAll(PDO::FETCH_COLUMN);
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 /**
