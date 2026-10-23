@@ -48,6 +48,26 @@ function wf_compute_grade(?float $marks): ?array
     return ['letter' => 'F', 'point' => 0.00];
 }
 
+/** Auto-grace: lift marks to the next grade boundary when within this margin. */
+const WF_GRACE_MARKS = 0.5;
+
+/**
+ * Auto-grace: if adding up to WF_GRACE_MARKS (0.5) would lift the total over
+ * the next grade boundary (e.g. 49.5 → 50 turns C into C+), the total is
+ * raised to that boundary automatically. Otherwise the original total is
+ * kept unchanged.
+ */
+function wf_apply_grace(?float $marks): ?float
+{
+    if ($marks === null) return null;
+    foreach (wf_grading_scale() as [$min, , ,]) {
+        if ($min > 0 && $marks < $min && $marks + WF_GRACE_MARKS >= $min) {
+            return (float)$min;
+        }
+    }
+    return $marks;
+}
+
 // ── Semester list ─────────────────────────────────────────────────────────────
 
 function wf_semester_list(): array
@@ -500,6 +520,7 @@ function wf_upsert_grade(
         } else {
             $sum    = array_sum(array_map(fn($v) => $v ?? 0, $clamped));
             $total  = min($sum, WF_MAX_TOTAL);
+            $total  = wf_apply_grace($total);
             $g      = wf_compute_grade($total);
             $letter = $g['letter'];
             $point  = $g['point'];

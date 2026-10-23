@@ -1518,6 +1518,16 @@ foreach ($creatable as $cr) {
     var scale = [[80,Infinity,'A+'],[75,80,'A'],[70,75,'A-'],[65,70,'B+'],
                  [60,65,'B'],[55,60,'B-'],[50,55,'C+'],[45,50,'C'],[40,45,'D'],[0,40,'F']];
     function grade(t) { for (var i=0;i<scale.length;i++) if (t>=scale[i][0]&&t<scale[i][1]) return scale[i][2]; return 'F'; }
+    // Auto-grace: lift the total to the next grade boundary when within 0.5 marks
+    // (e.g. 49.5 → 50 turns C into C+). Mirrors wf_apply_grace() on the server.
+    var GRACE_MARKS = 0.5;
+    function graceTotal(t) {
+        for (var i = 0; i < scale.length; i++) {
+            var min = scale[i][0];
+            if (min > 0 && t < min && t + GRACE_MARKS >= min) return min;
+        }
+        return t;
+    }
 
     // HTML escape helper for safe DOM construction
     function escHtml(str) {
@@ -2663,11 +2673,13 @@ foreach ($creatable as $cr) {
                 if (!isNaN(v)) { sum += v; hasEnteredMark = true; hasAnyData = true; }
             });
             if (!hasAnyData) { total.textContent = '—'; grd.textContent = '—'; return; }
-            total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
             if (examMode === 'mid') {
+                total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
                 // Mid Term only: no letter grade until the final marks are submitted
                 grd.innerHTML = '<span class="text-muted" title="Grade appears after final marks are submitted">—</span>';
             } else {
+                sum = graceTotal(sum);
+                total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
                 grd.textContent = grade(sum);
             }
         }
@@ -2771,11 +2783,13 @@ foreach ($creatable as $cr) {
                 if (!isNaN(v)) { sum += v; hasEnteredMark = true; hasAnyData = true; }
             });
             if (!hasAnyData) { total.textContent = '—'; grd.textContent = '—'; return; }
-            total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
             if (examMode === 'mid') {
+                total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
                 // Mid Term only: no letter grade until the final marks are submitted
                 grd.innerHTML = '<span class="text-muted" title="Grade appears after final marks are submitted">—</span>';
             } else {
+                sum = graceTotal(sum);
+                total.textContent = hasEnteredMark ? sum.toFixed(1) : '0.0';
                 grd.textContent = grade(sum);
             }
         }
