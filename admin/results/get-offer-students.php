@@ -15,6 +15,10 @@
  * GET params:
  *   offer_subject_id  (int, required)
  *   exam_id           (int, optional)  — enables the marked_by lookup
+ *   base_exam_id      (int, optional)  — primary (regular) exam whose marks
+ *                                        pre-fill a supplementary/makeup (sub
+ *                                        exam) sheet; falls back to the stored
+ *                                        ei_exams.base_exam_id mapping
  *   exclude_sheet_id  (int, optional)  — sheet currently being edited
  */
 require_once __DIR__ . '/../includes/auth.php';
@@ -26,6 +30,8 @@ header('Content-Type: application/json');
 
 $offer_subject_id = (int)($_GET['offer_subject_id'] ?? 0);
 $exam_id          = (int)($_GET['exam_id'] ?? 0);
+$base_param_given = isset($_GET['base_exam_id']); // explicit 0 = "no pre-fill"
+$base_exam_id     = (int)($_GET['base_exam_id'] ?? 0);
 $exclude_sheet_id = (int)($_GET['exclude_sheet_id'] ?? 0);
 if ($offer_subject_id <= 0) { echo '[]'; exit; }
 
@@ -85,20 +91,27 @@ if ($exam_id > 0 && $students) {
 //    under an earlier / re-created offer are found too) as `prev_marks`, so
 //    the final-entry sheet pre-fills them and lets the teacher modify them.
 // 2) SUPPLEMENTARY / MAKEUP / IMPROVEMENT final selected → return each
-//    student's FULL marks from the base (regular) final exam of the same
-//    subject as `prev_marks`. These are only a pre-fill: saving/publishing
-//    still stores the sheet under the selected supplementary exam.
+//    student's FULL marks from the explicitly chosen base (regular) exam of
+//    the same subject as `prev_marks`. The base exam is the `base_exam_id`
+//    GET param (sent by the mark-entry form when a Sub Exam is selected) or,
+//    when absent, the mapping stored in ei_exams.base_exam_id. No base exam
+//    selected/mapped → no pre-fill. These are only a pre-fill: saving/
+//    publishing still stores the sheet under the selected supplementary exam.
 if ($exam_id > 0 && $students) {
     try {
-        $ex = db()->prepare('SELECT exam_name, exam_year FROM ei_exams WHERE id = ? LIMIT 1');
+        $ex = db()->prepare('SELECT * FROM ei_exams WHERE id = ? LIMIT 1');
         $ex->execute([$exam_id]);
         $ex_row        = $ex->fetch(PDO::FETCH_ASSOC) ?: [];
         $sel_exam_name = strtolower((string)($ex_row['exam_name'] ?? ''));
-        $sel_exam_year = trim((string)($ex_row['exam_year'] ?? ''));
         // Keywords marking a re-sit exam held on the basis of a regular final.
         $supp_kw_re = '/\b(?:supplementary|supplement|suppl|supple|makeup|make[\s\-]+up|improvement|improve|retake|re[\s\-]+take)\b/i';
         $is_supplementary = (bool)preg_match($supp_kw_re, $sel_exam_name);
-        if (strpos($sel_exam_name, 'final') !== false && strpos($sel_exam_name, 'mid') === false) {
+        if (!$base_param_given && $base_exam_id <= 0) $base_exam_id = (int)($ex_row['base_exam_id'] ?? 0);
+        // A sub exam explicitly mapped/selected against a primary exam is a
+        // re-sit regardless of its name.
+        if ($base_exam_id > 0 && $base_exam_id !== $exam_id) $is_supplementary = true;
+        if ($is_supplementary
+            || (strpos($sel_exam_name, 'final') !== false && strpos($sel_exam_name, 'mid') === false)) {
             // Resolve the offer's curriculum / dept / course code so mid sheets
             // recorded under a DIFFERENT offer of the same subject (earlier
             // semester's offer, re-created offer, bulk import) are matched too.
@@ -135,37 +148,16 @@ if ($exam_id > 0 && $students) {
             $prev_by_pk = []; $prev_by_sid = [];
 
             if ($is_supplementary) {
-                // ── Supplementary/makeup final: pull FULL marks of the base final ──
-                // The base exam is the regular final whose name equals the selected
-                // exam name minus the supplementary keywords (same exam year
-                // preferred; falls back to any same-year regular final). Only a
-                // pre-fill — the sheet is still saved under the selected exam.
-                $norm = static function (string $n) use ($supp_kw_re): string {
-                    $n = (string)preg_replace($supp_kw_re, ' ', strtolower($n));
-                    $n = (string)preg_replace('/[^a-z0-9]+/', ' ', $n);
-                    return trim((string)preg_replace('/\s+/', ' ', $n));
-                };
-                $base_name = $norm($sel_exam_name);
-
-                $cand = db()->prepare(
-                    "SELECT id, exam_name, exam_year FROM ei_exams
-                      WHERE id <> ?
-                        AND LOWER(exam_name) LIKE '%final%'
-                        AND LOWER(exam_name) NOT LIKE '%mid%'"
-                );
-                $cand->execute([$exam_id]);
-                $exact_same_year = []; $exact = []; $same_year = [];
-                foreach ($cand->fetchAll(PDO::FETCH_ASSOC) as $c) {
-                    // Skip other supplementary/makeup exams — only regular finals qualify.
-                    if (preg_match($supp_kw_re, (string)$c['exam_name'])) continue;
-                    $cid      = (int)$c['id'];
-                    $is_exact = ($base_name !== '' && $norm((string)$c['exam_name']) === $base_name);
-                    $is_year  = ($sel_exam_year !== '' && trim((string)$c['exam_year']) === $sel_exam_year);
-                    if ($is_exact && $is_year)  $exact_same_year[] = $cid;
-                    elseif ($is_exact)          $exact[] = $cid;
-                    elseif ($is_year)           $same_year[] = $cid;
+                // ── Supplementary/makeup: pull FULL marks of the chosen base exam ──
+                // Only an explicitly selected / stored base exam is used — no
+                // automatic name matching. Only a pre-fill — the sheet is still
+                // saved under the selected supplementary exam.
+                $base_ids = [];
+                if ($base_exam_id > 0 && $base_exam_id !== $exam_id) {
+                    $bchk = db()->prepare('SELECT id FROM ei_exams WHERE id = ? LIMIT 1');
+                    $bchk->execute([$base_exam_id]);
+                    if ($bchk->fetchColumn()) $base_ids = [$base_exam_id];
                 }
-                $base_ids = $exact_same_year ?: ($exact ?: $same_year);
 
                 if ($base_ids) {
                     $ephs = implode(',', array_fill(0, count($base_ids), '?'));
