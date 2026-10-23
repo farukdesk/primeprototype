@@ -605,3 +605,193 @@ function sp_render_cv_html(array $data, bool $for_pdf = false): string
 
     return $html;
 }
+
+// ── Profile file attachments (Issues / Complaints, Evaluation Records) ────────
+
+/** File categories (value => display label). */
+const SP_FILE_CATEGORIES = [
+    'issue'      => 'Issues / Complaints',
+    'evaluation' => 'Evaluation Records',
+];
+
+const SP_DOC_EXTS  = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'doc', 'docx', 'xls', 'xlsx'];
+const SP_DOC_MIMES = [
+    'application/pdf',
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+const SP_DOC_MAX    = 10 * 1024 * 1024; // 10 MB
+const SP_FILES_SUBDIR = 'staff-profile-files';
+
+/**
+ * Ensure the staff_profile_files table exists. Safe to run on every request;
+ * mirrors admin/staff-profile-files.sql.
+ */
+function sp_ensure_files_table(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        db()->exec(
+            "CREATE TABLE IF NOT EXISTS staff_profile_files (
+                id            int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+                user_id       int(10) UNSIGNED NOT NULL COMMENT 'FK users.id – the employee',
+                category      enum('issue','evaluation') NOT NULL,
+                title         varchar(255) NOT NULL,
+                file_name     varchar(255) NOT NULL COMMENT 'Stored filename under uploads/staff-profile-files/',
+                original_name varchar(255) DEFAULT NULL,
+                mime_type     varchar(100) DEFAULT NULL,
+                file_size     int(10) UNSIGNED DEFAULT NULL COMMENT 'Bytes',
+                uploaded_by   int(10) UNSIGNED DEFAULT NULL COMMENT 'FK users.id – uploader',
+                created_at    datetime NOT NULL DEFAULT current_timestamp(),
+                PRIMARY KEY (id),
+                KEY idx_spf_user_cat (user_id, category)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci"
+        );
+    } catch (Throwable $e) {
+        // Insufficient DDL privileges – run admin/staff-profile-files.sql manually.
+    }
+}
+
+/** Fetch a user's profile files for a category, newest first. */
+function sp_profile_files(int $user_id, string $category): array
+{
+    sp_ensure_files_table();
+    try {
+        $st = db()->prepare(
+            'SELECT f.*, u.full_name AS uploader_name
+               FROM staff_profile_files f
+          LEFT JOIN users u ON u.id = f.uploaded_by
+              WHERE f.user_id = ? AND f.category = ?
+              ORDER BY f.created_at DESC, f.id DESC'
+        );
+        $st->execute([$user_id, $category]);
+        return $st->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Validate and store an uploaded profile document (pdf / image / doc / xls).
+ * Returns ['file' =>, 'original' =>, 'mime' =>, 'size' =>] or an error string.
+ */
+function sp_upload_profile_file(array $file): array|string
+{
+    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+        return 'Please choose a file to upload.';
+    }
+    if ($file['size'] > SP_DOC_MAX) {
+        return 'File is too large (max 10 MB).';
+    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, SP_DOC_EXTS, true)) {
+        return 'File type not allowed. Allowed: ' . implode(', ', SP_DOC_EXTS) . '.';
+    }
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = (string)$finfo->file($file['tmp_name']);
+    if (!in_array($mime, SP_DOC_MIMES, true)) {
+        return 'File content does not match an allowed type.';
+    }
+    $dir = UPLOAD_DIR . '/' . SP_FILES_SUBDIR;
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        return 'Could not create the upload directory.';
+    }
+    $name = bin2hex(random_bytes(12)) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $name)) {
+        return 'Failed to store the uploaded file.';
+    }
+    return [
+        'file'     => $name,
+        'original' => (string)$file['name'],
+        'mime'     => $mime,
+        'size'     => (int)$file['size'],
+    ];
+}
+
+/** Human-readable file size. */
+function sp_fmt_bytes(?int $bytes): string
+{
+    if ($bytes === null || $bytes <= 0) return '—';
+    if ($bytes >= 1048576) return number_format($bytes / 1048576, 1) . ' MB';
+    if ($bytes >= 1024)    return number_format($bytes / 1024, 1) . ' KB';
+    return $bytes . ' B';
+}
+
+// ── Leave record summary ──────────────────────────────────────────────────────
+
+/**
+ * Per-segment leave summary for an employee, built from the Leave Management
+ * module (approved leave_requests + leave_balances):
+ *   taken this month, taken this year, yearly quota and remaining per segment.
+ *
+ * Returns ['year' => int, 'rows' => [...]] or null when the Leave Management
+ * module is not installed.
+ */
+function sp_leave_summary(int $user_id): ?array
+{
+    try {
+        $lm_helpers = __DIR__ . '/../leave-management/helpers.php';
+        if (!is_file($lm_helpers)) {
+            return null;
+        }
+        require_once $lm_helpers;
+
+        $year  = (int)date('Y');
+        $month = date('Y-m');
+
+        $st = db()->prepare(
+            "SELECT category,
+                    COALESCE(SUM(CASE WHEN DATE_FORMAT(start_date, '%Y-%m') = ? THEN days ELSE 0 END), 0) AS month_days,
+                    COALESCE(SUM(days), 0) AS year_days,
+                    COUNT(*) AS requests
+               FROM leave_requests
+              WHERE user_id = ? AND status = 'approved' AND YEAR(start_date) = ?
+              GROUP BY category"
+        );
+        $st->execute([$month, $user_id, $year]);
+        $taken = [];
+        foreach ($st->fetchAll() as $r) {
+            $taken[$r['category']] = $r;
+        }
+
+        $balance = lm_get_balance($user_id, $year);
+
+        $rows = [];
+        foreach (LM_CATEGORIES as $cat) {
+            $month_days = (float)($taken[$cat]['month_days'] ?? 0);
+            $year_days  = (float)($taken[$cat]['year_days'] ?? 0);
+
+            // Yearly quota per segment: casual/sick from the balance sheet,
+            // maternity/paternity from the fixed entitlement, others unlimited.
+            $quota = match ($cat) {
+                'casual'    => (float)$balance['casual_total'],
+                'sick'      => (float)$balance['sick_total'],
+                default     => lm_category_max_days($cat),
+            };
+
+            // Keep the table focused: always show quota segments, and any
+            // other segment actually used this year.
+            if ($quota === null && $year_days <= 0) {
+                continue;
+            }
+
+            $rows[] = [
+                'category'  => $cat,
+                'label'     => lm_category_label($cat),
+                'month'     => $month_days,
+                'year'      => $year_days,
+                'quota'     => $quota,
+                'remaining' => $quota === null ? null : max(0, $quota - $year_days),
+            ];
+        }
+
+        return ['year' => $year, 'rows' => $rows];
+    } catch (Throwable $e) {
+        return null; // Leave Management module not installed.
+    }
+}
