@@ -1280,15 +1280,6 @@ foreach ($creatable as $cr) {
         return 'all';
     }
 
-    /** Whether the selected exam is a supplementary/makeup re-sit of a final. */
-    function isSupplementaryExam() {
-        var txt = '';
-        if (examSel && examSel.value && examSel.selectedIndex >= 0) {
-            txt = (examSel.options[examSel.selectedIndex].textContent || '').toLowerCase();
-        }
-        return /\b(?:supplementary|supplement|suppl|supple|makeup|make[\s-]+up|improvement|improve|retake|re[\s-]+take)\b/.test(txt);
-    }
-
     function isMidDist(name) {
         return /mid/.test(String(name || '').toLowerCase());
     }
@@ -1314,9 +1305,6 @@ foreach ($creatable as $cr) {
             if (examMode === 'mid') {
                 hint.textContent = 'Mid Term entry — only Mid Term columns are editable; letter grades appear after the final exam';
                 hint.className   = 'badge bg-warning text-dark ms-2';
-            } else if (examMode === 'final' && isSupplementaryExam()) {
-                hint.textContent = 'Supplementary/Makeup entry — marks from the original Final exam are pre-filled and can be modified; saving stores results under this exam';
-                hint.className   = 'badge bg-primary ms-2';
             } else if (examMode === 'final') {
                 hint.textContent = 'Final entry — Mid Term marks from the mid-term exam are pre-filled and can be modified';
                 hint.className   = 'badge bg-info text-dark ms-2';
