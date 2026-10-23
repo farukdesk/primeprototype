@@ -20,6 +20,11 @@ $report  = $_GET['report'] ?? 'daily';
 if (!in_array($report, ['daily', 'weekly', 'monthly', 'range'], true)) $report = 'daily';
 $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
+// Staff type filter: academic (educational) / non-academic (administrative).
+$type_filter = $_GET['type'] ?? '';
+if (!in_array($type_filter, ['educational', 'administrative'], true)) $type_filter = '';
+// Designation filter (exact value from the staff profile).
+$designation_filter = trim($_GET['designation'] ?? '');
 // Status filter: show only staff with Absent and/or Penalty Absent days.
 $status_filter = $_GET['status'] ?? '';
 if (!in_array($status_filter, ['absent', 'penalty', 'absent_or_penalty'], true)) $status_filter = '';
@@ -57,7 +62,7 @@ if ($report === 'daily') {
 }
 
 // ── Data ─────────────────────────────────────────────────────────────────────
-$staff     = att_staff_list($dept_id, $search);
+$staff     = att_staff_list($dept_id, $search, $type_filter, $designation_filter);
 $user_ids  = array_map(fn($s) => (int)$s['id'], $staff);
 $records   = att_records_map($user_ids, $from, $to);
 $holidays  = att_holidays_in_range($from, $to);
@@ -233,14 +238,15 @@ if (($_GET['export'] ?? '') === 'csv') {
 
 require_once __DIR__ . '/../includes/header.php';
 
-$depts   = att_departments();
+$depts        = att_departments();
+$designations = att_designations();
 $weekday = ['1' => 'Mon', '2' => 'Tue', '3' => 'Wed', '4' => 'Thu', '5' => 'Fri', '6' => 'Sat', '7' => 'Sun'];
 
 // Calendar month the drill-down opens on (the month containing the range start).
 $staff_month = date('Y-m', strtotime($from));
 
 /** URL to a staff member's calendar drill-down, preserving the report filters. */
-$staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $search, $status_filter, $from, $to): string {
+$staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $search, $status_filter, $type_filter, $designation_filter, $from, $to): string {
     $params = [
         'user_id' => $uid,
         'month'   => $staff_month,
@@ -248,6 +254,8 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
         'dept'    => $dept_id,
         'q'       => $search,
         'status'  => $status_filter,
+        'type'    => $type_filter,
+        'designation' => $designation_filter,
     ];
     // Carry the custom range through so "Back to report" restores it.
     if ($report === 'range') { $params['from'] = $from; $params['to'] = $to; }
@@ -334,6 +342,23 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label fw-semibold small mb-1">Staff Type</label>
+                <select name="type" class="form-select">
+                    <option value="">All Types</option>
+                    <option value="educational"    <?= $type_filter === 'educational'    ? 'selected' : '' ?>>Academic Staff</option>
+                    <option value="administrative" <?= $type_filter === 'administrative' ? 'selected' : '' ?>>Non-Academic Staff</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold small mb-1">Designation</label>
+                <select name="designation" class="form-select">
+                    <option value="">All Designations</option>
+                    <?php foreach ($designations as $dg): ?>
+                    <option value="<?= h($dg) ?>" <?= strcasecmp($designation_filter, $dg) === 0 ? 'selected' : '' ?>><?= h($dg) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label fw-semibold small mb-1">Status</label>
                 <select name="status" class="form-select">
                     <option value="">All Staff</option>
@@ -365,7 +390,8 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             <?php
             // Export links are rebuilt from the RESOLVED filters, so the CSV
             // always matches exactly the dates and staff shown on screen.
-            $export_base = ['report' => $report, 'dept' => $dept_id, 'q' => $search, 'status' => $status_filter, 'export' => 'csv'];
+            $export_base = ['report' => $report, 'dept' => $dept_id, 'q' => $search, 'status' => $status_filter,
+                            'type' => $type_filter, 'designation' => $designation_filter, 'export' => 'csv'];
             if ($report === 'monthly')     { $export_base['month'] = date('Y-m', strtotime($from)); }
             elseif ($report === 'range')   { $export_base['from'] = $from; $export_base['to'] = $to; }
             else                           { $export_base['date'] = $from; }
@@ -381,7 +407,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             </a>
             <?php endif; ?>
             <?php if ($report === 'monthly'): ?>
-            <a href="<?= APP_URL ?>/staff-attendance/report-pdf.php?month=<?= urlencode(date('Y-m', strtotime($from))) ?>&dept=<?= (int)$dept_id ?>&q=<?= urlencode($search) ?>"
+            <a href="<?= APP_URL ?>/staff-attendance/report-pdf.php?month=<?= urlencode(date('Y-m', strtotime($from))) ?>&dept=<?= (int)$dept_id ?>&q=<?= urlencode($search) ?>&type=<?= urlencode($type_filter) ?>&designation=<?= urlencode($designation_filter) ?>"
                class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener">
                 <i class="fas fa-file-pdf me-1"></i> Download PDF (26th–25th)
             </a>
@@ -389,7 +415,8 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
             <?php
             // Department-wise Attendance Statement (landscape, one department per
             // page) for the resolved date range — downloadable as PDF or DOC.
-            $stmt_base = ['from' => $from, 'to' => $to, 'dept' => $dept_id, 'q' => $search];
+            $stmt_base = ['from' => $from, 'to' => $to, 'dept' => $dept_id, 'q' => $search,
+                          'type' => $type_filter, 'designation' => $designation_filter];
             $stmt_pdf  = APP_URL . '/staff-attendance/statement.php?' . http_build_query($stmt_base + ['format' => 'pdf']);
             $stmt_doc  = APP_URL . '/staff-attendance/statement.php?' . http_build_query($stmt_base + ['format' => 'doc']);
             ?>

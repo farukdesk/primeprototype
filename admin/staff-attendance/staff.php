@@ -252,6 +252,9 @@ $dept_id = (int)($_GET['dept'] ?? 0);
 $search  = trim($_GET['q'] ?? '');
 $status_flt = $_GET['status'] ?? '';
 if (!in_array($status_flt, ['absent', 'penalty', 'absent_or_penalty'], true)) $status_flt = '';
+$type_flt = $_GET['type'] ?? '';
+if (!in_array($type_flt, ['educational', 'administrative'], true)) $type_flt = '';
+$desig_flt = trim($_GET['designation'] ?? '');
 $report  = $_GET['report'] ?? 'monthly';
 if (!in_array($report, ['daily', 'weekly', 'monthly', 'range'], true)) $report = 'monthly';
 $r_from  = $report === 'range' ? att_normalize_date($_GET['from'] ?? '') : null;
@@ -277,6 +280,8 @@ $report_qs = http_build_query(array_filter([
     'dept'   => $dept_id ?: null,
     'q'      => $search ?: null,
     'status' => $status_flt ?: null,
+    'type'   => $type_flt ?: null,
+    'designation' => $desig_flt ?: null,
 ]));
 
 if (!$member):
