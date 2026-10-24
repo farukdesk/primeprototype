@@ -21,6 +21,30 @@ function sp_is_admin(): bool
 }
 
 /**
+ * Register the read-only "Employee Profile View" module so it can be assigned
+ * from Access Control even when admin/staff-profile-view-module.sql was not run.
+ */
+function sp_ensure_view_module(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        db()->exec(
+            "INSERT IGNORE INTO modules
+                (name, slug, description, icon, parent_id, sort_order,
+                 is_active, can_view, can_create, can_edit, can_delete)
+             VALUES
+                ('Employee Profile View', 'staff-profile-view',
+                 'Read-only access to employee profiles (list, profile view and CV PDF download).',
+                 'fas fa-id-badge', NULL, 0, 1, 1, 0, 0, 0)"
+        );
+    } catch (Throwable $e) {
+        // Insufficient privileges – run admin/staff-profile-view-module.sql manually.
+    }
+}
+
+/**
  * Returns true if the current user can manage the staff department list.
  */
 function sp_can_manage_depts(): bool

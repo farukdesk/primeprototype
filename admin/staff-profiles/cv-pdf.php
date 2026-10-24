@@ -7,13 +7,16 @@ auth_check();
 require_once __DIR__ . '/sp-helpers.php';
 require_once dirname(__DIR__) . '/../vendor/autoload.php';
 
+sp_ensure_view_module();
+
 $id = (int)($_GET['id'] ?? 0);
 
-// Admins may download any employee's CV; other staff may only download their own.
+// Admins and Employee Profile View holders may download any employee's CV;
+// other staff may only download their own.
 $is_admin = is_super_admin() || sp_is_admin();
-if (!$is_admin) {
+if (!$is_admin && !can_access('staff-profile-view', 'can_view')) {
     if ($id !== (int)auth_user()['id'] || !can_access('staff-profile', 'can_view')) {
-        require_access('staff-profile', 'can_view');
+        require_access('staff-profile-view', 'can_view');
     }
 }
 

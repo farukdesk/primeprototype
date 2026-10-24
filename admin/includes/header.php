@@ -1891,7 +1891,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── HR & Staff ── -->
-    <?php if (is_super_admin() || can_access('jobs') || can_access('staff-departments') || can_access('leave-management') || can_access('staff-attendance')): ?>
+    <?php if (is_super_admin() || can_access('jobs') || can_access('staff-departments') || can_access('staff-profile-view') || can_access('leave-management') || can_access('staff-attendance')): ?>
     <button class="nav-group-toggle <?= $is_hr_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-jobs"
             aria-expanded="<?= $is_hr_active ? 'true' : 'false' ?>">
@@ -1915,13 +1915,15 @@ if (is_portal_student()) {
                 </a>
             </li>
             <?php endif; ?>
-            <?php if (is_super_admin() || can_access('staff-departments')): ?>
+            <?php if (is_super_admin() || can_access('staff-departments') || can_access('staff-profile-view')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/staff-profiles/index.php"
                    class="<?= strpos($current_path, '/staff-profiles/') !== false && strpos($current_path, '/my-profile') === false ? 'active' : '' ?>">
                     <i class="fas fa-id-badge"></i> Employee Profiles
                 </a>
             </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('staff-departments')): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/staff-profiles/departments.php"
                    class="<?= strpos($current_path, '/staff-profiles/departments') !== false ? 'active' : '' ?>">

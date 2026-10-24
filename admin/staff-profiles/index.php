@@ -3,12 +3,15 @@ require_once __DIR__ . '/../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/sp-helpers.php';
 
-// Non-admin staff go to their own profile
-if (!is_super_admin() && !sp_is_admin()) {
+sp_ensure_view_module();
+
+// Non-admin staff go to their own profile, except read-only Employee Profile
+// View holders who may browse the full employee list.
+if (!is_super_admin() && !sp_is_admin() && !can_access('staff-profile-view', 'can_view')) {
     if (can_access('staff-profile', 'can_view')) {
         redirect(APP_URL . '/staff-profiles/my-profile.php');
     }
-    require_access('staff-profile', 'can_view');
+    require_access('staff-profile-view', 'can_view');
 }
 
 $page_title = 'Employee Profiles';
