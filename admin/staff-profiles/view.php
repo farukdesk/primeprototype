@@ -3,14 +3,17 @@ require_once __DIR__ . '/../includes/auth.php';
 auth_check();
 require_once __DIR__ . '/sp-helpers.php';
 
+sp_ensure_view_module();
+
 $id = (int)($_GET['id'] ?? 0);
 
-// Admins (or super admins) can view any employee profile. Other staff may only
-// view their own profile, provided they have staff-profile view access.
+// Admins (or super admins) and holders of the read-only Employee Profile View
+// module can view any employee profile. Other staff may only view their own
+// profile, provided they have staff-profile view access.
 $is_admin = is_super_admin() || sp_is_admin();
-if (!$is_admin) {
+if (!$is_admin && !can_access('staff-profile-view', 'can_view')) {
     if ($id !== (int)auth_user()['id'] || !can_access('staff-profile', 'can_view')) {
-        require_access('staff-profile', 'can_view');
+        require_access('staff-profile-view', 'can_view');
     }
 }
 
