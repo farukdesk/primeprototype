@@ -1,5 +1,50 @@
 <?php
 
+/**
+ * Best-effort auto-migration: add a nullable user_id link column to
+ * ei_faculty so pool members can be tied to login accounts. Mirrors
+ * ivd_ensure_user_column() in admin/invigilation-duty/helpers.php.
+ */
+function ei_ensure_faculty_user_column(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $has = db()->query("SHOW COLUMNS FROM ei_faculty LIKE 'user_id'")->fetch();
+        if (!$has) {
+            db()->exec(
+                "ALTER TABLE ei_faculty
+                   ADD COLUMN user_id INT UNSIGNED DEFAULT NULL COMMENT 'Linked login account (users.id)' AFTER dept_id,
+                   ADD KEY idx_ei_faculty_user (user_id)"
+            );
+        }
+    } catch (Throwable $e) {
+        // best effort — queries will surface real problems
+    }
+}
+
+/**
+ * Login accounts selectable as the "Login Account" link of a pool member.
+ * Email/username is shown alongside the name so people with the same or a
+ * similar name can be told apart.
+ *
+ * @return array<int,array{id:int,full_name:string,email:string,username:string}>
+ */
+function ei_login_account_options(): array
+{
+    try {
+        return db()->query(
+            'SELECT id, full_name, email, username
+             FROM users
+             WHERE is_active = 1
+             ORDER BY full_name ASC, id ASC'
+        )->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
 function ei_get_departments(): array
 {
     return db()->query(
