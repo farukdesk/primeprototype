@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/slot-helpers.php';
 require_access('exam-invigilation');
+
+ei_ensure_faculty_user_column();
 
 $page_title = 'Faculty Availability Pool';
 $weekday_labels = [
@@ -68,9 +71,11 @@ $page   = min($page, $pages);
 $offset = ($page - 1) * $per;
 
 $data_st = db()->prepare(
-    "SELECT f.*, d.name AS dept_name
+    "SELECT f.*, d.name AS dept_name,
+            u.full_name AS linked_name, u.email AS linked_email, u.username AS linked_username
      FROM ei_faculty f
      JOIN dept_departments d ON d.id = f.dept_id
+     LEFT JOIN users u ON u.id = f.user_id
      $sql_where
      ORDER BY d.name ASC, f.name ASC
      LIMIT $per OFFSET $offset"
@@ -207,7 +212,18 @@ require_once __DIR__ . '/../includes/header.php';
                     ?>
                     <tr>
                         <td class="px-4"><?= $offset + $i + 1 ?></td>
-                        <td class="fw-medium"><?= h($f['name']) ?></td>
+                        <td class="fw-medium">
+                            <?= h($f['name']) ?>
+                            <?php if (!empty($f['user_id'])): ?>
+                            <div class="text-muted" style="font-size:.75rem;" title="Linked login account">
+                                <i class="fas fa-link me-1"></i><?= h($f['linked_email'] ?: ($f['linked_username'] ?? '')) ?>
+                            </div>
+                            <?php else: ?>
+                            <div style="font-size:.75rem;">
+                                <span class="badge bg-warning text-dark" title="Not linked to a login account — this member cannot see their duties on My Invigilation Duty">No login link</span>
+                            </div>
+                            <?php endif; ?>
+                        </td>
                         <td><span class="badge bg-primary bg-opacity-10 text-primary"><?= h($f['dept_name']) ?></span></td>
                         <td><?= $f['designation'] ? h($f['designation']) : '<span class="text-muted">—</span>' ?></td>
                         <td>

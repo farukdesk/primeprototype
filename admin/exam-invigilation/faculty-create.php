@@ -1,10 +1,14 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/slot-helpers.php';
 require_access('exam-invigilation', 'can_create');
 
 $page_title = 'Add Faculty';
 $errors     = [];
 clear_old();
+
+ei_ensure_faculty_user_column();
+$login_users = ei_login_account_options();
 
 try {
     $departments = db()->query(
@@ -31,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $dept_id          = (int)($_POST['dept_id'] ?? 0);
     $name             = trim($_POST['name'] ?? '');
+    $user_id          = (int)($_POST['user_id'] ?? 0) ?: null;
     $designation      = trim($_POST['designation'] ?? '');
     $weekend_days_raw = $_POST['weekend_days'] ?? [0, 6];
     if (!is_array($weekend_days_raw)) $weekend_days_raw = [];
@@ -76,20 +81,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         try {
             db()->prepare(
-                'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, pay_fixed, fixed_payment_amount, signature, is_active)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
-            )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $pay_fixed, $fixed_payment_amount, $signature, $is_active]);
+                'INSERT INTO ei_faculty (dept_id, user_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, pay_fixed, fixed_payment_amount, signature, is_active)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([$dept_id, $user_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $pay_fixed, $fixed_payment_amount, $signature, $is_active]);
         } catch (Throwable $e) {
             // ei-fixed-payment-payees-v1.sql not run yet
             db()->prepare(
-                'INSERT INTO ei_faculty (dept_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, signature, is_active)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?)'
-            )->execute([$dept_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $signature, $is_active]);
+                'INSERT INTO ei_faculty (dept_id, user_id, name, designation, gender, weekend_available, weekend_days, contact_number, remuneration_per_slot, pay_by_unique_slot, signature, is_active)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([$dept_id, $user_id, $name, $designation ?: null, $gender, $weekend_available, $weekend_days, $contact_number ?: null, $remuneration_per_slot, $pay_by_unique_slot, $signature, $is_active]);
         }
         flash_set('success', 'Faculty <strong>' . h($name) . '</strong> added to pool.');
         redirect(APP_URL . '/exam-invigilation/faculty.php');
     }
-    save_old(compact('dept_id','name','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','pay_by_unique_slot','pay_fixed','fixed_payment_amount','is_active'));
+    save_old(compact('dept_id','name','user_id','designation','gender','weekend_days_raw','contact_number','remuneration_per_slot','pay_by_unique_slot','pay_fixed','fixed_payment_amount','is_active'));
 }
 
 require_once __DIR__ . '/../includes/header.php';
@@ -160,6 +165,21 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="text" name="designation" class="form-control" style="border-radius:10px;"
                            value="<?= old('designation') ?>" maxlength="200"
                            placeholder="e.g. Associate Professor">
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-medium">Login Account <small class="text-muted fw-normal">(for My Invigilation Duty)</small></label>
+                    <select name="user_id" class="form-select" style="border-radius:10px;">
+                        <option value="0">— Not linked —</option>
+                        <?php foreach ($login_users as $lu): ?>
+                        <option value="<?= (int)$lu['id'] ?>" <?= (int)old('user_id') === (int)$lu['id'] ? 'selected' : '' ?>>
+                            <?= h($lu['full_name']) ?> (<?= h($lu['email'] ?: $lu['username']) ?>)
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="text-muted">
+                        Links this pool member to their login account so they see <strong>their own</strong> duties.
+                        Pick by email — never rely on the name alone, as several people can share the same name.
+                    </small>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Gender</label>
