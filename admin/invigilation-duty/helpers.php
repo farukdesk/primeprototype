@@ -27,6 +27,38 @@ function ivd_ensure_user_column(): void
 }
 
 /**
+ * Normalise a person name for matching: lowercase, strip punctuation,
+ * common titles ("Dr.", "Prof.", "Mr.", "Ms.", "Mrs.", "Engr.") and
+ * low-signal honorific given-name prefixes ("Md."/"Mohammad"/"Muhammad"/
+ * "Mst."/"Most." and their common spellings), collapse whitespace.
+ */
+function ivd_normalize_name(string $name): string
+{
+    $name = mb_strtolower(trim($name));
+    $name = str_replace(['.', ',', '-', "'", '’', '(', ')', '/'], ' ', $name);
+    $name = preg_replace(
+        '/\b(dr|prof|professor|mr|ms|mrs|engr|md|mohammad|muhammad|mohammed|muhammed|mohamed|mohd|mst|most|mosammat|mosammad)\b/u',
+        ' ',
+        $name
+    );
+    $name = preg_replace('/\s+/u', ' ', (string)$name);
+    return trim((string)$name);
+}
+
+/**
+ * Order-insensitive key for a normalised name: its words sorted and joined,
+ * so "karim abdul" and "abdul karim" compare equal. Returns '' for names
+ * too short to be a meaningful identifier (fewer than 2 words).
+ */
+function ivd_name_token_key(string $normalized): string
+{
+    $tokens = array_values(array_filter(explode(' ', $normalized), 'strlen'));
+    if (count($tokens) < 2) return '';
+    sort($tokens);
+    return implode(' ', $tokens);
+}
+
+/**
  * Canonical key for a phone number: digits only, trimmed to the last 10
  * digits (drops "+880"/"880"/leading 0 country/trunk prefixes). Returns ''
  * when the number is too short to be meaningful.
@@ -39,18 +71,87 @@ function ivd_phone_key(?string $phone): string
 }
 
 /**
+ * The user's normalised name keys (order-insensitive), gathered from
+ * users.full_name and any active dept_faculty rows linked to the account.
+ *
+ * @return array<string,true>
+ */
+function ivd_name_keys_for_user(int $user_id): array
+{
+    $keys = [];
+    try {
+        $st = db()->prepare('SELECT full_name FROM users WHERE id = ?');
+        $st->execute([$user_id]);
+        if ($u = $st->fetch()) {
+            $k = ivd_name_token_key(ivd_normalize_name((string)($u['full_name'] ?? '')));
+            if ($k !== '') $keys[$k] = true;
+        }
+    } catch (Throwable $e) {}
+    try {
+        $st = db()->prepare('SELECT name FROM dept_faculty WHERE user_id = ? AND is_active = 1');
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            $k = ivd_name_token_key(ivd_normalize_name((string)$n));
+            if ($k !== '') $keys[$k] = true;
+        }
+    } catch (Throwable $e) {}
+    return $keys;
+}
+
+/**
+ * Whether any OTHER active login account carries one of the given name
+ * keys (via users.full_name or a linked dept_faculty row). Used to refuse
+ * a name-based match when two real people share the same name.
+ *
+ * @param array<string,true> $keys
+ */
+function ivd_name_shared_with_other_user(array $keys, int $user_id): bool
+{
+    if (!$keys) return false;
+    try {
+        $st = db()->prepare('SELECT full_name FROM users WHERE id <> ? AND is_active = 1');
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            $k = ivd_name_token_key(ivd_normalize_name((string)$n));
+            if ($k !== '' && isset($keys[$k])) return true;
+        }
+    } catch (Throwable $e) {
+        return true; // fail safe: cannot prove uniqueness
+    }
+    try {
+        $st = db()->prepare(
+            'SELECT name FROM dept_faculty WHERE is_active = 1 AND user_id IS NOT NULL AND user_id <> ?'
+        );
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            $k = ivd_name_token_key(ivd_normalize_name((string)$n));
+            if ($k !== '' && isset($keys[$k])) return true;
+        }
+    } catch (Throwable $e) {
+        return true;
+    }
+    return false;
+}
+
+/**
  * Resolve the ei_faculty row id(s) belonging to the given user.
  *
- * Name matching is deliberately NOT used: different people can share the
- * same (or a very similar) name, so matching by name risks showing one
- * person's duties to another. Resolution relies on hard identifiers only:
+ * Resolution order, strongest evidence first:
  *
  * 1. Direct link via ei_faculty.user_id (set by admins on the Exam
  *    Invigilation → Faculty Pool add/edit forms).
- * 2. Fallback: an exact phone match (users.phone / faculty_profiles.phone
- *    vs ei_faculty.contact_number) against unlinked pool rows, accepted
- *    only when it identifies exactly one row. The unique match is persisted
- *    back to ei_faculty.user_id so future lookups are direct.
+ * 2. Exact phone match (users.phone / faculty_profiles.phone vs
+ *    ei_faculty.contact_number) against unlinked pool rows, accepted only
+ *    when it identifies exactly one row.
+ * 3. Exact normalised-name match (order-insensitive, titles/honorifics
+ *    stripped) against unlinked pool rows — accepted only when it is
+ *    doubly unambiguous: exactly one pool row matches AND no other login
+ *    account carries the same name. This restores self-service access for
+ *    faculty whose pool row has no usable phone, without the risk of
+ *    showing one person's duties to a same-named colleague.
+ *
+ * A unique fallback match is persisted back to ei_faculty.user_id so
+ * future lookups are direct.
  *
  * @return int[] ei_faculty ids (may be empty)
  */
@@ -69,8 +170,7 @@ function ivd_faculty_ids_for_user(int $user_id): array
         return [];
     }
 
-    // 2. Fallback: gather this user's phone numbers (hard identifier; names
-    //    are never used because different people can share the same name).
+    // 2–3. Fallback: gather this user's phone numbers and name keys.
     $phones = [];
     try {
         $st = db()->prepare('SELECT phone FROM users WHERE id = ?');
@@ -88,32 +188,49 @@ function ivd_faculty_ids_for_user(int $user_id): array
             if ($pk !== '') $phones[$pk] = true;
         }
     } catch (Throwable $e) {}
-    if (!$phones) return [];
+    $name_keys = ivd_name_keys_for_user($user_id);
+    if (!$phones && !$name_keys) return [];
 
     try {
-        $rows = db()->query('SELECT id, user_id, contact_number FROM ei_faculty')->fetchAll();
+        $rows = db()->query('SELECT id, user_id, name, contact_number FROM ei_faculty')->fetchAll();
     } catch (Throwable $e) {
         return [];
     }
 
     $phone_eq = [];
+    $name_eq  = [];
     foreach ($rows as $row) {
         if (!empty($row['user_id'])) continue; // already linked to someone else
         $pk = ivd_phone_key((string)($row['contact_number'] ?? ''));
         if ($pk !== '' && isset($phones[$pk])) {
             $phone_eq[] = (int)$row['id'];
+            continue;
+        }
+        $nk = ivd_name_token_key(ivd_normalize_name((string)($row['name'] ?? '')));
+        if ($nk !== '' && isset($name_keys[$nk])) {
+            $name_eq[] = (int)$row['id'];
         }
     }
 
-    // Accept the phone match only when it is unique and unambiguous, and
-    // persist it so future lookups are direct.
-    if (count($phone_eq) !== 1) return [];
+    // Phone is the stronger identifier; use it when unique. Otherwise fall
+    // back to an exact name match, but only when it is doubly unambiguous:
+    // one pool row AND no other login account with the same name.
+    $match = [];
+    if (count($phone_eq) === 1) {
+        $match = $phone_eq;
+    } elseif (!$phone_eq && count($name_eq) === 1
+        && !ivd_name_shared_with_other_user($name_keys, $user_id)) {
+        $match = $name_eq;
+    }
+    if (count($match) !== 1) return [];
+
+    // Persist the unique match so future lookups are direct.
     try {
         db()->prepare('UPDATE ei_faculty SET user_id = ? WHERE id = ? AND user_id IS NULL')
-            ->execute([$user_id, $phone_eq[0]]);
+            ->execute([$user_id, $match[0]]);
     } catch (Throwable $e) {}
 
-    return $phone_eq;
+    return $match;
 }
 
 /**
