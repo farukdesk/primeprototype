@@ -149,8 +149,8 @@ function ivd_render_duty_rows(array $rows, bool $allow_request = false): void
         <i class="fas fa-user-clock text-muted mb-3" style="font-size:2.5rem;"></i>
         <h5 class="fw-semibold mb-2">No invigilation profile found</h5>
         <p class="text-muted mb-0" style="max-width:520px;margin:0 auto;">
-            Your login account is not yet linked to a faculty record in the Exam Invigilation pool.
-            For accuracy, duties are matched by linked account — not by name — so please ask the
+            Your login account could not be matched to a faculty record in the Exam Invigilation
+            pool (by linked account, phone number, or an unambiguous name match). Please ask the
             Controller of Examinations office to link your account on the Faculty Pool page.
         </p>
     </div>
