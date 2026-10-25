@@ -47,6 +47,10 @@ if ($open = mcr_open_request_for_grade($grade_id)) {
 
 $cur_marks = mcr_grade_marks($grade);
 $dist      = mcr_distribution($grade['curriculum_id'] ? (int)$grade['curriculum_id'] : null, count($cur_marks));
+// The curriculum may define more components than the grade row has stored marks.
+while (count($cur_marks) < count($dist)) {
+    $cur_marks[] = null;
+}
 
 // ── POST: submit the request ──────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
