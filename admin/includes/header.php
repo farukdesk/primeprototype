@@ -343,6 +343,7 @@ if (is_portal_student()) {
                   || strpos($current_path, '/student-verification/') !== false
                   || strpos($current_path, '/cert-verifiers/') !== false
                   || $is_exam_invigilation_active || $is_invigilation_duty_active || $is_admit_card_active
+                  || strpos($current_path, '/mark-change-request/') !== false
                   || strpos($current_path, '/hall-management/') !== false;
     ?>
 
@@ -940,7 +941,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Controller of Examinations ── -->
-    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('spring-result') || can_access('grade-sheet') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('invigilation-duty') || can_access('exam-routine') || can_access('admit-card') || can_access('hall-management')): ?>
+    <?php if (is_super_admin() || can_access('results') || can_access('results-entry') || can_access('results-chains') || can_access('mark-change-request') || can_access('spring-result') || can_access('grade-sheet') || can_access('final-result-publish') || can_access('tabulation-checker') || can_access('transcript-maker') || can_access('student-verification') || can_access('cert-verifiers') || can_access('exam-invigilation') || can_access('invigilation-duty') || can_access('exam-routine') || can_access('admit-card') || can_access('hall-management')): ?>
     <button class="nav-group-toggle <?= $is_coe_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-coe"
             aria-expanded="<?= $is_coe_active ? 'true' : 'false' ?>">
@@ -990,6 +991,27 @@ if (is_portal_student()) {
                 <a href="<?= APP_URL ?>/results/chains/index.php"
                    class="<?= strpos($current_path, '/results/chains/') !== false ? 'active' : '' ?>" style="padding-left:2.2rem;">
                     <i class="fas fa-sitemap"></i> Workflow Chains
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php
+            // Mark Change Request: faculty (module access) and chain approvers
+            $_mcr_show = false; $_mcr_count = 0;
+            try {
+                require_once __DIR__ . '/../mark-change-request/helpers.php';
+                if (is_super_admin()) mcr_ensure_schema(); // bootstrap tables + faculty grants
+                $_mcr_show  = mcr_can_view_module();
+                if ($_mcr_show) $_mcr_count = mcr_pending_count_for_user();
+            } catch (Throwable $_e) { $_mcr_show = is_super_admin() || can_access('mark-change-request'); }
+            if ($_mcr_show):
+            ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/mark-change-request/index.php"
+                   class="<?= strpos($current_path, '/mark-change-request/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-file-pen"></i> Mark Change Request
+                    <?php if ($_mcr_count > 0): ?>
+                    <span class="badge bg-primary ms-auto" style="font-size:.65rem;"><?= $_mcr_count ?></span>
+                    <?php endif; ?>
                 </a>
             </li>
             <?php endif; ?>
