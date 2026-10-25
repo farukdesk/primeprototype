@@ -512,6 +512,10 @@ function mcr_submit(int $grade_id, array $new_marks, int $new_is_absent, string 
     $old_marks = mcr_grade_marks($grade);
     $dist      = mcr_distribution($grade['curriculum_id'] ? (int)$grade['curriculum_id'] : null,
                                   max(count($old_marks), count($new_marks)));
+    // Pad so old/new mark lists compare component-by-component at equal length.
+    while (count($old_marks) < count($dist)) {
+        $old_marks[] = null;
+    }
     $new       = mcr_compute($new_marks, $new_is_absent, $dist);
 
     $old_json = json_encode(array_values($old_marks));
