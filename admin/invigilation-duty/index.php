@@ -150,8 +150,10 @@ function ivd_render_duty_rows(array $rows, bool $allow_request = false): void
         <h5 class="fw-semibold mb-2">No invigilation profile found</h5>
         <p class="text-muted mb-0" style="max-width:520px;margin:0 auto;">
             Your login account could not be matched to a faculty record in the Exam Invigilation
-            pool (by linked account, phone number, or an unambiguous name match). Please ask the
-            Controller of Examinations office to link your account on the Faculty Pool page.
+            pool (by linked account, phone number, or name — including close spelling variants).
+            This usually means your pool record's name/phone differs too much from your account,
+            or more than one record could be yours. Please ask the Controller of Examinations
+            office to link your account on the Faculty Pool page.
         </p>
     </div>
 </div>

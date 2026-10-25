@@ -59,6 +59,90 @@ function ivd_name_token_key(string $normalized): string
 }
 
 /**
+ * Tokenise a raw person name for fuzzy matching: normalise it, split into
+ * words and merge runs of single-letter initials so "A. K. M. Rahman" and
+ * "AKM Rahman" both yield ["akm", "rahman"].
+ *
+ * @return string[]
+ */
+function ivd_name_tokens(string $name): array
+{
+    $tokens = array_values(array_filter(explode(' ', ivd_normalize_name($name)), 'strlen'));
+    $out = [];
+    $run = '';
+    foreach ($tokens as $t) {
+        if (mb_strlen($t) === 1) { $run .= $t; continue; }
+        if ($run !== '') { $out[] = $run; $run = ''; }
+        $out[] = $t;
+    }
+    if ($run !== '') $out[] = $run;
+    return $out;
+}
+
+/**
+ * Whether two name tokens should be considered the same word:
+ *  - exact match;
+ *  - an initial matching the first letter of the other word ("k" ~ "kamrul");
+ *  - small typo / spelling variant (levenshtein ≤ 1, or ≤ 2 for long words)
+ *    e.g. "hasan" ~ "hassan", "rahman" ~ "rahaman";
+ *  - identical metaphone (same pronunciation), e.g. "chowdhury" ~ "choudhury".
+ * Typo/phonetic comparison is only attempted for plain ASCII words.
+ */
+function ivd_token_pair_match(string $a, string $b): bool
+{
+    if ($a === $b) return true;
+    $la = mb_strlen($a);
+    $lb = mb_strlen($b);
+    if ($la === 1 || $lb === 1) {
+        return $la === 1
+            ? mb_substr($b, 0, 1) === $a
+            : mb_substr($a, 0, 1) === $b;
+    }
+    if (min($la, $lb) >= 4 && preg_match('/^[a-z]+$/', $a) && preg_match('/^[a-z]+$/', $b)) {
+        if (levenshtein($a, $b) <= (min($la, $lb) >= 7 ? 2 : 1)) return true;
+        if (function_exists('metaphone')) {
+            $ma = metaphone($a);
+            if ($ma !== '' && $ma === metaphone($b)) return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Fuzzy order-insensitive comparison of two tokenised names. Matches when
+ * every token of the shorter name can be paired with a distinct token of the
+ * longer one (so "Kamrul Hasan" matches "Md. Kamrul Hasan Khan"), with at
+ * least two paired tokens and at least one "strong" pair (both words ≥ 4
+ * characters — initials alone are never enough).
+ *
+ * @param string[] $a
+ * @param string[] $b
+ */
+function ivd_fuzzy_name_match(array $a, array $b): bool
+{
+    if (count($a) < 2 || count($b) < 2) return false;
+    if (count($a) > count($b)) { $tmp = $a; $a = $b; $b = $tmp; }
+
+    $used   = [];
+    $strong = 0;
+    foreach ($a as $ta) {
+        $found = -1;
+        foreach ($b as $i => $tb) { // prefer exact pairings first
+            if (!isset($used[$i]) && $ta === $tb) { $found = $i; break; }
+        }
+        if ($found < 0) {
+            foreach ($b as $i => $tb) {
+                if (!isset($used[$i]) && ivd_token_pair_match($ta, $tb)) { $found = $i; break; }
+            }
+        }
+        if ($found < 0) return false;
+        $used[$found] = true;
+        if (mb_strlen($ta) >= 4 && mb_strlen($b[$found]) >= 4) $strong++;
+    }
+    return $strong >= 1 && count($used) >= 2;
+}
+
+/**
  * Canonical key for a phone number: digits only, trimmed to the last 10
  * digits (drops "+880"/"880"/leading 0 country/trunk prefixes). Returns ''
  * when the number is too short to be meaningful.
@@ -134,6 +218,94 @@ function ivd_name_shared_with_other_user(array $keys, int $user_id): bool
 }
 
 /**
+ * The user's tokenised name candidates for fuzzy matching, gathered from
+ * users.full_name and any active dept_faculty rows linked to the account.
+ *
+ * @return string[][]
+ */
+function ivd_user_name_token_lists(int $user_id): array
+{
+    $lists = [];
+    $seen  = [];
+    $push  = static function (string $name) use (&$lists, &$seen): void {
+        $tokens = ivd_name_tokens($name);
+        if (count($tokens) < 2) return;
+        $key = implode(' ', $tokens);
+        if (isset($seen[$key])) return;
+        $seen[$key]  = true;
+        $lists[] = $tokens;
+    };
+    try {
+        $st = db()->prepare('SELECT full_name FROM users WHERE id = ?');
+        $st->execute([$user_id]);
+        if ($u = $st->fetch()) $push((string)($u['full_name'] ?? ''));
+    } catch (Throwable $e) {}
+    try {
+        $st = db()->prepare('SELECT name FROM dept_faculty WHERE user_id = ? AND is_active = 1');
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) $push((string)$n);
+    } catch (Throwable $e) {}
+    return $lists;
+}
+
+/**
+ * Department id(s) the user belongs to (faculty_profiles / active
+ * dept_faculty rows). Used to disambiguate when several pool rows carry
+ * matching names or phone numbers.
+ *
+ * @return array<int,true>
+ */
+function ivd_user_dept_ids(int $user_id): array
+{
+    $depts = [];
+    foreach ([
+        'SELECT dept_id FROM faculty_profiles WHERE user_id = ?',
+        'SELECT dept_id FROM dept_faculty WHERE user_id = ? AND is_active = 1',
+    ] as $sql) {
+        try {
+            $st = db()->prepare($sql);
+            $st->execute([$user_id]);
+            foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d) {
+                if ($d !== null && (int)$d > 0) $depts[(int)$d] = true;
+            }
+        } catch (Throwable $e) {}
+    }
+    return $depts;
+}
+
+/**
+ * Whether any OTHER active login account's name fuzzy-matches the given
+ * pool-row name tokens. Used to refuse a fuzzy name match when the pool row
+ * could plausibly belong to a different real person.
+ *
+ * @param string[] $pool_tokens
+ */
+function ivd_fuzzy_shared_with_other_user(array $pool_tokens, int $user_id): bool
+{
+    try {
+        $st = db()->prepare('SELECT full_name FROM users WHERE id <> ? AND is_active = 1');
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            if (ivd_fuzzy_name_match($pool_tokens, ivd_name_tokens((string)$n))) return true;
+        }
+    } catch (Throwable $e) {
+        return true; // fail safe: cannot prove uniqueness
+    }
+    try {
+        $st = db()->prepare(
+            'SELECT name FROM dept_faculty WHERE is_active = 1 AND user_id IS NOT NULL AND user_id <> ?'
+        );
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
+            if (ivd_fuzzy_name_match($pool_tokens, ivd_name_tokens((string)$n))) return true;
+        }
+    } catch (Throwable $e) {
+        return true;
+    }
+    return false;
+}
+
+/**
  * Resolve the ei_faculty row id(s) belonging to the given user.
  *
  * Resolution order, strongest evidence first:
@@ -149,6 +321,17 @@ function ivd_name_shared_with_other_user(array $keys, int $user_id): bool
  *    account carries the same name. This restores self-service access for
  *    faculty whose pool row has no usable phone, without the risk of
  *    showing one person's duties to a same-named colleague.
+ * 4. Fuzzy name match against unlinked pool rows — tolerates missing
+ *    honorifics, initials vs full words ("K." ~ "Kamrul", "A K M" ~ "AKM"),
+ *    small typos / spelling variants ("Hasan" ~ "Hassan", "Rahman" ~
+ *    "Rahaman", "Chowdhury" ~ "Choudhury") and extra/missing name parts
+ *    ("Kamrul Hasan" ~ "Md. Kamrul Hasan Khan"). Accepted only when it is
+ *    doubly unambiguous: exactly one pool row matches AND no other login
+ *    account fuzzy-matches that row's name.
+ *
+ * Whenever several pool rows tie at tiers 2–4, the user's own department(s)
+ * (faculty_profiles / dept_faculty) are used as a tie-breaker: if exactly
+ * one of the tied rows belongs to the user's department, it wins.
  *
  * A unique fallback match is persisted back to ei_faculty.user_id so
  * future lookups are direct.
@@ -192,35 +375,66 @@ function ivd_faculty_ids_for_user(int $user_id): array
     if (!$phones && !$name_keys) return [];
 
     try {
-        $rows = db()->query('SELECT id, user_id, name, contact_number FROM ei_faculty')->fetchAll();
+        $rows = db()->query('SELECT id, user_id, dept_id, name, contact_number FROM ei_faculty')->fetchAll();
     } catch (Throwable $e) {
         return [];
     }
 
+    $user_depts  = ivd_user_dept_ids($user_id);
+    $token_lists = ivd_user_name_token_lists($user_id);
+
+    // Tie-breaker: when several pool rows match equally well, prefer the
+    // single one in the user's own department.
+    $narrow_by_dept = static function (array $candidates) use ($user_depts): array {
+        if (count($candidates) <= 1 || !$user_depts) return $candidates;
+        $own = array_values(array_filter(
+            $candidates,
+            static fn (array $c) => isset($user_depts[(int)($c['dept_id'] ?? 0)])
+        ));
+        return count($own) === 1 ? $own : $candidates;
+    };
+
     $phone_eq = [];
     $name_eq  = [];
+    $fuzzy_eq = [];
     foreach ($rows as $row) {
         if (!empty($row['user_id'])) continue; // already linked to someone else
         $pk = ivd_phone_key((string)($row['contact_number'] ?? ''));
         if ($pk !== '' && isset($phones[$pk])) {
-            $phone_eq[] = (int)$row['id'];
+            $phone_eq[] = $row;
             continue;
         }
         $nk = ivd_name_token_key(ivd_normalize_name((string)($row['name'] ?? '')));
         if ($nk !== '' && isset($name_keys[$nk])) {
-            $name_eq[] = (int)$row['id'];
+            $name_eq[] = $row;
+            continue;
+        }
+        $pool_tokens = ivd_name_tokens((string)($row['name'] ?? ''));
+        foreach ($token_lists as $mine) {
+            if (ivd_fuzzy_name_match($mine, $pool_tokens)) {
+                $row['_tokens'] = $pool_tokens;
+                $fuzzy_eq[]     = $row;
+                break;
+            }
         }
     }
 
-    // Phone is the stronger identifier; use it when unique. Otherwise fall
-    // back to an exact name match, but only when it is doubly unambiguous:
-    // one pool row AND no other login account with the same name.
+    // Phone is the strongest identifier; then exact name, then fuzzy name.
+    // Name-based tiers additionally require that no other login account
+    // could claim the same pool row.
+    $phone_eq = $narrow_by_dept($phone_eq);
+    $name_eq  = $narrow_by_dept($name_eq);
+    $fuzzy_eq = $narrow_by_dept($fuzzy_eq);
+
     $match = [];
     if (count($phone_eq) === 1) {
-        $match = $phone_eq;
+        $match = [(int)$phone_eq[0]['id']];
     } elseif (!$phone_eq && count($name_eq) === 1
         && !ivd_name_shared_with_other_user($name_keys, $user_id)) {
-        $match = $name_eq;
+        $match = [(int)$name_eq[0]['id']];
+    } elseif (!$phone_eq && !$name_eq && count($fuzzy_eq) === 1
+        && !ivd_fuzzy_shared_with_other_user($fuzzy_eq[0]['_tokens'], $user_id)) {
+        $match = [(int)$fuzzy_eq[0]['id']];
     }
     if (count($match) !== 1) return [];
 
