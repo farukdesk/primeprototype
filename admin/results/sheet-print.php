@@ -10,10 +10,21 @@
  * - Final (or unspecified) exams print the full distribution with grades.
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_access('results');
+require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/workflow-helpers.php';
 
 $id     = (int)($_GET['id'] ?? 0);
 $sheet  = wf_get_sheet($id);
+
+// Plain faculty (not super admin, not results staff, not a workflow approver)
+// may only print sheets they authored — mirrors the Published tab restriction.
+if (!is_super_admin() && !rm_is_staff() && !wf_has_approver_role()
+    && (int)$sheet['created_by'] !== (int)(auth_user()['id'] ?? 0)) {
+    flash_set('error', 'You can only view your own mark sheets.');
+    redirect(APP_URL . '/results/index.php');
+}
+
 $grades = wf_get_grades($id);
 
 // ── Digital sign-offs: signature images auto-attached from user profiles ───

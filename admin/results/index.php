@@ -31,6 +31,10 @@ if (!is_super_admin() && $dept_scope === null) {
     $dept_scope = array_values(array_unique($own_depts));
 }
 
+// Plain faculty (not super admin, not results staff, not a workflow approver)
+// may only see their OWN published sheets, never other teachers' results.
+$published_own_only = !is_super_admin() && !rm_is_staff() && !wf_has_approver_role();
+
 // ── Workflow counts (chain-aware) ─────────────────────────────────────────────
 $wf_counts  = ['my_sheets' => 0, 'queue' => 0, 'published' => 0];
 $user_id    = (int)(auth_user()['id'] ?? 0);
@@ -49,7 +53,10 @@ try {
     // always sees their own published sheets even outside their dept scope)
     $pub_where  = "workflow_status = 'published'";
     $pub_params = [];
-    if ($dept_scope !== null && !empty($dept_scope)) {
+    if ($published_own_only) {
+        $pub_where  .= ' AND created_by = ?';
+        $pub_params  = [$user_id];
+    } elseif ($dept_scope !== null && !empty($dept_scope)) {
         $dphs        = implode(',', array_fill(0, count($dept_scope), '?'));
         $pub_where  .= " AND (dept_id IN ($dphs) OR created_by = ?)";
         $pub_params  = array_merge($dept_scope, [$user_id]);
@@ -142,7 +149,7 @@ endif;
 
 // ── Active tab: Published workflow sheets ─────────────────────────────────────
 if ($active_tab === 'published' && $has_wf_access):
-    _wf_render_published($dept_scope, $user_id);
+    _wf_render_published($dept_scope, $user_id, $published_own_only);
     require_once __DIR__ . '/../includes/footer.php';
     exit;
 endif;
@@ -320,15 +327,18 @@ function _wf_render_my_sheets(int $user_id, ?array $dept_scope): void
 }
 
 /**
- * Render "Published" tab — all published workflow sheets in user's scope,
- * plus any published sheets the current user authored (so a teacher always
- * sees their own published results even outside their department scope).
+ * Render "Published" tab — published workflow sheets in user's scope.
+ * Staff/approvers see all published sheets in their dept scope (plus any they
+ * authored); plain faculty ($own_only) see ONLY their own published sheets.
  */
-function _wf_render_published(?array $dept_scope, int $user_id = 0): void
+function _wf_render_published(?array $dept_scope, int $user_id = 0, bool $own_only = false): void
 {
     $where  = ["ms.workflow_status = 'published'"];
     $params = [];
-    if ($dept_scope !== null) {
+    if ($own_only) {
+        $where[]  = 'ms.created_by = ?';
+        $params[] = $user_id;
+    } elseif ($dept_scope !== null) {
         if (empty($dept_scope)) {
             $where[]  = 'ms.created_by = ?';
             $params[] = $user_id;
