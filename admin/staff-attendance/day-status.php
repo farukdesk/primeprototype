@@ -156,11 +156,18 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="px-3"><?= h(date('d M Y (D)', strtotime($r['status_date']))) ?></td>
                         <td><strong><?= h($r['full_name']) ?></strong></td>
                         <td>
-                            <?php if ($r['status'] === 'day_off'): ?>
-                                <span class="badge bg-secondary">Day Off</span>
-                            <?php else: ?>
-                                <span class="badge bg-primary">Approved Leave</span>
-                            <?php endif; ?>
+                            <?php
+                            $mark_badges = [
+                                'approved_leave' => ['bg-primary', 'Approved Leave'],
+                                'day_off'        => ['bg-secondary', 'Day Off'],
+                                'absent'         => ['bg-danger', 'Absent'],
+                                'weekend'        => ['bg-secondary', 'Weekend'],
+                                'holiday'        => ['bg-success', 'Holiday'],
+                                'exam_duty'      => ['bg-primary-subtle text-primary border border-primary-subtle', 'Exam Duty'],
+                            ];
+                            [$mb_cls, $mb_lbl] = $mark_badges[$r['status']] ?? ['bg-primary', 'Approved Leave'];
+                            ?>
+                            <span class="badge <?= $mb_cls ?>"><?= h($mb_lbl) ?></span>
                         </td>
                         <td class="small"><?= h((string)($r['note'] ?? '')) ?: '<span class="text-muted">—</span>' ?></td>
                         <td class="small"><?= $r['source'] === 'leave' ? '<span class="badge bg-info text-dark">Leave approval</span>' : '<span class="badge bg-light text-dark border">Manual</span>' ?></td>
