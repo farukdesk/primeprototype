@@ -518,10 +518,11 @@ function att_prime_month_range(string $month): array
  */
 
 /**
- * Resolve the ei_faculty row id(s) that belong to the given user. Mirrors the
- * Invigilation Duty module: direct link via ei_faculty.user_id first, then a
- * unique full-name match (users.full_name / dept_faculty.name), persisted back
- * when unambiguous. Cached per request.
+ * Resolve the ei_faculty row id(s) that belong to the given user. Delegates
+ * to the Invigilation Duty module's resolver (ivd_faculty_ids_for_user) so
+ * the same accounts resolve identically everywhere: direct link via
+ * ei_faculty.user_id first, then name/phone matching, persisted back when
+ * unambiguous. Cached per request.
  *
  * @return int[] ei_faculty ids (may be empty)
  */
@@ -531,75 +532,13 @@ function att_user_faculty_ids(int $user_id): array
     if ($user_id <= 0) return [];
     if (array_key_exists($user_id, $cache)) return $cache[$user_id];
 
-    // 1. Direct link.
+    require_once __DIR__ . '/../invigilation-duty/helpers.php';
     try {
-        $st = db()->prepare('SELECT id FROM ei_faculty WHERE user_id = ?');
-        $st->execute([$user_id]);
-        $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
-        if ($ids) return $cache[$user_id] = $ids;
+        return $cache[$user_id] = ivd_faculty_ids_for_user($user_id);
     } catch (Throwable $e) {
-        // ei_faculty / user_id column missing - no invigilation duty data.
+        // ei_faculty missing - no invigilation duty data.
         return $cache[$user_id] = [];
     }
-
-    // 2. Fallback: unique name match (users.full_name + dept_faculty.name).
-    $candidates = [];
-    try {
-        $st = db()->prepare('SELECT full_name FROM users WHERE id = ?');
-        $st->execute([$user_id]);
-        $full_name = (string)$st->fetchColumn();
-        if ($full_name !== '') $candidates[] = $full_name;
-    } catch (Throwable $e) {}
-    try {
-        $st = db()->prepare('SELECT name FROM dept_faculty WHERE user_id = ? AND is_active = 1');
-        $st->execute([$user_id]);
-        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $n) {
-            if ((string)$n !== '') $candidates[] = (string)$n;
-        }
-    } catch (Throwable $e) {}
-
-    $wanted = [];
-    foreach ($candidates as $c) {
-        $norm = att_normalize_person_name($c);
-        if ($norm !== '') $wanted[$norm] = true;
-    }
-    if (!$wanted) return $cache[$user_id] = [];
-
-    $matches = [];
-    try {
-        foreach (db()->query('SELECT id, name, user_id FROM ei_faculty WHERE is_active = 1')->fetchAll() as $row) {
-            if (!empty($row['user_id'])) continue; // already linked to someone else
-            if (isset($wanted[att_normalize_person_name((string)$row['name'])])) {
-                $matches[] = (int)$row['id'];
-            }
-        }
-    } catch (Throwable $e) {
-        return $cache[$user_id] = [];
-    }
-
-    // Persist a unique, unambiguous match for future direct lookups.
-    if (count($matches) === 1) {
-        try {
-            db()->prepare('UPDATE ei_faculty SET user_id = ? WHERE id = ? AND user_id IS NULL')
-                ->execute([$user_id, $matches[0]]);
-        } catch (Throwable $e) {}
-    }
-
-    return $cache[$user_id] = $matches;
-}
-
-/**
- * Normalise a person name for matching: lowercase, strip common titles and
- * punctuation, collapse whitespace. Mirrors ivd_normalize_name() in the
- * Invigilation Duty module so the same accounts resolve consistently.
- */
-function att_normalize_person_name(string $name): string
-{
-    $name = mb_strtolower(trim($name));
-    $name = str_replace(['.', ','], ' ', $name);
-    $name = preg_replace('/\b(dr|prof|professor|mr|ms|mrs|engr|md)\b/u', ' ', $name);
-    $name = preg_replace('/\s+/u', ' ', (string)$name);
-    return trim((string)$name);
 }
 
 /**

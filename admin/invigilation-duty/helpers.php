@@ -27,26 +27,82 @@ function ivd_ensure_user_column(): void
 }
 
 /**
- * Normalise a person name for matching: lowercase, strip common titles
- * ("Dr.", "Prof.", "Mr.", "Ms.", "Mrs.", "Md.") and punctuation, collapse
- * whitespace.
+ * Normalise a person name for matching: lowercase, strip punctuation,
+ * common titles ("Dr.", "Prof.", "Mr.", "Ms.", "Mrs.", "Engr.") and
+ * low-signal honorific given-name prefixes ("Md."/"Mohammad"/"Muhammad"/
+ * "Mst."/"Most." and their common spellings), collapse whitespace.
  */
 function ivd_normalize_name(string $name): string
 {
     $name = mb_strtolower(trim($name));
-    $name = str_replace(['.', ','], ' ', $name);
-    $name = preg_replace('/\b(dr|prof|professor|mr|ms|mrs|engr|md)\b/u', ' ', $name);
+    $name = str_replace(['.', ',', '-', "'", '’', '(', ')', '/'], ' ', $name);
+    $name = preg_replace(
+        '/\b(dr|prof|professor|mr|ms|mrs|engr|md|mohammad|muhammad|mohammed|muhammed|mohamed|mohd|mst|most|mosammat|mosammad)\b/u',
+        ' ',
+        $name
+    );
     $name = preg_replace('/\s+/u', ' ', (string)$name);
     return trim((string)$name);
+}
+
+/**
+ * Order-insensitive key for a normalised name: its words sorted and joined,
+ * so "karim abdul" and "abdul karim" compare equal.
+ */
+function ivd_name_token_key(string $normalized): string
+{
+    $tokens = array_filter(explode(' ', $normalized), 'strlen');
+    sort($tokens);
+    return implode(' ', $tokens);
+}
+
+/**
+ * Canonical key for a phone number: digits only, trimmed to the last 10
+ * digits (drops "+880"/"880"/leading 0 country/trunk prefixes). Returns ''
+ * when the number is too short to be meaningful.
+ */
+function ivd_phone_key(?string $phone): string
+{
+    $d = preg_replace('/\D+/', '', (string)$phone);
+    if (strlen($d) > 10) $d = substr($d, -10);
+    return strlen($d) >= 9 ? $d : '';
+}
+
+/**
+ * Whether one of the wanted normalised names and $norm match partially:
+ * all words of the shorter name (at least 2) appear in the longer one.
+ * Catches "abdul karim" vs "abdul karim khan".
+ *
+ * @param array<string,true> $wanted normalised candidate names as keys
+ */
+function ivd_name_partial_match(array $wanted, string $norm): bool
+{
+    $b = array_values(array_filter(explode(' ', $norm), 'strlen'));
+    if (!$b) return false;
+    foreach (array_keys($wanted) as $w) {
+        $a = array_values(array_filter(explode(' ', (string)$w), 'strlen'));
+        if (!$a) continue;
+        [$short, $long] = count($a) <= count($b) ? [$a, $b] : [$b, $a];
+        if (count($short) < 2) continue;
+        if (!array_diff($short, $long)) return true;
+    }
+    return false;
 }
 
 /**
  * Resolve the ei_faculty row id(s) belonging to the given user.
  *
  * 1. Direct link via ei_faculty.user_id.
- * 2. Fallback: unique name match against the user's full name and their
- *    dept_faculty profile name(s). A confident unique match is persisted
- *    back to ei_faculty.user_id so future lookups are direct.
+ * 2. Fallback matching against unlinked pool rows (active or not — inactive
+ *    members may still hold assigned duties), in order of confidence:
+ *      a. exact normalised-name match (users.full_name / dept_faculty.name);
+ *      b. same name words in any order;
+ *      c. phone match (users.phone / faculty_profiles.phone vs
+ *         ei_faculty.contact_number);
+ *      d. partial name match (shorter name fully contained in the longer
+ *         one), accepted only when it is unambiguous.
+ *    A unique match is persisted back to ei_faculty.user_id so future
+ *    lookups are direct.
  *
  * @return int[] ei_faculty ids (may be empty)
  */
@@ -65,13 +121,17 @@ function ivd_faculty_ids_for_user(int $user_id): array
         return [];
     }
 
-    // 2. Fallback: match by name
+    // 2. Fallback: gather this user's candidate names and phone numbers
     $candidates = [];
+    $phones     = [];
     try {
-        $st = db()->prepare('SELECT full_name FROM users WHERE id = ?');
+        $st = db()->prepare('SELECT full_name, phone FROM users WHERE id = ?');
         $st->execute([$user_id]);
-        $full_name = (string)$st->fetchColumn();
-        if ($full_name !== '') $candidates[] = $full_name;
+        if ($u = $st->fetch()) {
+            if ((string)($u['full_name'] ?? '') !== '') $candidates[] = (string)$u['full_name'];
+            $pk = ivd_phone_key((string)($u['phone'] ?? ''));
+            if ($pk !== '') $phones[$pk] = true;
+        }
     } catch (Throwable $e) {}
     try {
         $st = db()->prepare('SELECT name FROM dept_faculty WHERE user_id = ? AND is_active = 1');
@@ -80,25 +140,57 @@ function ivd_faculty_ids_for_user(int $user_id): array
             if ((string)$n !== '') $candidates[] = (string)$n;
         }
     } catch (Throwable $e) {}
+    try {
+        $st = db()->prepare('SELECT phone FROM faculty_profiles WHERE user_id = ?');
+        $st->execute([$user_id]);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $p) {
+            $pk = ivd_phone_key((string)$p);
+            if ($pk !== '') $phones[$pk] = true;
+        }
+    } catch (Throwable $e) {}
 
-    $wanted = [];
+    $wanted        = [];
+    $wanted_tokens = [];
     foreach ($candidates as $c) {
         $norm = ivd_normalize_name($c);
-        if ($norm !== '') $wanted[$norm] = true;
+        if ($norm === '') continue;
+        $wanted[$norm] = true;
+        $wanted_tokens[ivd_name_token_key($norm)] = true;
     }
-    if (!$wanted) return [];
+    if (!$wanted && !$phones) return [];
 
-    $matches = [];
     try {
-        foreach (db()->query('SELECT id, name, user_id FROM ei_faculty WHERE is_active = 1')->fetchAll() as $row) {
-            if (!empty($row['user_id'])) continue; // already linked to someone else
-            if (isset($wanted[ivd_normalize_name((string)$row['name'])])) {
-                $matches[] = (int)$row['id'];
-            }
-        }
+        $rows = db()->query('SELECT id, name, user_id, contact_number FROM ei_faculty')->fetchAll();
     } catch (Throwable $e) {
         return [];
     }
+
+    $exact = $token_eq = $phone_eq = $partial = [];
+    foreach ($rows as $row) {
+        if (!empty($row['user_id'])) continue; // already linked to someone else
+        $id   = (int)$row['id'];
+        $norm = ivd_normalize_name((string)$row['name']);
+        if ($norm !== '' && isset($wanted[$norm])) {
+            $exact[] = $id;
+            continue;
+        }
+        if ($norm !== '' && isset($wanted_tokens[ivd_name_token_key($norm)])) {
+            $token_eq[] = $id;
+            continue;
+        }
+        $pk = ivd_phone_key((string)($row['contact_number'] ?? ''));
+        if ($pk !== '' && isset($phones[$pk])) {
+            $phone_eq[] = $id;
+            continue;
+        }
+        if ($norm !== '' && $wanted && ivd_name_partial_match($wanted, $norm)) {
+            $partial[] = $id;
+        }
+    }
+
+    $matches = $exact ?: ($token_eq ?: $phone_eq);
+    // A partial name match is weaker evidence: trust it only when unique.
+    if (!$matches && count($partial) === 1) $matches = $partial;
 
     // Persist only a unique, unambiguous match
     if (count($matches) === 1) {
