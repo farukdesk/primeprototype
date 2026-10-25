@@ -124,9 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
                 'in=' . ($in_t ?? '—') . ', out=' . ($out_t ?? '—'));
             flash_set('success', 'Clock in/out saved for ' . date('d M Y', strtotime($pdate)) . '.');
         }
-    } elseif ($act === 'mark' && in_array($_POST['mark'] ?? '', ['absent', 'weekend', 'holiday'], true)) {
+    } elseif ($act === 'mark' && in_array($_POST['mark'] ?? '', ['absent', 'weekend', 'holiday', 'exam_duty'], true)) {
         $mark = $_POST['mark'];
         $note = trim($_POST['note'] ?? '');
+        $mark_labels = ['absent' => 'Absent', 'weekend' => 'Weekend', 'holiday' => 'Holiday', 'exam_duty' => 'Exam Duty'];
         try {
             // Cancel a leave previously created from this calendar for the day
             // (the mark below overwrites it), returning it to the balance.
@@ -147,7 +148,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
             } catch (Throwable $e) { /* leave module not installed – ignore */ }
             att_mark_dayoff($user_id, $pdate, $mark, $note !== '' ? mb_substr($note, 0, 255) : null, 'manual', null, $me_id);
             log_change('staff-attendance', 'UPDATE', $user_id, 'Day mark ' . $pdate, null, null, $mark);
-            flash_set('success', date('d M Y', strtotime($pdate)) . ' marked as ' . ucfirst($mark) . '.');
+            flash_set('success', date('d M Y', strtotime($pdate)) . ' marked as ' . $mark_labels[$mark]
+                . ($mark === 'exam_duty' ? ' — Late In / Early Out will not be counted on this day.' : '.'));
         } catch (Throwable $e) {
             flash_set('error', 'Could not save the mark. Please run the staff-attendance-day-marks-v1.sql migration first.');
         }
@@ -211,6 +213,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
         } catch (Throwable $e) {
             flash_set('error', 'Could not save the leave. Please make sure the Leave Management module is installed.');
         }
+    } elseif ($act === 'fix_times') {
+        // One-click fix: when the day was Late In / Early Out (or Short Hours /
+        // missing clock-out), replace the offending side with a generated
+        // rule-compliant time; a compliant side is kept untouched.
+        $st = db()->prepare('SELECT * FROM att_records WHERE user_id = ? AND work_date = ?');
+        $st->execute([$user_id, $pdate]);
+        $rec = $st->fetch() ?: null;
+        $fx_holidays = array_filter(
+            att_holidays_in_range($pdate, $pdate),
+            fn(string $d): bool => att_holiday_applies($user_id, $d),
+            ARRAY_FILTER_USE_KEY
+        );
+        $fx_status = att_compute_status($rec, $user_id, $pdate, att_effective_schedule($user_id), $fx_holidays, att_on_leave_user_ids($pdate));
+        if (!in_array($fx_status, ['late_in', 'early_out', 'late_and_early', 'short_hours', 'incomplete'], true)) {
+            flash_set('error', 'Nothing to fix on ' . date('d M Y', strtotime($pdate)) . ' — current status is "' . att_status_label($fx_status) . '".');
+        } else {
+            $fix = att_generate_compliant_times($user_id, $pdate, $rec);
+            if ($fix === null) {
+                flash_set('error', 'Could not generate compliant times for ' . date('d M Y', strtotime($pdate)) . '.');
+            } else {
+                db()->prepare(
+                    'INSERT INTO att_records (user_id, work_date, in_time, out_time, created_by)
+                     VALUES (?,?,?,?,?)
+                     ON DUPLICATE KEY UPDATE in_time = VALUES(in_time), out_time = VALUES(out_time)'
+                )->execute([$user_id, $pdate, $fix['in_time'], $fix['out_time'], $me_id]);
+                log_change('staff-attendance', 'UPDATE', $user_id, 'Attendance ' . $pdate, null, null,
+                    'auto-fix: in ' . att_display_time($rec['in_time'] ?? null) . '→' . att_display_time($fix['in_time'])
+                    . ', out ' . att_display_time($rec['out_time'] ?? null) . '→' . att_display_time($fix['out_time']));
+                flash_set('success', date('d M Y', strtotime($pdate)) . ' fixed — in '
+                    . att_display_time($fix['in_time']) . ', out ' . att_display_time($fix['out_time'])
+                    . ' (was ' . att_status_label($fx_status) . ').');
+            }
+        }
     } elseif ($act === 'reset') {
         db()->prepare('DELETE FROM att_records WHERE user_id = ? AND work_date = ?')->execute([$user_id, $pdate]);
         try {
@@ -238,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_edit && $member) {
         try {
             db()->prepare(
                 "DELETE FROM att_day_status
-                  WHERE user_id = ? AND status_date = ? AND status IN ('absent','weekend','holiday')"
+                  WHERE user_id = ? AND status_date = ? AND status IN ('absent','weekend','holiday','exam_duty')"
             )->execute([$user_id, $pdate]);
         } catch (Throwable $e) { /* ignore */ }
         log_change('staff-attendance', 'DELETE', $user_id, 'Attendance ' . $pdate, null, null, 'day reset');
@@ -362,7 +397,7 @@ foreach ($dates as $d) {
         // Exam invigilation duty rostered for this day. When the member clocks
         // in the status becomes Present, so this flag keeps a visible "Exam
         // Duty" mark alongside the clock in/out times.
-        'exam_duty' => att_exam_exempt($user_id, $d),
+        'exam_duty' => att_exam_exempt($user_id, $d) || att_day_override($user_id, $d) === 'exam_duty',
     ];
 }
 
@@ -736,9 +771,22 @@ $weekday_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                         <button name="mark" value="holiday" class="btn btn-outline-success btn-sm"><i class="fas fa-umbrella-beach me-1"></i> Holiday</button>
                         <button name="mark" value="casual" class="btn btn-outline-info btn-sm"><i class="fas fa-mug-hot me-1"></i> Casual Leave</button>
                         <button name="mark" value="sick" class="btn btn-outline-warning btn-sm"><i class="fas fa-briefcase-medical me-1"></i> Sick Leave</button>
+                        <button name="mark" value="exam_duty" class="btn btn-outline-primary btn-sm"><i class="fas fa-user-shield me-1"></i> Exam Duty</button>
                     </div>
                     <input type="text" name="note" class="form-control form-control-sm" maxlength="255" placeholder="Note / reason (optional)">
-                    <div class="form-text">Applies to this staff member only. University-wide holidays are managed on the Holidays page. Casual / Sick Leave deducts 1 day from the yearly leave balance (Reset Day restores it).</div>
+                    <div class="form-text">Applies to this staff member only. University-wide holidays are managed on the Holidays page. Casual / Sick Leave deducts 1 day from the yearly leave balance (Reset Day restores it). Exam Duty excuses Late In / Early Out / Insufficient Hours on this day without touching the recorded times.</div>
+                </form>
+
+                <hr class="my-2">
+                <form method="POST" class="mb-1" onsubmit="return confirm('Replace the late clock-in / early clock-out with generated rule-compliant times?');">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="day_action" value="fix_times">
+                    <input type="hidden" name="date" class="dam-date" value="">
+                    <input type="hidden" name="report" value="<?= h($report) ?>">
+                    <input type="hidden" name="dept" value="<?= (int)$dept_id ?>">
+                    <input type="hidden" name="q" value="<?= h($search) ?>">
+                    <button class="btn btn-outline-success btn-sm"><i class="fas fa-wand-magic-sparkles me-1"></i> Auto-fix Clock In/Out</button>
+                    <div class="form-text">One click: if this day has a Late In, Early Out, Insufficient Hours or a missing clock-out, the offending time is replaced with a generated time that falls within the attendance rules. A compliant time is kept as is.</div>
                 </form>
 
                 <hr class="my-2">
