@@ -22,7 +22,7 @@
  *     Empty count cells show an em dash "—". Counts are two digits.
  *     CL/ML are the approved Casual / Medical(Sick) leave days inside the
  *     range, shown as a count plus the dates, e.g. "02 (24,25)".
- *     PA (Penalty Absent) is the attendance-policy penalty (every 4 Late In /
+ *     PA (Penalty Absent) is the attendance-policy penalty (every 3 Late In /
  *     Early Out days inside the range = 1 absent day) as a count only.
  *     Absent shows the day count plus the dates, e.g. "02 (4,11)".
  *
