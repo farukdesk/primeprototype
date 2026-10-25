@@ -825,7 +825,7 @@ function att_day_override(int $user_id, string $date): ?string
         try {
             $stmt = db()->prepare(
                 "SELECT user_id, status FROM att_day_status
-                  WHERE status_date = ? AND status IN ('absent', 'weekend', 'holiday')"
+                  WHERE status_date = ? AND status IN ('absent', 'weekend', 'holiday', 'exam_duty')"
             );
             $stmt->execute([$date]);
             foreach ($stmt->fetchAll() as $r) $map[(int)$r['user_id']] = (string)$r['status'];
@@ -855,7 +855,10 @@ function att_compute_status(?array $record, int $user_id, string $date, array $s
     // Invigilation-duty exemption: on days the faculty member has an exam
     // invigilation duty (Exam Invigilation), never count Late In / Early Out /
     // Insufficient Hours -- the exam duty replaces their office schedule.
-    $exam_exempt = att_exam_exempt($user_id, $date);
+    // An admin "Exam Duty" quick mark from the staff calendar grants the same
+    // exemption for duties not rostered in the Exam Invigilation module.
+    $exam_exempt = att_exam_exempt($user_id, $date)
+                || att_day_override($user_id, $date) === 'exam_duty';
 
     // Running-exam role exemption: members of exam-management groups (names
     // containing Coordinator, Head, Dean, Section Officer or Controller) are
@@ -1401,16 +1404,129 @@ function att_day_status_rows(string $from, string $to): array
     }
 }
 
-/** Mark one day as Approved Leave / Day Off / Absent / Weekend / Holiday for a staff member (idempotent). */
+/** Mark one day as Approved Leave / Day Off / Absent / Weekend / Holiday / Exam Duty for a staff member (idempotent). */
 function att_mark_dayoff(int $user_id, string $date, string $status, ?string $note, string $source = 'manual', ?int $leave_request_id = null, ?int $created_by = null): void
 {
-    if (!in_array($status, ['approved_leave', 'day_off', 'absent', 'weekend', 'holiday'], true)) $status = 'approved_leave';
+    if (!in_array($status, ['approved_leave', 'day_off', 'absent', 'weekend', 'holiday', 'exam_duty'], true)) $status = 'approved_leave';
+    if ($status === 'exam_duty') att_ensure_exam_duty_mark();
     db()->prepare(
         'INSERT INTO att_day_status (user_id, status_date, status, note, source, leave_request_id, created_by)
          VALUES (?,?,?,?,?,?,?)
          ON DUPLICATE KEY UPDATE status = VALUES(status), note = VALUES(note),
                                  source = VALUES(source), leave_request_id = VALUES(leave_request_id)'
     )->execute([$user_id, $date, $status, $note, $source, $leave_request_id, $created_by]);
+}
+
+/**
+ * Auto-migrate: make sure the att_day_status.status enum accepts 'exam_duty'
+ * (mirrors admin/staff-attendance-exam-duty-mark.sql). Runs at most once per
+ * request and is a no-op once applied or when the table is missing.
+ */
+function att_ensure_exam_duty_mark(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $col = db()->query("SHOW COLUMNS FROM att_day_status LIKE 'status'")->fetch();
+        if ($col && strpos((string)($col['Type'] ?? ''), 'exam_duty') === false) {
+            db()->exec(
+                "ALTER TABLE att_day_status
+                   MODIFY `status` enum('approved_leave','day_off','absent','weekend','holiday','exam_duty')
+                          NOT NULL DEFAULT 'approved_leave'"
+            );
+        }
+    } catch (Throwable $e) {
+        // att_day_status migration not applied yet – marking will report it.
+    }
+}
+
+/**
+ * Generate rule-compliant clock in/out times for a day flagged Late In /
+ * Early Out / Short Hours / Incomplete ("one-click fix"). Mirrors the limits
+ * used by att_compute_status(): the member's effective schedule (or approved
+ * Thu/Fri On Campus slot window), the June-2026 policy buffers per Employee
+ * Type, the early-bird 08:30→16:30 allowance, the faculty 7h30 daily minimum
+ * and the faculty flexible-Friday strict 8 hours.
+ *
+ * A compliant side is kept untouched; an offending side gets a slightly
+ * randomised time inside the allowed window so fixed days look natural.
+ * Returns ['in_time' => 'HH:MM:SS', 'out_time' => 'HH:MM:SS'] or null when
+ * there is nothing to fix (or the day is online-only / has no clock-in).
+ */
+function att_generate_compliant_times(int $user_id, string $date, ?array $rec): ?array
+{
+    $in_min  = att_time_to_minutes($rec['in_time']  ?? null);
+    $out_min = att_time_to_minutes($rec['out_time'] ?? null);
+    if ($in_min === null) return null; // never fabricate a whole day
+
+    $sched = att_effective_schedule($user_id);
+    $slot  = att_slot_window($user_id, $date);
+    if ($slot !== null) {
+        if (!empty($slot['online_only'])) return null;
+        $sched['start_time'] = $slot['start_time'];
+        $sched['close_time'] = $slot['close_time'];
+    }
+
+    $policy = att_policy_active($date);
+    $etype  = $policy ? att_employee_type($user_id) : '';
+    $in_buffer  = (int)$sched['in_buffer_minutes'];
+    $out_buffer = (int)$sched['out_buffer_minutes'];
+    if ($policy && $etype === 'administrative') {
+        $in_buffer  = ATT_POLICY_ADMIN_IN_BUFFER;
+        $out_buffer = ATT_POLICY_OUT_BUFFER;
+    } elseif ($policy && $etype === 'educational') {
+        $in_buffer  = ATT_POLICY_FACULTY_IN_BUFFER;
+        $out_buffer = ATT_POLICY_OUT_BUFFER;
+    }
+
+    $start     = (int)att_time_to_minutes($sched['start_time']);
+    $close     = (int)att_time_to_minutes($sched['close_time']);
+    $start_lim = $start + $in_buffer;   // latest on-time clock-in
+    $close_lim = $close - $out_buffer;  // earliest allowed clock-out
+
+    $fixed_in  = $in_min;
+    $fixed_out = $out_min;
+
+    // Late in: generated arrival inside the on-time window.
+    if ($fixed_in > $start_lim) {
+        $fixed_in = random_int($start, $start_lim);
+    }
+
+    if ($policy && $etype === 'educational' && (int)date('N', strtotime($date)) === 5) {
+        // Faculty flexible Friday: any times are fine, but strict 8 hours total.
+        $fixed_in = $in_min; // the real arrival stays — only the total matters
+        if ($fixed_out === null || $fixed_out - $fixed_in < ATT_POLICY_FRIDAY_MIN_MINUTES) {
+            $fixed_out = $fixed_in + ATT_POLICY_FRIDAY_MIN_MINUTES + random_int(2, 14);
+        }
+    } else {
+        // Early birds (in by 08:30) may leave from 16:30 under the policy.
+        $out_ok = $close_lim;
+        if ($policy && $fixed_in <= (int)att_time_to_minutes(ATT_POLICY_EARLY_IN)) {
+            $out_ok = min($close_lim, (int)att_time_to_minutes(ATT_POLICY_EARLY_OUT_OK));
+        }
+        // Early out (or missing out): generated departure at/after closing.
+        if ($fixed_out === null || $fixed_out < $out_ok) {
+            $fixed_out = $out_ok + random_int(1, 18);
+        }
+        // Faculty daily minimum (7h 30m) under the policy.
+        if ($policy && $etype === 'educational' && $slot === null
+            && $fixed_out - $fixed_in < ATT_POLICY_FACULTY_MIN_MINUTES) {
+            $fixed_out = $fixed_in + ATT_POLICY_FACULTY_MIN_MINUTES + random_int(2, 14);
+        }
+    }
+
+    if ($fixed_in === $in_min && $fixed_out === $out_min) return null; // nothing to fix
+
+    $fixed_out = min($fixed_out, 23 * 60 + 59); // never roll past midnight
+
+    $fmt = static function (int $m): string {
+        return sprintf('%02d:%02d:%02d', intdiv($m, 60) % 24, $m % 60, random_int(0, 59));
+    };
+    return [
+        'in_time'  => $fixed_in  === $in_min  ? (string)$rec['in_time']  : $fmt($fixed_in),
+        'out_time' => $fixed_out === $out_min ? (string)$rec['out_time'] : $fmt($fixed_out),
+    ];
 }
 
 // ── Custom Thursday / Friday day slots ────────────────────────────────────
