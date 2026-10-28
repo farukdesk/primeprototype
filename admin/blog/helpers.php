@@ -99,6 +99,18 @@ function blog_ensure_schema(): void
                     ADD KEY idx_blog_post_pinned (is_pinned, published_at)"
             );
         }
+        // Auto-migrate: author display fields (shown on the public blog detail page).
+        $col = $db->query("SHOW COLUMNS FROM blog_posts LIKE 'author_name'")->fetch();
+        if (!$col) {
+            $db->exec(
+                "ALTER TABLE blog_posts
+                    ADD COLUMN author_name       VARCHAR(190) NULL AFTER meta_description,
+                    ADD COLUMN author_role       VARCHAR(190) NULL AFTER author_name,
+                    ADD COLUMN author_department VARCHAR(190) NULL AFTER author_role,
+                    ADD COLUMN author_bio        TEXT NULL AFTER author_department,
+                    ADD COLUMN image_caption     VARCHAR(500) NULL AFTER featured_image"
+            );
+        }
     } catch (Throwable $e) {
         // Insufficient privileges – run admin/blog-v1.sql manually.
     }
