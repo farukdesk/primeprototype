@@ -11,6 +11,21 @@ require_access('blog', 'can_view');
 
 $page_title = 'Blog Posts';
 
+// Quick pin/unpin toggle
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'toggle_pin') {
+    csrf_check();
+    if (!blog_can('can_edit')) {
+        flash_set('error', 'You do not have permission to pin posts.');
+    } else {
+        $pid = (int)($_POST['id'] ?? 0);
+        if ($pid > 0 && blog_find_post($pid)) {
+            db()->prepare('UPDATE blog_posts SET is_pinned = 1 - is_pinned WHERE id = ?')->execute([$pid]);
+            flash_set('success', 'Pin status updated.');
+        }
+    }
+    redirect(APP_URL . '/blog/index.php');
+}
+
 $search   = trim($_GET['search'] ?? '');
 $status   = $_GET['status'] ?? '';
 $category = (int)($_GET['category'] ?? 0);
@@ -167,6 +182,9 @@ require_once __DIR__ . '/../includes/header.php';
                             <?= $p['status'] === 'published'
                                 ? '<span class="badge bg-success">Published</span>'
                                 : '<span class="badge bg-secondary">Draft</span>' ?>
+                            <?php if ($p['is_pinned']): ?>
+                            <span class="badge bg-warning text-dark mt-1"><i class="fas fa-thumbtack me-1"></i>Pinned</span>
+                            <?php endif; ?>
                         </td>
                         <td><?= (int)$p['views'] ?></td>
                         <td>
@@ -185,6 +203,16 @@ require_once __DIR__ . '/../includes/header.php';
                                 </a>
                                 <?php endif; ?>
                                 <?php if (blog_can('can_edit')): ?>
+                                <form method="POST">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="action" value="toggle_pin">
+                                    <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                                    <button class="btn btn-sm <?= $p['is_pinned'] ? 'btn-warning' : 'btn-outline-warning' ?>"
+                                            title="<?= $p['is_pinned'] ? 'Unpin from blog page' : 'Pin on blog page' ?>"
+                                            style="border-radius:7px;">
+                                        <i class="fas fa-thumbtack"></i>
+                                    </button>
+                                </form>
                                 <a href="<?= APP_URL ?>/blog/edit.php?id=<?= $p['id'] ?>"
                                    class="btn btn-sm btn-outline-primary" title="Edit" style="border-radius:7px;">
                                     <i class="fas fa-edit"></i>
