@@ -37,6 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $allow_comments = isset($_POST['allow_comments']) ? 1 : 0;
     $meta_title     = trim($_POST['meta_title'] ?? '');
     $meta_desc      = trim($_POST['meta_description'] ?? '');
+    $author_name    = trim($_POST['author_name'] ?? '');
+    $author_role    = trim($_POST['author_role'] ?? '');
+    $author_dept    = trim($_POST['author_department'] ?? '');
+    $author_bio     = trim($_POST['author_bio'] ?? '');
+    $image_caption  = trim($_POST['image_caption'] ?? '');
     $regen_slug     = isset($_POST['regenerate_slug']);
 
     if ($title === '') $errors[] = 'Title is required.';
@@ -69,14 +74,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare(
             'UPDATE blog_posts SET
                 title = ?, slug = ?, excerpt = ?, content = ?, content_type = ?,
-                featured_image = ?, category_id = ?, tags = ?, status = ?, is_pinned = ?, published_at = ?,
-                allow_comments = ?, meta_title = ?, meta_description = ?
+                featured_image = ?, image_caption = ?, category_id = ?, tags = ?, status = ?, is_pinned = ?, published_at = ?,
+                allow_comments = ?, meta_title = ?, meta_description = ?,
+                author_name = ?, author_role = ?, author_department = ?, author_bio = ?
              WHERE id = ?'
         )->execute([
             $title, $slug, $excerpt !== '' ? $excerpt : null, $content, $content_type,
-            $featured_image, $category_id, $tags !== '' ? $tags : null,
+            $featured_image, $image_caption !== '' ? $image_caption : null,
+            $category_id, $tags !== '' ? $tags : null,
             $is_published ? 'published' : 'draft', $is_pinned, $published_at, $allow_comments,
             $meta_title !== '' ? $meta_title : null, $meta_desc !== '' ? $meta_desc : null,
+            $author_name !== '' ? $author_name : null, $author_role !== '' ? $author_role : null,
+            $author_dept !== '' ? $author_dept : null, $author_bio !== '' ? $author_bio : null,
             $id,
         ]);
 
@@ -98,6 +107,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'meta_title'       => $meta_title,
         'meta_description' => $meta_desc,
         'featured_image'   => $featured_image,
+        'image_caption'    => $image_caption,
+        'author_name'      => $author_name,
+        'author_role'      => $author_role,
+        'author_department'=> $author_dept,
+        'author_bio'       => $author_bio,
     ]);
 }
 
@@ -197,6 +211,37 @@ require_once __DIR__ . '/../includes/header.php';
                 </div>
             </div>
 
+            <!-- Author -->
+            <div class="card mt-4">
+                <div class="card-header py-3 px-4">
+                    <h6 class="mb-0 fw-semibold"><i class="fas fa-user-pen me-2 text-muted"></i>Author (optional — shown on the post page)</h6>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Name</label>
+                            <input type="text" name="author_name" class="form-control" maxlength="190"
+                                   value="<?= h($post['author_name'] ?? '') ?>" placeholder="e.g. Dr. Jane Rahman">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Role</label>
+                            <input type="text" name="author_role" class="form-control" maxlength="190"
+                                   value="<?= h($post['author_role'] ?? '') ?>" placeholder="e.g. Associate Professor">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-medium">Department</label>
+                            <input type="text" name="author_department" class="form-control" maxlength="190"
+                                   value="<?= h($post['author_department'] ?? '') ?>" placeholder="e.g. Dept. of EEE">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-medium">Short Bio</label>
+                            <textarea name="author_bio" class="form-control" rows="2" maxlength="1000"
+                                      placeholder="One or two sentences about the author…"><?= h($post['author_bio'] ?? '') ?></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- Right column: settings -->
@@ -281,6 +326,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <input type="file" name="featured_image" class="form-control"
                            accept=".jpg,.jpeg,.png,.gif,.webp">
                     <div class="form-text mt-2">Uploading a new image replaces the current one.</div>
+                    <div class="mt-3">
+                        <label class="form-label fw-medium">Image Caption (optional)</label>
+                        <input type="text" name="image_caption" class="form-control" maxlength="500"
+                               value="<?= h($post['image_caption'] ?? '') ?>" placeholder="Shown under the featured image">
+                    </div>
                 </div>
             </div>
 
