@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $category_id    = (int)($_POST['category_id'] ?? 0) ?: null;
     $tags           = trim($_POST['tags'] ?? '');
     $is_published   = isset($_POST['is_published']) ? 1 : 0;
+    $is_pinned      = isset($_POST['is_pinned']) ? 1 : 0;
     $published_at   = $is_published ? (trim($_POST['published_at'] ?? '') ?: date('Y-m-d H:i:s')) : null;
     $allow_comments = isset($_POST['allow_comments']) ? 1 : 0;
     $meta_title     = trim($_POST['meta_title'] ?? '');
@@ -53,12 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         db()->prepare(
             'INSERT INTO blog_posts
              (title, slug, excerpt, content, content_type, featured_image, category_id, tags,
-              status, published_at, allow_comments, meta_title, meta_description, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+              status, is_pinned, published_at, allow_comments, meta_title, meta_description, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $title, $slug, $excerpt !== '' ? $excerpt : null, $content, $content_type,
             $featured_image, $category_id, $tags !== '' ? $tags : null,
-            $is_published ? 'published' : 'draft', $published_at, $allow_comments,
+            $is_published ? 'published' : 'draft', $is_pinned, $published_at, $allow_comments,
             $meta_title !== '' ? $meta_title : null, $meta_desc !== '' ? $meta_desc : null,
             $user['id'],
         ]);
@@ -70,6 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     save_old(compact('title', 'excerpt', 'content_type', 'tags', 'meta_title') + [
         'category_id'      => (string)($category_id ?? ''),
         'is_published'     => (string)$is_published,
+        'is_pinned'        => (string)$is_pinned,
         'allow_comments'   => (string)$allow_comments,
         'meta_description' => $meta_desc,
     ]);
@@ -178,6 +180,13 @@ require_once __DIR__ . '/../includes/header.php';
                         <input type="datetime-local" name="published_at" class="form-control"
                                value="<?= date('Y-m-d\TH:i') ?>">
                         <div class="form-text">Leave blank to use current time.</div>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_pinned" name="is_pinned"
+                               value="1" <?= old('is_pinned') ? 'checked' : '' ?>>
+                        <label class="form-check-label fw-medium" for="is_pinned">
+                            <i class="fas fa-thumbtack me-1 text-warning"></i>Pin on blog page
+                        </label>
                     </div>
                     <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" id="allow_comments" name="allow_comments"
