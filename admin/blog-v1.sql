@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS blog_posts (
     category_id      INT UNSIGNED NULL,
     tags             VARCHAR(500) NULL,
     status           ENUM('draft','published') NOT NULL DEFAULT 'draft',
+    is_pinned        TINYINT(1) NOT NULL DEFAULT 0,
     published_at     DATETIME NULL,
     allow_comments   TINYINT(1) NOT NULL DEFAULT 1,
     views            INT UNSIGNED NOT NULL DEFAULT 0,
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS blog_posts (
     PRIMARY KEY (id),
     UNIQUE KEY uq_blog_post_slug (slug),
     KEY idx_blog_post_status (status, published_at),
+    KEY idx_blog_post_pinned (is_pinned, published_at),
     KEY idx_blog_post_cat (category_id),
     CONSTRAINT fk_blog_post_cat FOREIGN KEY (category_id)
         REFERENCES blog_categories (id) ON DELETE SET NULL

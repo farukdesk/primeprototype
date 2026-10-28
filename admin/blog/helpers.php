@@ -47,6 +47,7 @@ function blog_ensure_schema(): void
                 category_id      INT UNSIGNED NULL,
                 tags             VARCHAR(500) NULL,
                 status           ENUM('draft','published') NOT NULL DEFAULT 'draft',
+                is_pinned        TINYINT(1) NOT NULL DEFAULT 0,
                 published_at     DATETIME NULL,
                 allow_comments   TINYINT(1) NOT NULL DEFAULT 1,
                 views            INT UNSIGNED NOT NULL DEFAULT 0,
@@ -58,6 +59,7 @@ function blog_ensure_schema(): void
                 PRIMARY KEY (id),
                 UNIQUE KEY uq_blog_post_slug (slug),
                 KEY idx_blog_post_status (status, published_at),
+                KEY idx_blog_post_pinned (is_pinned, published_at),
                 KEY idx_blog_post_cat (category_id),
                 CONSTRAINT fk_blog_post_cat FOREIGN KEY (category_id)
                     REFERENCES blog_categories (id) ON DELETE SET NULL
@@ -88,6 +90,15 @@ function blog_ensure_schema(): void
                  'Website blog: posts, categories and comment moderation.',
                  'fas fa-blog', NULL, 0, 1, 1, 1, 1, 1)"
         );
+        // Auto-migrate: is_pinned column for installs created before pinning existed.
+        $col = $db->query("SHOW COLUMNS FROM blog_posts LIKE 'is_pinned'")->fetch();
+        if (!$col) {
+            $db->exec(
+                "ALTER TABLE blog_posts
+                    ADD COLUMN is_pinned TINYINT(1) NOT NULL DEFAULT 0 AFTER status,
+                    ADD KEY idx_blog_post_pinned (is_pinned, published_at)"
+            );
+        }
     } catch (Throwable $e) {
         // Insufficient privileges – run admin/blog-v1.sql manually.
     }
