@@ -280,7 +280,7 @@ if (is_portal_student()) {
 
     <?php
     $current_path = $_SERVER['PHP_SELF'];
-    $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false || strpos($current_path, '/policy-procedure/') !== false;
+    $is_website_active  = strpos($current_path, '/cms/') !== false || strpos($current_path, '/homepage/') !== false || strpos($current_path, '/pages/') !== false || strpos($current_path, '/policy-procedure/') !== false || strpos($current_path, '/blog/') !== false;
     $is_course_offer_active = strpos($current_path, '/course-offer/') !== false;
     $is_spring_result_active = strpos($current_path, '/spring-result/') !== false;
     $is_tabulation_checker_active = strpos($current_path, '/tabulation-checker/') !== false;
@@ -422,7 +422,7 @@ if (is_portal_student()) {
     <?php endif; ?>
 
     <!-- ── Website & CMS ── -->
-    <?php if (is_super_admin() || can_access('homepage') || can_access('cms-notice-board')): ?>
+    <?php if (is_super_admin() || can_access('homepage') || can_access('cms-notice-board') || can_access('blog')): ?>
     <button class="nav-group-toggle <?= $is_website_active ? '' : 'collapsed' ?>"
             data-bs-toggle="collapse" data-bs-target="#grp-website"
             aria-expanded="<?= $is_website_active ? 'true' : 'false' ?>">
@@ -457,6 +457,16 @@ if (is_portal_student()) {
                     <i class="fas fa-newspaper"></i> News
                 </a>
             </li>
+            <?php endif; ?>
+            <?php if (is_super_admin() || can_access('blog')): ?>
+            <li class="nav-item">
+                <a href="<?= APP_URL ?>/blog/index.php"
+                   class="<?= strpos($current_path, '/blog/') !== false ? 'active' : '' ?>">
+                    <i class="fas fa-blog"></i> Blog
+                </a>
+            </li>
+            <?php endif; ?>
+            <?php if (is_super_admin()): ?>
             <li class="nav-item">
                 <a href="<?= APP_URL ?>/cms/programs/index.php"
                    class="<?= strpos($current_path, '/cms/programs/') !== false ? 'active' : '' ?>">
