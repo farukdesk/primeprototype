@@ -356,6 +356,8 @@ function wf_get_approver_queue(): array
                     p.program_name,
                     c.name          AS chain_name,
                     u.full_name     AS creator_name,
+                    e.exam_name,
+                    e.exam_year,
                     s.step_label    AS current_step_label,
                     s.group_id      AS current_group_id,
                     g.name          AS current_group_name,
@@ -369,6 +371,7 @@ function wf_get_approver_queue(): array
                                                  AND s.step_order = ms.current_step_order
              LEFT JOIN user_groups g              ON g.id  = s.group_id
              LEFT JOIN users u                    ON u.id  = ms.created_by
+             LEFT JOIN ei_exams e                 ON e.id  = ms.exam_id
              $where_sql
              ORDER BY ms.updated_at ASC"
         );

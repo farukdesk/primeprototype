@@ -64,6 +64,7 @@ foreach ($sheets as $s) {
                     <tr>
                         <th class="px-4" style="width:40px;">#</th>
                         <th>Subject</th>
+                        <th>Exam</th>
                         <th>Department / Program</th>
                         <th>Semester</th>
                         <th>Submitted By</th>
@@ -81,6 +82,13 @@ foreach ($sheets as $s) {
                         <div class="fw-medium"><?= h($s['subject_title']) ?></div>
                         <?php if ($s['subject_code']): ?>
                         <small class="text-muted"><?= h($s['subject_code']) ?></small>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!empty($s['exam_name'])): ?>
+                            <?= h(trim($s['exam_name'] . ' ' . ($s['exam_year'] ?? ''))) ?>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
                         <?php endif; ?>
                     </td>
                     <td>
