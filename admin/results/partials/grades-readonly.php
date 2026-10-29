@@ -60,11 +60,35 @@ function _gr_get_absent_flags(array $g): array {
     }
     return [];
 }
+
+// Sub-exam diff context (set by workflow-review.php; defaults keep partial reusable)
+$_sub       = !empty($is_sub_exam);
+$_base_pk   = $base_marks_by_pk  ?? [];
+$_base_sid  = $base_marks_by_sid ?? [];
+
+/**
+ * Compare a sub-exam mark against the base-exam mark for one component.
+ * Returns [status, base_value]: status = 'same' | 'modified' | 'new' | null (no mark).
+ */
+function _gr_diff($cur, array $base, int $di): array {
+    $has_cur  = $cur !== null && $cur !== '';
+    $has_base = array_key_exists($di, $base);
+    if (!$has_cur)  return [null, $has_base ? $base[$di] : null];
+    if (!$has_base) return ['new', null];
+    return [abs((float)$cur - (float)$base[$di]) < 0.001 ? 'same' : 'modified', $base[$di]];
+}
 ?>
 <div class="card" style="border-radius:12px;">
-    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center">
+    <div class="card-header py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h6 class="mb-0 fw-semibold"><i class="fas fa-list me-2 text-muted"></i>Student Marks</h6>
-        <span class="badge bg-secondary"><?= count($grades) ?> student<?= count($grades) !== 1 ? 's' : '' ?></span>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php if ($_sub): ?>
+            <span class="small text-muted me-1"><i class="fas fa-rotate-left me-1"></i>vs base exam:</span>
+            <span class="badge" style="background:#fff3cd; color:#664d03; border:1px solid #ffe69c;">Modified</span>
+            <span class="badge" style="background:#d1e7dd; color:#0f5132; border:1px solid #a3cfbb;">Newly entered</span>
+            <?php endif; ?>
+            <span class="badge bg-secondary"><?= count($grades) ?> student<?= count($grades) !== 1 ? 's' : '' ?></span>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -104,16 +128,39 @@ function _gr_get_absent_flags(array $g): array {
                         $_remarks_parts[] = 'Marked as absent';
                     }
                     ?>
+                    <?php
+                    $_base_row = $_sub
+                        ? ($_base_pk[(int)($g['student_id'] ?? 0)]
+                            ?? ($_base_sid[trim((string)($g['s_student_id'] ?? $g['student_sid'] ?? ''))] ?? []))
+                        : [];
+                    ?>
                     <tr class="<?= $g['is_absent'] ? 'table-warning' : '' ?>">
                         <td class="px-3"><?= $idx + 1 ?></td>
                         <td><code><?= h($g['s_student_id'] ?? $g['student_sid']) ?></code></td>
                         <td><?= h($g['s_full_name'] ?? $g['student_name']) ?></td>
                         <?php foreach ($_dist as $di => $_d): ?>
-                        <td class="text-center">
+                        <?php
+                        $_cell_style = ''; $_cell_title = ''; $_base_val = null; $_diff = null;
+                        if ($_sub && !$g['is_absent'] && empty($_abs_flags[$di])) {
+                            [$_diff, $_base_val] = _gr_diff($_marks[$di] ?? null, $_base_row, $di);
+                            if ($_diff === 'modified') {
+                                $_cell_style = 'background:#fff3cd; box-shadow:inset 0 0 0 1px #ffc107;';
+                                $_cell_title = 'Modified — base exam mark: ' . $_base_val;
+                            } elseif ($_diff === 'new') {
+                                $_cell_style = 'background:#d1e7dd; box-shadow:inset 0 0 0 1px #198754;';
+                                $_cell_title = 'Newly entered — no mark in base exam';
+                            }
+                        }
+                        ?>
+                        <td class="text-center" style="<?= $_cell_style ?>"<?= $_cell_title !== '' ? ' title="' . h($_cell_title) . '"' : '' ?>>
                             <?php if ($g['is_absent']): ?>
                             —
                             <?php elseif (!empty($_abs_flags[$di])): ?>
                             <span class="badge bg-warning text-dark" title="Absent for this component">Abs</span>
+                            <?php elseif ($_diff === 'modified'): ?>
+                            <span class="text-muted text-decoration-line-through small me-1"><?= h($_base_val) ?></span><strong><?= h($_marks[$di]) ?></strong>
+                            <?php elseif ($_diff === 'new'): ?>
+                            <strong><?= h($_marks[$di]) ?></strong>
                             <?php else: ?>
                             <?= h($_marks[$di] ?? '—') ?>
                             <?php endif; ?>

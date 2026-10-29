@@ -74,6 +74,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $cur_step = wf_get_step((int)$sheet['chain_id'], $current_step_order);
 
+// ── Exam info + sub-exam (supplementary/makeup) baseline marks ────────────────
+// Shows the exam title in the header and, when the sheet belongs to a sub exam
+// (ei_exams.base_exam_id → regular exam), compares every mark against the base
+// exam sheet so modified / newly entered marks can be highlighted for review.
+$exam_label        = '';
+$is_sub_exam       = false;
+$base_exam_label   = '';
+$base_marks_by_pk  = [];   // students.id  => [dist_index => float]
+$base_marks_by_sid = [];   // student_sid  => [dist_index => float]
+
+if (!empty($sheet['exam_id'])) {
+    try {
+        $exq = db()->prepare('SELECT * FROM ei_exams WHERE id = ? LIMIT 1');
+        $exq->execute([(int)$sheet['exam_id']]);
+        $exam_row = $exq->fetch() ?: null;
+        if ($exam_row) {
+            $exam_label = trim((string)$exam_row['exam_name'] . ' ' . (string)($exam_row['exam_year'] ?? ''));
+
+            $base_exam_id = (int)($exam_row['base_exam_id'] ?? 0);
+            if ($base_exam_id > 0 && $base_exam_id !== (int)$sheet['exam_id']) {
+                $is_sub_exam = true;
+                $bq = db()->prepare('SELECT exam_name, exam_year FROM ei_exams WHERE id = ? LIMIT 1');
+                $bq->execute([$base_exam_id]);
+                if ($brow = $bq->fetch()) {
+                    $base_exam_label = trim((string)$brow['exam_name'] . ' ' . (string)($brow['exam_year'] ?? ''));
+                }
+
+                // Match base sheets of the SAME subject (offer, curriculum, or
+                // dept + subject code — mirrors the mark-entry pre-fill logic).
+                $subj_where  = '(ms.offer_subject_id = ?';
+                $subj_params = [(int)($sheet['offer_subject_id'] ?? 0)];
+                if (!empty($sheet['curriculum_id'])) {
+                    $subj_where   .= ' OR ms.curriculum_id = ?';
+                    $subj_params[] = (int)$sheet['curriculum_id'];
+                }
+                if (!empty($sheet['subject_code']) && !empty($sheet['dept_id'])) {
+                    $subj_where   .= ' OR (ms.dept_id = ? AND ms.subject_code = ?)';
+                    $subj_params[] = (int)$sheet['dept_id'];
+                    $subj_params[] = (string)$sheet['subject_code'];
+                }
+                $subj_where .= ')';
+
+                // Later rows win: published sheets overwrite pending/draft values.
+                $bmq = db()->prepare(
+                    "SELECT g.student_sid, g.student_id, g.marks_json,
+                            g.attendance, g.class_test, g.mid_term, g.final_exam
+                       FROM result_mark_sheets ms
+                       JOIN result_sheet_grades g ON g.sheet_id = ms.id
+                      WHERE $subj_where
+                        AND ms.exam_id = ?
+                        AND ms.id <> ?
+                      ORDER BY FIELD(ms.workflow_status, 'draft', 'returned', 'pending', 'published') ASC,
+                               ms.updated_at ASC"
+                );
+                $bmq->execute(array_merge($subj_params, [$base_exam_id, $id]));
+                foreach ($bmq->fetchAll(PDO::FETCH_ASSOC) as $m) {
+                    $marks = json_decode((string)$m['marks_json'], true);
+                    $prev  = [];
+                    if (is_array($marks)) {
+                        foreach ($marks as $i => $v) {
+                            if ($v !== null && $v !== '') $prev[(int)$i] = (float)$v;
+                        }
+                    }
+                    if (empty($prev)) { // legacy fixed columns fallback
+                        foreach ([$m['attendance'], $m['class_test'], $m['mid_term'], $m['final_exam']] as $i => $v) {
+                            if ($v !== null && $v !== '') $prev[$i] = (float)$v;
+                        }
+                    }
+                    if (empty($prev)) continue;
+                    if (!empty($m['student_id']))               $base_marks_by_pk[(int)$m['student_id']] = $prev;
+                    if (trim((string)$m['student_sid']) !== '') $base_marks_by_sid[trim((string)$m['student_sid'])] = $prev;
+                }
+            }
+        }
+    } catch (Throwable $_e) { /* ei_exams/base_exam_id unavailable — skip */ }
+}
+
 require_once __DIR__ . '/../includes/header.php';
 ?>
 
