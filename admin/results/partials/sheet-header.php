@@ -26,6 +26,17 @@
                     <?php if (!empty($sheet['academic_year'])): ?>&nbsp;(<?= h($sheet['academic_year']) ?>)<?php endif; ?>
                     <?php if (!empty($sheet['credits'])): ?>&nbsp;·&nbsp;<?= h($sheet['credits']) ?> Credits<?php endif; ?>
                 </div>
+                <?php if (!empty($exam_label)): ?>
+                <div class="small mt-1">
+                    <i class="fas fa-graduation-cap me-1 text-muted"></i>
+                    Exam: <strong style="color:#002147;"><?= h($exam_label) ?></strong>
+                    <?php if (!empty($is_sub_exam)): ?>
+                    <span class="badge bg-warning text-dark ms-1" style="font-size:.7rem;">
+                        <i class="fas fa-rotate-left me-1"></i>Sub Exam<?= $base_exam_label !== '' ? ' of ' . h($base_exam_label) : '' ?>
+                    </span>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
                 <?php if (!empty($sheet['chain_name'])): ?>
                 <div class="small text-muted mt-1">
                     <i class="fas fa-sitemap me-1"></i>Chain: <?= h($sheet['chain_name']) ?>
