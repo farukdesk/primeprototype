@@ -265,7 +265,7 @@ ob_start();
         <span class="lg-off">HOL = Holiday &middot; WE = Weekend</span>
         <br>Policy effective 01 Jun 2026: Administrative clock-in grace 15 min, Faculty 20 min (no clock-out grace);
         faculty Fridays are flexible (minimum 7 hours); clock-in by 8:30 AM allows leaving from 4:30 PM;
-        every 4 Late In / Early Out days count as 1 Absent day (Penalty Absent column).
+        every 3 Late In / Early Out days count as 1 Absent day (Penalty Absent column).
     </div>
 </body>
 </html>

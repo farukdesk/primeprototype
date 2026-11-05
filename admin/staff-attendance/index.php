@@ -209,7 +209,7 @@ if (($_GET['export'] ?? '') === 'csv') {
     } else {
         fputcsv($out, ['Employee Name', 'Employee ID', 'Designation', 'Department', 'Contact Number', 'Working Days',
                        'Present', 'Late In', 'Early Out', 'On Leave', 'Absent',
-                       'Penalty Absent (4 Late/Early = 1)', 'Total Absent (incl. Penalty)', 'Total Working Hours']);
+                       'Penalty Absent (3 Late/Early = 1)', 'Total Absent (incl. Penalty)', 'Total Working Hours']);
         foreach ($staff as $s) {
             $uid = (int)$s['id'];
             $x   = $summ[$uid];
@@ -517,7 +517,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             <?php if ($status_filter !== ''): ?>
                             <th title="Leave applications still awaiting approval — click one to open it">Pending Leave</th>
                             <?php endif; ?>
-                            <th title="Every 4 Late In / Early Out days = 1 Absent day (effective 01 Jun 2026)">Penalty Absent</th>
+                            <th title="Every 3 Late In / Early Out days = 1 Absent day (effective 01 Jun 2026)">Penalty Absent</th>
                             <th>Total Working Hours</th>
                         </tr>
                     </thead>
@@ -565,7 +565,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
                             </td>
                             <?php endif; ?>
                             <?php $pen_abs = att_late_penalty_days((int)($x['pen'] ?? 0)); ?>
-                            <td><a href="<?= $slink ?>" class="text-decoration-none" title="<?= (int)($x['pen'] ?? 0) ?> Late In / Early Out day(s) since 01 Jun 2026 — every 4 = 1 Absent"><?= $pen_abs ? '<span class="badge bg-danger">' . $pen_abs . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
+                            <td><a href="<?= $slink ?>" class="text-decoration-none" title="<?= (int)($x['pen'] ?? 0) ?> Late In / Early Out day(s) since 01 Jun 2026 — every 3 = 1 Absent"><?= $pen_abs ? '<span class="badge bg-danger">' . $pen_abs . '</span>' : '<span class="text-muted">0</span>' ?></a></td>
                             <td><a href="<?= $slink ?>" class="text-decoration-none text-reset"><strong><?= h(att_format_hours((int)$x['minutes'])) ?></strong></a></td>
                         </tr>
                     <?php endforeach; ?>
@@ -586,7 +586,7 @@ $staff_link = static function (int $uid) use ($report, $staff_month, $dept_id, $
     <strong>7 hours 30 minutes</strong> in a day (below this shows <em>Insufficient Hours</em>);
     faculty Fridays are flexible (strict 8 hours, never marked Late/Early); clocking in by
     8:30 AM allows leaving from 4:30 PM; and every
-    <strong>4 Late In / Early Out days count as 1 Absent day</strong> (Penalty Absent column — salary may be deducted).
+    <strong>3 Late In / Early Out days count as 1 Absent day</strong> (Penalty Absent column — salary may be deducted).
 </p>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
