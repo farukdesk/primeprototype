@@ -219,6 +219,22 @@ function is_super_admin(): bool {
     return $user && (int)$user['is_super'] === 1;
 }
 
+// ── Impersonation ("shadow login") ───────────────────────────────────────────
+// A super admin can temporarily sign in as another user WITHOUT their password.
+// The real admin identity is parked in $_SESSION['impersonator'] and restored
+// on "Return to my account". No password is ever read, exposed or bypassed —
+// this is a scoped, fully audit-logged session switch.
+
+/** True when the current session is an admin impersonating another user. */
+function is_impersonating(): bool {
+    return !empty($_SESSION['impersonator']['user_id']);
+}
+
+/** The parked real-admin identity while impersonating, or null. */
+function impersonator(): ?array {
+    return is_impersonating() ? $_SESSION['impersonator'] : null;
+}
+
 /**
  * Check whether the current user can access a given module slug.
  * Super admins bypass all checks.
