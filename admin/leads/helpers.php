@@ -127,6 +127,7 @@ function leads_source_badge(string $source): string
         'campus_visit'   => ['bg-secondary',        'Campus Visit'],
         'agent'          => ['bg-dark',             'Promoter'],
         'f2f_marketing'  => ['bg-warning text-dark','F2F Marketing'],
+        'admission_fair' => ['text-white',          'Admission Fair'],
     ];
     [$cls, $label] = $map[$source] ?? ['bg-secondary', ucfirst(str_replace('_', ' ', $source))];
     return '<span class="badge ' . $cls . '">' . h($label) . '</span>';
@@ -159,6 +160,7 @@ function leads_source_label(string $source): string
         'agent'         => 'Promoter',
         'f2f_marketing' => 'F2F Marketing',
         'facebook'      => 'Facebook',
+        'admission_fair' => 'Admission Fair',
     ];
     return $map[$source] ?? ucfirst(str_replace('_', ' ', $source));
 }

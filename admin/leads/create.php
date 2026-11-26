@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $bachelor_cgpa    = is_numeric($_POST['bachelor_cgpa'] ?? '') ? (float)$_POST['bachelor_cgpa'] : null;
     $status      = in_array($_POST['status'] ?? '', array_keys(leads_all_statuses()), true)
                    ? $_POST['status'] : 'fresh';
-    $source      = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'], true)
+    $source      = in_array($_POST['source'] ?? '', ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook', 'admission_fair'], true)
                    ? $_POST['source'] : 'online';
     $assigned_to = (int)($_POST['assigned_to'] ?? 0) ?: null;
     $next_followup_date = trim($_POST['next_followup_date'] ?? '');
@@ -244,7 +244,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-3">
                         <label class="form-label">Lead Source</label>
                         <select name="source" class="form-select">
-                            <?php foreach (['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Promoter', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'] as $v => $l): ?>
+                            <?php foreach (['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Promoter', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook', 'admission_fair' => 'Admission Fair'] as $v => $l): ?>
                             <option value="<?= $v ?>" <?= old('source') === $v ? 'selected' : '' ?>><?= $l ?></option>
                             <?php endforeach; ?>
                         </select>

@@ -14,8 +14,8 @@ const AF_FAIR_NAME     = 'Prime University Admission Fair, Spring 2027';
 const AF_FAIR_DATES    = '09–11 December 2026';
 const AF_FAIR_VENUE    = 'Prime University Campus, 114/116 Mazar Road, Mirpur-1, Dhaka 1216';
 const AF_SEMESTER      = 'Spring 2027';
-// Value saved in leads.source. If your `source` column is an ENUM that does not
-// include 'admission_fair', set this to 'online' (the history note still marks it as a fair lead).
+// Value saved in leads.source. Requires admin/leads/admission-fair-source.sql to be run once
+// (adds 'admission_fair' to the `source` ENUM). Shown as "Admission Fair" in admin/leads.
 const AF_LEAD_SOURCE   = 'admission_fair';
 const AF_HISTORY_NOTE  = 'Registered via Admission Fair Spring 2027 form';
 
