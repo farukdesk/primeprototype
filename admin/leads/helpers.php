@@ -122,12 +122,14 @@ function leads_source_badge(string $source): string
     if ($source === 'facebook') {
         return '<span class="badge" style="background:#1877F2"><i class="fab fa-facebook-messenger me-1"></i>Facebook</span>';
     }
+    if ($source === 'admission_fair') {
+        return '<span class="badge text-dark" style="background:#ffb81c"><i class="fas fa-ticket-alt me-1"></i>Admission Fair</span>';
+    }
     $map = [
         'online'         => ['bg-info text-dark',  'Online'],
         'campus_visit'   => ['bg-secondary',        'Campus Visit'],
         'agent'          => ['bg-dark',             'Promoter'],
         'f2f_marketing'  => ['bg-warning text-dark','F2F Marketing'],
-        'admission_fair' => ['text-white',          'Admission Fair'],
     ];
     [$cls, $label] = $map[$source] ?? ['bg-secondary', ucfirst(str_replace('_', ' ', $source))];
     return '<span class="badge ' . $cls . '">' . h($label) . '</span>';
