@@ -31,7 +31,7 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_to))   $f_to   = '';
 if ($f_from !== '' && $f_to !== '' && $f_from > $f_to) { [$f_from, $f_to] = [$f_to, $f_from]; }
 
 $valid_statuses = array_keys(leads_all_statuses());
-$valid_sources  = ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'];
+$valid_sources  = ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook', 'admission_fair'];
 $valid_sorts    = ['date_desc','date_asc','updated_desc','name_asc','name_desc','status_asc','followup_asc'];
 
 $where  = [];
@@ -202,7 +202,7 @@ $adv_open   = $adv_count > 0;
 $is_created_today = $f_datefield === 'created' && $f_from === $today_str && $f_to === $today_str;
 $is_updated_today = $f_datefield === 'updated' && $f_from === $today_str && $f_to === $today_str;
 
-$source_labels = ['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Promoter', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook'];
+$source_labels = ['online' => 'Online', 'campus_visit' => 'Campus Visit', 'agent' => 'Promoter', 'f2f_marketing' => 'F2F Marketing', 'facebook' => 'Facebook', 'admission_fair' => 'Admission Fair'];
 
 require_once __DIR__ . '/../includes/header.php';
 ?>
@@ -393,6 +393,8 @@ require_once __DIR__ . '/../includes/header.php';
         <div class="d-flex flex-wrap align-items-center gap-1 mt-2">
             <a href="?date_field=created&date_from=<?= $today_str ?>&date_to=<?= $today_str ?>" class="btn btn-sm quick-chip <?= $is_created_today ? 'btn-success' : 'btn-outline-success' ?>">Created Today <span class="badge <?= $is_created_today ? 'bg-white text-success' : 'bg-success' ?>"><?= $created_today ?></span></a>
             <a href="?date_field=updated&date_from=<?= $today_str ?>&date_to=<?= $today_str ?>" class="btn btn-sm quick-chip <?= $is_updated_today ? 'btn-info' : 'btn-outline-info' ?>">Updated Today <span class="badge <?= $is_updated_today ? 'bg-white text-info' : 'bg-info' ?>"><?= $updated_today ?></span></a>
+            <?php $is_fair = $f_source === 'admission_fair'; $fair_count = (int)($source_stats['admission_fair'] ?? 0); ?>
+            <a href="?source=admission_fair" class="btn btn-sm quick-chip <?= $is_fair ? 'btn-warning' : 'btn-outline-warning' ?>"><i class="fas fa-ticket-alt me-1"></i>Admission Fair <span class="badge <?= $is_fair ? 'bg-white text-warning' : 'bg-warning text-dark' ?>"><?= number_format($fair_count) ?></span></a>
             <?php if ($today_count > 0): ?>
             <a href="?followup=today" class="btn btn-sm quick-chip <?= $f_followup === 'today' ? 'btn-primary' : 'btn-outline-primary' ?>">Follow-ups Today <span class="badge <?= $f_followup === 'today' ? 'bg-white text-primary' : 'bg-primary' ?>"><?= $today_count ?></span></a>
             <?php endif; ?>

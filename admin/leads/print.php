@@ -23,7 +23,7 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_to))   $f_to   = '';
 if ($f_from !== '' && $f_to !== '' && $f_from > $f_to) { [$f_from, $f_to] = [$f_to, $f_from]; }
 
 $valid_statuses = array_keys(leads_all_statuses());
-$valid_sources  = ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook'];
+$valid_sources  = ['online', 'campus_visit', 'agent', 'f2f_marketing', 'facebook', 'admission_fair'];
 $valid_sorts    = ['date_desc', 'date_asc', 'updated_desc', 'name_asc', 'name_desc', 'status_asc', 'followup_asc'];
 
 $where  = [];

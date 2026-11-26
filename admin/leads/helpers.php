@@ -122,6 +122,9 @@ function leads_source_badge(string $source): string
     if ($source === 'facebook') {
         return '<span class="badge" style="background:#1877F2"><i class="fab fa-facebook-messenger me-1"></i>Facebook</span>';
     }
+    if ($source === 'admission_fair') {
+        return '<span class="badge text-dark" style="background:#ffb81c"><i class="fas fa-ticket-alt me-1"></i>Admission Fair</span>';
+    }
     $map = [
         'online'         => ['bg-info text-dark',  'Online'],
         'campus_visit'   => ['bg-secondary',        'Campus Visit'],
@@ -159,6 +162,7 @@ function leads_source_label(string $source): string
         'agent'         => 'Promoter',
         'f2f_marketing' => 'F2F Marketing',
         'facebook'      => 'Facebook',
+        'admission_fair' => 'Admission Fair',
     ];
     return $map[$source] ?? ucfirst(str_replace('_', ' ', $source));
 }
